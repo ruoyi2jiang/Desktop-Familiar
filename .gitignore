@@ -1,0 +1,16 @@
+bin/
+obj/
+Artifacts/
+tmp/
+.vs/
+*.user
+*.suo
+
+# Private companion sources and distributable character packs.
+/CompanionPacks/
+/build-*-companion-pack.ps1
+*.companionpack
+
+# Local application data and recovery files must never enter source control.
+desktop-familiar.json
+desktop-familiar.invalid-*.json

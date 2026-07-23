@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>DesktopFamiliar</AssemblyName>
+    <RootNamespace>DesktopFamiliar</RootNamespace>
+    <AssemblyTitle>Desktop Familiar</AssemblyTitle>
+    <Product>Desktop Familiar</Product>
+    <Company>Desktop Familiar</Company>
+    <Description>An animated desktop-companion application for Windows.</Description>
+    <Version>0.8.0</Version>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+    <Resource Include="Assets\AppIcon.ico" />
+    <EmbeddedResource Include="Resources\Strings\en.json" LogicalName="DesktopFamiliar.Localization.Strings.en.json" />
+    <Content Include="Resources\Strings\en.json" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+</Project>

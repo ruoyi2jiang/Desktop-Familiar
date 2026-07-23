@@ -1,0 +1,45 @@
+<Window x:Class="DesktopFamiliar.Views.CompanionLibraryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DesktopFamiliar"
+        xmlns:loc="clr-namespace:DesktopFamiliar.Localization"
+        Title="{loc:Loc Library.Window.Title}" Width="900" Height="650" MinWidth="680" MinHeight="480"
+        WindowStartupLocation="CenterScreen">
+    <Grid Background="{DynamicResource PageBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{DynamicResource SecondaryBackgroundBrush}" Padding="28,22" BorderBrush="{DynamicResource SecondaryAccentBrush}" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left">
+                    <TextBlock Text="{x:Static local:App.DisplayVersion}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextOnSecondaryBackgroundBrush}" Opacity="0.82" />
+                    <TextBlock Text="{loc:Loc Library.Header}" FontSize="26" FontWeight="SemiBold" Foreground="{DynamicResource TextOnSecondaryBackgroundBrush}" />
+                    <TextBlock Text="{loc:Loc Library.Subtitle}" Foreground="{DynamicResource TextOnSecondaryBackgroundBrush}" Opacity="0.82" Margin="0,5,0,0" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button Content="{loc:Loc CompanionBundle.Import}" Style="{StaticResource SecondaryOutlineButton}"
+                            Margin="0,0,8,0" Click="ImportCompanion_Click" />
+                    <Button Content="{loc:Loc Library.CreateNew}" Style="{StaticResource SecondaryButton}"
+                            Margin="0" Click="CreateCompanion_Click" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" Padding="24">
+            <StackPanel>
+                <Border x:Name="EmptyCard" Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="34" Margin="0,10"
+                        BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Loc Library.Empty.Title}" Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="{loc:Loc Library.Empty.Description}"
+                                   Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" Opacity="0.72" HorizontalAlignment="Center" Margin="0,8,0,16" />
+                        <Button Content="{loc:Loc Library.Empty.Action}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center" Click="CreateCompanion_Click" />
+                    </StackPanel>
+                </Border>
+                <WrapPanel x:Name="CompanionCards" Orientation="Horizontal" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

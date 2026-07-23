@@ -1,0 +1,44 @@
+<Window x:Class="DesktopFamiliar.Views.CrashReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:DesktopFamiliar.Localization"
+        Title="{loc:Loc Crash.Window.Title}" Width="820" Height="620" MinWidth="620" MinHeight="440"
+        WindowStartupLocation="CenterScreen" Topmost="True">
+    <Grid Background="{DynamicResource PageBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{DynamicResource PrimaryAccentBrush}" Padding="26,22">
+            <StackPanel>
+                <TextBlock Text="{loc:Loc Crash.Headline}" Foreground="{DynamicResource TextOnPrimaryAccentBrush}" FontSize="24" FontWeight="SemiBold" />
+                <TextBlock Text="{loc:Loc Crash.Description}"
+                           Foreground="{DynamicResource TextOnPrimaryAccentBrush}" Opacity="0.82" TextWrapping="Wrap" Margin="0,7,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="24,20,24,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="LogPathText" Grid.Row="0" Foreground="{DynamicResource TextOnPageBackgroundBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+            <TextBox x:Name="ReportText" Grid.Row="1" Style="{StaticResource ThemedMultilineTextInput}"
+                     IsReadOnly="True" AcceptsTab="True"
+                     FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap"
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+        </Grid>
+
+        <Border Grid.Row="2" Background="{DynamicResource PageBackgroundBrush}" BorderBrush="{DynamicResource PageAccentBrush}" BorderThickness="0,1,0,0" Padding="20,14">
+            <DockPanel>
+                <TextBlock x:Name="CopyStatus" Foreground="{DynamicResource TextOnPageBackgroundBrush}" VerticalAlignment="Center" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="{loc:Loc Crash.CopyReport}" Style="{StaticResource PrimaryButton}" Click="CopyReport_Click" />
+                    <Button Content="{loc:Loc Crash.CloseApplication}" IsDefault="True" Click="Close_Click" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
