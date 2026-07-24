@@ -13,7 +13,7 @@ The notification-area menu provides:
 - **Settings** to change general, user, viewport, dialogue, and theme options.
 - **Exit** to close Desktop Familiar.
 
-Clicking anywhere outside the notification-area menu closes it.
+Clicking anywhere outside the notification-area menu closes it. Windows opened from either the notification-area or companion menu receive normal keyboard input immediately after the menu closes.
 
 Right-clicking the companion provides the relevant quick actions. The overlay and notification-area menus share the same compact width, themed rounded treatment, and inner spacing. Submenu owners such as **Select companion** retain their ordinary hover colour while the child menu is open, without switching to a darker selected state. The child menu remains available while the pointer moves into it, then both the child and parent hover close after the pointer leaves it or enters another main-menu row. The viewport menu begins with **Enter focus**, directly above the first action without a divider. While Focus is active, the viewport menu is unavailable; use the notification-area Focus toggle to leave Focus mode. The overlay can be dragged to another screen position.
 

@@ -77,7 +77,7 @@ Windows compose controls in XAML. `CompanionCard`, `FieldHelpLabel`, and shared 
 
 All visual colours use semantic `DynamicResource` keys defined by `ThemeTokens` and populated by `ThemeService`. Page, primary, secondary, and input surfaces use their matching background, text, accent, hover, and active roles. Do not add literal UI colours for themed elements.
 
-`TrayService` uses the native `ThemedTrayContextMenu`, while the overlay uses WPF context menus. Both derive presentation from the same theme palette. `TrayToggleMenuItem` owns the notification-menu Focus toggle.
+`TrayService` uses the native `ThemedTrayContextMenu`, while the overlay uses WPF context menus. Both derive presentation from the same theme palette. `TrayToggleMenuItem` owns the notification-menu Focus toggle. Window-opening commands from either menu pass through `DeferredMenuAction`: the selected command is held until the menu's closed boundary and is then dispatched at `ContextIdle`, preventing native or WPF menu input mode from leaking into the activated window.
 
 ## Localization
 

@@ -1,6 +1,7 @@
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Views.Controls;
+using System.Windows.Threading;
 using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
 
@@ -15,6 +16,7 @@ public sealed class TrayService : IDisposable
     private readonly Action _exit;
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly ThemedTrayContextMenu _trayMenu;
+    private readonly DeferredMenuAction _menuAction = new();
     private TrayToggleColors _toggleColors;
 
     public TrayService(
@@ -35,6 +37,7 @@ public sealed class TrayService : IDisposable
         // has no native owner here and can remain open after focus moves away.
         _trayMenu = new ThemedTrayContextMenu();
         _trayMenu.Opening += TrayMenu_Opening;
+        _trayMenu.Closed += TrayMenu_Closed;
 
         _notifyIcon = new Forms.NotifyIcon
         {
@@ -109,15 +112,15 @@ public sealed class TrayService : IDisposable
         _trayMenu.Items.Add(selectCompanion);
 
         var configure = CreateMenuItem(LocalizationService.Get("Tray.ConfigureCompanion"));
-        configure.Click += (_, _) => _showCompanionLibrary();
+        configure.Click += (_, _) => _menuAction.Queue(_showCompanionLibrary);
         _trayMenu.Items.Add(configure);
 
         var setEvent = CreateMenuItem(LocalizationService.Get("Calendar.Menu.SetEvent"));
-        setEvent.Click += (_, _) => _showCalendarEvents();
+        setEvent.Click += (_, _) => _menuAction.Queue(_showCalendarEvents);
         _trayMenu.Items.Add(setEvent);
 
         var settings = CreateMenuItem(LocalizationService.Get("Tray.Settings"));
-        settings.Click += (_, _) => _showSettings();
+        settings.Click += (_, _) => _menuAction.Queue(_showSettings);
         _trayMenu.Items.Add(settings);
 
         _trayMenu.Items.Add(new ThemedTraySeparator());
@@ -127,6 +130,12 @@ public sealed class TrayService : IDisposable
 
         _trayMenu.ApplyItemTheme(_trayMenu.Items);
     }
+
+    private void TrayMenu_Closed(object? sender, Forms.ToolStripDropDownClosedEventArgs e) =>
+        _menuAction.DispatchPending(action =>
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                DispatcherPriority.ContextIdle,
+                action));
 
     private void ClearTrayItems()
     {
@@ -211,6 +220,8 @@ public sealed class TrayService : IDisposable
     {
         _notifyIcon.ContextMenuStrip = null;
         _trayMenu.Opening -= TrayMenu_Opening;
+        _trayMenu.Closed -= TrayMenu_Closed;
+        _menuAction.Clear();
         _trayMenu.Dispose();
         _notifyIcon.Visible = false;
         _notifyIcon.Icon?.Dispose();
