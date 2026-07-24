@@ -2,6 +2,7 @@ using DesktopFamiliar.Models;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Services.Calendar;
 using DesktopFamiliar.Services.Focus;
+using DesktopFamiliar.Services.AutoClick;
 using DesktopFamiliar.Services.Storage;
 using DesktopFamiliar.Services.Validation;
 
@@ -29,6 +30,7 @@ public sealed class CompanionManager
     public event EventHandler? ViewportChanged;
     public event EventHandler? DialogPresentationChanged;
     public event EventHandler? IdleIntervalChanged;
+    public event EventHandler? AutoClickSettingsChanged;
     public event EventHandler? UserBirthdayChanged;
     public event EventHandler? ThemeChanged;
     public event EventHandler? CalendarEventsChanged;
@@ -186,6 +188,28 @@ public sealed class CompanionManager
         Data.Settings.IdleDelaySeconds = seconds;
         Persist();
         IdleIntervalChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetAutoClickSettings(string hotkey, int intervalMilliseconds)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hotkey);
+        if (!AutoClickHotkeyPolicy.TryParse(hotkey, out var parsedHotkey))
+            throw new ArgumentException("The auto-click hotkey is invalid.", nameof(hotkey));
+
+        intervalMilliseconds = Math.Clamp(
+            intervalMilliseconds,
+            AppSettings.MinimumAutoClickIntervalMilliseconds,
+            AppSettings.MaximumAutoClickIntervalMilliseconds);
+        if (Data.Settings.AutoClickHotkey == parsedHotkey.DisplayText
+            && Data.Settings.AutoClickIntervalMilliseconds == intervalMilliseconds)
+        {
+            return;
+        }
+
+        Data.Settings.AutoClickHotkey = parsedHotkey.DisplayText;
+        Data.Settings.AutoClickIntervalMilliseconds = intervalMilliseconds;
+        Persist();
+        AutoClickSettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetTheme(AppTheme theme)

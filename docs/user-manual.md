@@ -10,12 +10,12 @@ The notification-area menu provides:
 - **Select companion** to switch the active character.
 - **Configure** to open the companion library.
 - **Calendar** to open the local event calendar.
-- **Settings** to change general, user, viewport, dialogue, and theme options.
+- **Settings** to change general, auto-clicker, user, viewport, dialogue, and theme options.
 - **Exit** to close Desktop Familiar.
 
 Clicking anywhere outside the notification-area menu closes it. Windows opened from either the notification-area or companion menu receive normal keyboard input immediately after the menu closes.
 
-Right-clicking the companion provides the relevant quick actions. The overlay and notification-area menus share the same compact width, themed rounded treatment, and inner spacing. Submenu owners such as **Select companion** retain their ordinary hover colour while the child menu is open, without switching to a darker selected state. The child menu remains available while the pointer moves into it, then both the child and parent hover close after the pointer leaves it or enters another main-menu row. The viewport menu begins with **Enter focus**, directly above the first action without a divider. While Focus is active, the viewport menu is unavailable; use the notification-area Focus toggle to leave Focus mode. The overlay can be dragged to another screen position.
+Right-clicking the companion provides the relevant quick actions. Choose **Click the screen for me**, immediately below **Enter focus**, to open the same target picker used by the auto-clicker hotkey. The lower section includes **Calendar**, **Configure**, and **Settings**. The overlay and notification-area menus share the same compact width, themed rounded treatment, and inner spacing. Submenu owners such as **Select companion** retain their ordinary hover colour while the child menu is open, without switching to a darker selected state. The child menu remains available while the pointer moves into it, then both the child and parent hover close after the pointer leaves it or enters another main-menu row. The viewport menu begins with **Enter focus**, directly above the first action without a divider. While Focus is active, the viewport menu is unavailable; use the notification-area Focus toggle to leave Focus mode. The overlay can be dragged to another screen position.
 
 ## Companion library
 
@@ -70,7 +70,7 @@ The circular down pointer hides a visible dialogue and is the only action that m
 
 Open **Calendar** to see the current month. Use the month and year selectors or the arrows to navigate. The earliest view is the same calendar month one year ago; future years and years containing saved events remain selectable. Past days are disabled for new events.
 
-Select a day or date range, then enter an event name and optional notes. An event may be:
+Select a day or date range, then enter an event name and optional notes. New events default to a timed event rather than full day. If selecting a start time would leave the end time at or before it, the end time automatically moves to 30 minutes later. An event may be:
 
 - all day or a time period;
 - one-time, including a continuous multi-day span;
@@ -93,6 +93,7 @@ The calendar is currently stored only in Desktop Familiar. It does not synchroni
 ## Settings
 
 - **General**: run after Windows sign-in and set the random-idle interval.
+- **Auto clicker**: choose a global toggle hotkey and the interval in milliseconds or seconds. Pressing the hotkey always opens a full-screen target picker; click the desired screen position to start. Press the hotkey again to stop, or press Esc to cancel target selection. The target is not saved, so every start requires an intentional new selection.
 - **User**: save your birthday for user-birthday animation states, or clear it.
 - **View**: set the character viewport width/height and optionally truncate long dialogue.
 - **Theme**: select, create, edit, name, and delete user themes. New themes can start from an existing palette. Built-in themes cannot be deleted.

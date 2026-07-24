@@ -236,6 +236,21 @@ public sealed class PersistenceTests
     }
 
     [Fact]
+    public void Schema1Configuration_MigratesAutoClickSettings()
+    {
+        var data = JsonSerializer.Deserialize<DesktopCompanionData>(
+            """{"SchemaVersion":1,"Settings":{}}""",
+            CreateOptions());
+
+        Assert.NotNull(data);
+        new CompanionDataNormalizer().Normalize(data);
+
+        Assert.Equal(2, data.SchemaVersion);
+        Assert.Equal(AppSettings.DefaultAutoClickIntervalMilliseconds, data.Settings.AutoClickIntervalMilliseconds);
+        Assert.Equal(AppSettings.DefaultAutoClickHotkey, data.Settings.AutoClickHotkey);
+    }
+
+    [Fact]
     public void FirstLoad_CreatesNormalizedEmptyConfiguration()
     {
         using var directory = new TemporaryDirectory();

@@ -41,6 +41,37 @@ public sealed class UserSettingsManagerTests
         Assert.False(changed);
     }
 
+    [Fact]
+    public void AutoClickSettingsArePersistedAndPublishedAfterSave()
+    {
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData());
+        var manager = new CompanionManager(repository);
+        var changed = 0;
+        manager.AutoClickSettingsChanged += (_, _) => changed++;
+
+        manager.SetAutoClickSettings("alt+ctrl+F8", 250);
+
+        Assert.Equal("Ctrl+Alt+F8", manager.Data.Settings.AutoClickHotkey);
+        Assert.Equal(250, repository.Load().Settings.AutoClickIntervalMilliseconds);
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void AutoClickSettingsSaveFailureRestoresPreviousValueAndDoesNotPublishChange()
+    {
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData());
+        var manager = new CompanionManager(repository);
+        var changed = false;
+        manager.AutoClickSettingsChanged += (_, _) => changed = true;
+        repository.FailSaves = true;
+
+        Assert.Throws<AppPersistenceException>(() => manager.SetAutoClickSettings("Ctrl+Alt+F8", 250));
+
+        Assert.Equal(AppSettings.DefaultAutoClickHotkey, manager.Data.Settings.AutoClickHotkey);
+        Assert.Equal(AppSettings.DefaultAutoClickIntervalMilliseconds, manager.Data.Settings.AutoClickIntervalMilliseconds);
+        Assert.False(changed);
+    }
+
     private sealed class MemoryCompanionRepository(DesktopCompanionData data) : ICompanionRepository
     {
         private DesktopCompanionData _data = data.Clone();

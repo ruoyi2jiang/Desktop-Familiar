@@ -9,6 +9,7 @@ namespace DesktopFamiliar.Views.Controls;
 public sealed class DeferredMenuAction
 {
     private Action? _pendingAction;
+    private long _dispatchGeneration;
 
     public bool HasPendingAction => _pendingAction is not null;
 
@@ -23,10 +24,24 @@ public sealed class DeferredMenuAction
         ArgumentNullException.ThrowIfNull(dispatcher);
 
         var action = _pendingAction;
+        var dispatchGeneration = _dispatchGeneration;
         _pendingAction = null;
         if (action is not null)
-            dispatcher(action);
+        {
+            dispatcher(() =>
+            {
+                if (dispatchGeneration == _dispatchGeneration)
+                    action();
+            });
+        }
     }
 
-    public void Clear() => _pendingAction = null;
+    /// <summary>Prevents a callback already dispatched to the UI queue from running.</summary>
+    public void InvalidateDispatchedAction() => _dispatchGeneration++;
+
+    public void Clear()
+    {
+        _pendingAction = null;
+        InvalidateDispatchedAction();
+    }
 }

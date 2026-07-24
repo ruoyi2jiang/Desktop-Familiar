@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Calendar;
+using DesktopFamiliar.Services.AutoClick;
 using DesktopFamiliar.Views;
 
 namespace DesktopFamiliar;
@@ -18,6 +19,7 @@ public partial class App : System.Windows.Application
     private CalendarEventWindow? _calendarEvents;
     private CalendarReminderService? _calendarReminders;
     private CalendarReminderPresentationCoordinator? _reminderPresentation;
+    private AutoClickCoordinator? _autoClickCoordinator;
     private int _fatalReportShown;
     private bool _shutdownRequested;
 
@@ -60,6 +62,7 @@ public partial class App : System.Windows.Application
             ShowStorageRecoveryNotice(Storage.LastRecoveryNotice);
             ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             Manager.ThemeChanged += (_, _) => ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
+            _autoClickCoordinator = new AutoClickCoordinator(Manager);
             _overlay = new CompanionOverlayWindow(Manager);
             Manager.FocusModeChanged += (_, _) => ApplyVisibility();
             Manager.ActivityStateChanged += (_, _) => ApplyVisibility();
@@ -250,10 +253,12 @@ public partial class App : System.Windows.Application
             _settings.Activate();
             return;
         }
-        _settings = new SettingsWindow(Manager);
+        _settings = new SettingsWindow(Manager, _autoClickCoordinator ?? throw new InvalidOperationException("Auto-click services are unavailable."));
         _settings.Show();
         _settings.Activate();
     }
+
+    public void ToggleAutoClick() => _autoClickCoordinator?.Toggle();
 
     public void ShowCalendarEvents()
     {
@@ -321,6 +326,7 @@ public partial class App : System.Windows.Application
             return;
         _shutdownRequested = true;
         AppLogger.Info("Application shutdown was requested.");
+        _autoClickCoordinator?.Dispose();
         _trayService?.Dispose();
         _calendarReminders?.Dispose();
         if (_overlay is not null)
@@ -345,6 +351,7 @@ public partial class App : System.Windows.Application
         if (_fatalReportShown == 0)
             AppLogger.Info($"Application exited normally with code {e.ApplicationExitCode}.");
         _trayService?.Dispose();
+        _autoClickCoordinator?.Dispose();
         _calendarReminders?.Dispose();
         base.OnExit(e);
     }

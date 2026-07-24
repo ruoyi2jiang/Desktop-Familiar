@@ -50,12 +50,15 @@ public partial class CalendarEventWindow : Window
                 month,
                 CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(month)))
             .ToList();
-        var times = Enumerable.Range(0, 48)
+        var startTimes = Enumerable.Range(0, 48)
             .Select(index => TimeSpan.FromMinutes(index * 30))
             .Select(time => new Choice<TimeSpan>(time, time.ToString(@"hh\:mm")))
             .ToList();
-        StartTimeCombo.ItemsSource = times;
-        EndTimeCombo.ItemsSource = times;
+        var endTimes = startTimes
+            .Append(new Choice<TimeSpan>(TimeSpan.FromDays(1), "24:00"))
+            .ToList();
+        StartTimeCombo.ItemsSource = startTimes;
+        EndTimeCombo.ItemsSource = endTimes;
         CategoryCombo.ItemsSource = Enum.GetValues<CalendarEventCategory>()
             .Select(category => new Choice<CalendarEventCategory>(category, LocalizationService.Get($"Calendar.Category.{category}")))
             .ToList();
@@ -405,7 +408,7 @@ public partial class CalendarEventWindow : Window
             Date = startDate,
             EndDate = endDate,
             Category = CalendarEventCategory.Life,
-            IsAllDay = true,
+            IsAllDay = false,
             ReminderEnabled = true,
             ReminderAdvanceMinutes = 15,
             SnoozeMinutes = 10
@@ -508,6 +511,20 @@ public partial class CalendarEventWindow : Window
     {
         if (!_loading)
             ApplyControlState();
+    }
+
+    private void StartTimeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || AllDayCheck.IsChecked == true
+            || StartTimeCombo.SelectedItem is not Choice<TimeSpan> startTime
+            || EndTimeCombo.SelectedItem is not Choice<TimeSpan> endTime)
+        {
+            return;
+        }
+
+        var adjustedEndTime = CalendarTimeRangePolicy.EnsureEndAfterStart(startTime.Value, endTime.Value);
+        if (adjustedEndTime != endTime.Value)
+            EndTimeCombo.SelectedItem = FindChoice(EndTimeCombo, adjustedEndTime);
     }
 
     private void RecurrenceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -90,6 +90,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void BuildContextMenu()
     {
+        _menuAction.InvalidateDispatchedAction();
         if (ContextMenu is { } previousMenu)
             previousMenu.Closed -= OverlayContextMenu_Closed;
 
@@ -106,6 +107,14 @@ public partial class CompanionOverlayWindow : Window
         };
         enterFocus.Click += (_, _) => _manager.SetFocusMode(true);
         menu.Items.Add(enterFocus);
+
+        var autoClick = new System.Windows.Controls.MenuItem
+        {
+            Header = LocalizationService.Get("Overlay.AutoClick"),
+            Style = (Style)FindResource("Windows11MenuItem")
+        };
+        autoClick.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ToggleAutoClick);
+        menu.Items.Add(autoClick);
 
         if (_manager.ActivityState == CompanionActivityState.Idle)
         {
@@ -131,6 +140,12 @@ public partial class CompanionOverlayWindow : Window
             Style = (Style)FindResource("Windows11MenuItem")
         };
         setEvent.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ShowCalendarEvents);
+        var settings = new System.Windows.Controls.MenuItem
+        {
+            Header = LocalizationService.Get("Tray.Settings"),
+            Style = (Style)FindResource("Windows11MenuItem")
+        };
+        settings.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ShowSettings);
         var exit = new System.Windows.Controls.MenuItem
         {
             Header = LocalizationService.Get("Overlay.Exit"),
@@ -140,6 +155,7 @@ public partial class CompanionOverlayWindow : Window
         menu.Items.Add(new System.Windows.Controls.Separator { Style = (Style)FindResource("Windows11MenuSeparator") });
         menu.Items.Add(setEvent);
         menu.Items.Add(configure);
+        menu.Items.Add(settings);
         menu.Items.Add(new System.Windows.Controls.Separator { Style = (Style)FindResource("Windows11MenuSeparator") });
         menu.Items.Add(exit);
         ContextMenu = menu;
@@ -147,7 +163,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void OverlayContextMenu_Closed(object? sender, RoutedEventArgs e) =>
         _menuAction.DispatchPending(action =>
-            Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, action));
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, action));
 
     public void ShowCompanion()
     {

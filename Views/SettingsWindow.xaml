@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:DesktopFamiliar.Localization"
         Title="{loc:Loc Settings.Window.Title}" Width="980" Height="720" MinWidth="780" MinHeight="560"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style x:Key="SettingsSidebarItem" TargetType="RadioButton">
             <Setter Property="Height" Value="48" />
@@ -102,6 +102,8 @@
                 <TextBlock Text="{loc:Loc Settings.Menu.Title}" Foreground="{DynamicResource TextOnSecondaryBackgroundBrush}" FontSize="25" FontWeight="SemiBold" Margin="18,26,18,24" />
                 <RadioButton x:Name="GeneralMenuButton" Content="{loc:Loc Settings.General.Menu}" IsChecked="True"
                              GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="GeneralMenu_Click" />
+                <RadioButton x:Name="AutoClickMenuButton" Content="{loc:Loc Settings.AutoClick.Menu}"
+                             GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="AutoClickMenu_Click" />
                 <RadioButton x:Name="UserMenuButton" Content="{loc:Loc Settings.User.Menu}"
                              GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="UserMenu_Click" />
                 <RadioButton x:Name="CompanionMenuButton" Content="{loc:Loc Settings.Companion.Menu}"
@@ -140,6 +142,27 @@
                         <Button Grid.Column="2" Content="{loc:Loc Settings.User.Birthday.Clear}" Style="{StaticResource OutlineButton}"
                                 Height="38" Padding="14,0" Margin="0" Click="ClearUserBirthday_Click" />
                     </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="AutoClickPanel" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Loc Settings.AutoClick.Title}" FontSize="27" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:Loc Settings.AutoClick.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,6,0,26" TextWrapping="Wrap" />
+                    <TextBlock Text="{loc:Loc Settings.AutoClick.Hotkey}" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:Loc Settings.AutoClick.Hotkey.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,5,0,12" TextWrapping="Wrap" />
+                    <Button x:Name="AutoClickHotkeyButton" Style="{StaticResource OutlineButton}" HorizontalAlignment="Left"
+                            Height="38" MinWidth="170" Padding="16,0" Margin="0" Click="AutoClickHotkey_Click" />
+                    <Border Style="{StaticResource SettingsDivider}" />
+                    <TextBlock Text="{loc:Loc Settings.AutoClick.Interval}" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:Loc Settings.AutoClick.Interval.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,5,0,12" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox x:Name="AutoClickIntervalBox" Style="{StaticResource SettingsTextInput}" Width="120" Margin="0" />
+                        <ComboBox x:Name="AutoClickIntervalUnitComboBox" Width="150" Margin="10,0,14,0" SelectionChanged="AutoClickIntervalUnit_Changed">
+                            <ComboBoxItem Tag="milliseconds" Content="{loc:Loc Settings.AutoClick.Milliseconds}" />
+                            <ComboBoxItem Tag="seconds" Content="{loc:Loc Settings.AutoClick.Seconds}" />
+                        </ComboBox>
+                        <Button Content="{loc:Loc Settings.AutoClick.Apply}" Style="{StaticResource PrimaryButton}" Height="38" Padding="16,0" Margin="0" Click="ApplyAutoClickSettings_Click" />
+                    </StackPanel>
+                    <TextBlock Text="{loc:Loc Settings.AutoClick.TargetHelp}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,15,0,0" TextWrapping="Wrap" />
                 </StackPanel>
 
                 <StackPanel x:Name="CompanionPanel" Visibility="Collapsed">

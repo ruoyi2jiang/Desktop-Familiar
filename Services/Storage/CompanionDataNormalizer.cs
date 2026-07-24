@@ -1,6 +1,7 @@
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services.Animation;
+using DesktopFamiliar.Services.AutoClick;
 using DesktopFamiliar.Services.Calendar;
 
 namespace DesktopFamiliar.Services.Storage;
@@ -11,6 +12,7 @@ public sealed class CompanionDataNormalizer
     public void Normalize(DesktopCompanionData data)
     {
         ArgumentNullException.ThrowIfNull(data);
+        Migrate(data);
         data.SchemaVersion = DesktopCompanionData.CurrentSchemaVersion;
         data.Companions ??= [];
         data.CalendarEvents ??= [];
@@ -43,6 +45,26 @@ public sealed class CompanionDataNormalizer
             settings.ViewportHeight,
             AppSettings.MinimumViewportSize,
             AppSettings.MaximumViewportSize);
+        settings.AutoClickIntervalMilliseconds = Math.Clamp(
+            settings.AutoClickIntervalMilliseconds,
+            AppSettings.MinimumAutoClickIntervalMilliseconds,
+            AppSettings.MaximumAutoClickIntervalMilliseconds);
+        if (!AutoClickHotkeyPolicy.TryParse(settings.AutoClickHotkey, out _))
+            settings.AutoClickHotkey = AppSettings.DefaultAutoClickHotkey;
+    }
+
+    private static void Migrate(DesktopCompanionData data)
+    {
+        if (data.SchemaVersion >= 2)
+            return;
+
+        // Schema 2 adds persisted auto-click preferences. Deserialization supplies
+        // the model defaults for absent schema-1 properties; this makes the step
+        // explicit before the normalized document is written back.
+        data.Settings ??= new AppSettings();
+        data.Settings.AutoClickIntervalMilliseconds = AppSettings.DefaultAutoClickIntervalMilliseconds;
+        data.Settings.AutoClickHotkey = AppSettings.DefaultAutoClickHotkey;
+        data.SchemaVersion = 2;
     }
 
     private static void EnsureSavedThemes(AppSettings settings)
@@ -171,9 +193,10 @@ public sealed class CompanionDataNormalizer
         }
 
         calendarEvent.StartTime = ClampTime(calendarEvent.StartTime);
-        calendarEvent.EndTime = ClampTime(calendarEvent.EndTime);
-        if (calendarEvent.EndTime <= calendarEvent.StartTime)
-            calendarEvent.EndTime = calendarEvent.StartTime.Add(TimeSpan.FromMinutes(30));
+        calendarEvent.EndTime = ClampEndTime(calendarEvent.EndTime);
+        calendarEvent.EndTime = CalendarTimeRangePolicy.EnsureEndAfterStart(
+            calendarEvent.StartTime,
+            calendarEvent.EndTime);
     }
 
     private static void NormalizeCompanion(CompanionDefinition companion)
@@ -225,6 +248,15 @@ public sealed class CompanionDataNormalizer
             return TimeSpan.Zero;
         return value >= TimeSpan.FromDays(1)
             ? TimeSpan.FromHours(23.5)
+            : value;
+    }
+
+    private static TimeSpan ClampEndTime(TimeSpan value)
+    {
+        if (value < TimeSpan.Zero)
+            return TimeSpan.Zero;
+        return value > TimeSpan.FromDays(1)
+            ? TimeSpan.FromDays(1)
             : value;
     }
 }

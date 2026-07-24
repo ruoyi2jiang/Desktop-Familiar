@@ -7,6 +7,10 @@ public sealed class AppSettings
     public const int MinimumIdleDelaySeconds = 5;
     public const int MaximumIdleDelaySeconds = 3600;
     public const int DefaultIdleDelaySeconds = 30;
+    public const int MinimumAutoClickIntervalMilliseconds = 10;
+    public const int MaximumAutoClickIntervalMilliseconds = 60000;
+    public const int DefaultAutoClickIntervalMilliseconds = 1000;
+    public const string DefaultAutoClickHotkey = "Ctrl+Alt+C";
 
     public Guid? CurrentCompanionId { get; set; }
 
@@ -22,6 +26,8 @@ public sealed class AppSettings
     public int ViewportHeight { get; set; } = 240;
     public bool TruncateLongDialogLines { get; set; }
     public bool DialogBubbleHidden { get; set; }
+    public int AutoClickIntervalMilliseconds { get; set; } = DefaultAutoClickIntervalMilliseconds;
+    public string AutoClickHotkey { get; set; } = DefaultAutoClickHotkey;
 
     public double? CompanionLeft { get; set; }
 
@@ -42,6 +48,8 @@ public sealed class AppSettings
         ViewportHeight = ViewportHeight,
         TruncateLongDialogLines = TruncateLongDialogLines,
         DialogBubbleHidden = DialogBubbleHidden,
+        AutoClickIntervalMilliseconds = AutoClickIntervalMilliseconds,
+        AutoClickHotkey = AutoClickHotkey,
         CompanionLeft = CompanionLeft,
         CompanionTop = CompanionTop
     };

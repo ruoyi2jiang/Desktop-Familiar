@@ -1,7 +1,6 @@
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Views.Controls;
-using System.Windows.Threading;
 using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
 
@@ -16,8 +15,8 @@ public sealed class TrayService : IDisposable
     private readonly Action _exit;
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly ThemedTrayContextMenu _trayMenu;
-    private readonly DeferredMenuAction _menuAction = new();
     private TrayToggleColors _toggleColors;
+    private bool _refreshAfterClose;
 
     public TrayService(
         CompanionManager manager,
@@ -36,8 +35,11 @@ public sealed class TrayService : IDisposable
         // outside-click dismissal. A programmatically opened WPF ContextMenu
         // has no native owner here and can remain open after focus moves away.
         _trayMenu = new ThemedTrayContextMenu();
-        _trayMenu.Opening += TrayMenu_Opening;
         _trayMenu.Closed += TrayMenu_Closed;
+        _manager.CurrentCompanionChanged += ManagerTrayContentChanged;
+        _manager.CompanionCollectionChanged += ManagerTrayContentChanged;
+        _manager.FocusModeChanged += ManagerTrayContentChanged;
+        _manager.ThemeChanged += ManagerTrayContentChanged;
 
         _notifyIcon = new Forms.NotifyIcon
         {
@@ -46,6 +48,7 @@ public sealed class TrayService : IDisposable
             ContextMenuStrip = _trayMenu,
             Visible = true
         };
+        BuildTrayMenu();
     }
 
     private static Drawing.Icon LoadAppIcon()
@@ -67,7 +70,7 @@ public sealed class TrayService : IDisposable
         }
     }
 
-    private void TrayMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
+    private void BuildTrayMenu()
     {
         ClearTrayItems();
         ApplyTrayTheme(_manager.CurrentSavedTheme.Palette);
@@ -112,15 +115,15 @@ public sealed class TrayService : IDisposable
         _trayMenu.Items.Add(selectCompanion);
 
         var configure = CreateMenuItem(LocalizationService.Get("Tray.ConfigureCompanion"));
-        configure.Click += (_, _) => _menuAction.Queue(_showCompanionLibrary);
+        configure.Click += (_, _) => _showCompanionLibrary();
         _trayMenu.Items.Add(configure);
 
         var setEvent = CreateMenuItem(LocalizationService.Get("Calendar.Menu.SetEvent"));
-        setEvent.Click += (_, _) => _menuAction.Queue(_showCalendarEvents);
+        setEvent.Click += (_, _) => _showCalendarEvents();
         _trayMenu.Items.Add(setEvent);
 
         var settings = CreateMenuItem(LocalizationService.Get("Tray.Settings"));
-        settings.Click += (_, _) => _menuAction.Queue(_showSettings);
+        settings.Click += (_, _) => _showSettings();
         _trayMenu.Items.Add(settings);
 
         _trayMenu.Items.Add(new ThemedTraySeparator());
@@ -131,11 +134,25 @@ public sealed class TrayService : IDisposable
         _trayMenu.ApplyItemTheme(_trayMenu.Items);
     }
 
-    private void TrayMenu_Closed(object? sender, Forms.ToolStripDropDownClosedEventArgs e) =>
-        _menuAction.DispatchPending(action =>
-            System.Windows.Application.Current.Dispatcher.BeginInvoke(
-                DispatcherPriority.ContextIdle,
-                action));
+    private void TrayMenu_Closed(object? sender, Forms.ToolStripDropDownClosedEventArgs e)
+    {
+        if (!_refreshAfterClose)
+            return;
+
+        _refreshAfterClose = false;
+        BuildTrayMenu();
+    }
+
+    private void ManagerTrayContentChanged(object? sender, EventArgs e)
+    {
+        if (_trayMenu.Visible)
+        {
+            _refreshAfterClose = true;
+            return;
+        }
+
+        BuildTrayMenu();
+    }
 
     private void ClearTrayItems()
     {
@@ -219,9 +236,11 @@ public sealed class TrayService : IDisposable
     public void Dispose()
     {
         _notifyIcon.ContextMenuStrip = null;
-        _trayMenu.Opening -= TrayMenu_Opening;
         _trayMenu.Closed -= TrayMenu_Closed;
-        _menuAction.Clear();
+        _manager.CurrentCompanionChanged -= ManagerTrayContentChanged;
+        _manager.CompanionCollectionChanged -= ManagerTrayContentChanged;
+        _manager.FocusModeChanged -= ManagerTrayContentChanged;
+        _manager.ThemeChanged -= ManagerTrayContentChanged;
         _trayMenu.Dispose();
         _notifyIcon.Visible = false;
         _notifyIcon.Icon?.Dispose();
