@@ -16,6 +16,10 @@ App (composition root)
   -> CalendarReminderService
       -> CalendarOccurrenceCalculator
       -> IClock
+  -> AutoClickCoordinator
+      -> GlobalHotkeyService
+      -> AutoClickService
+      -> AutoClickTargetWindow
   -> CompanionOverlayWindow
       -> FrameAnimationPlayer
           -> IAnimationFrameLoader
@@ -38,6 +42,8 @@ App (composition root)
 ## Runtime state
 
 `CompanionManager` owns the loaded `DesktopCompanionData`, exposes the selected companion, and raises narrow events after a successful mutation. It depends only on `ICompanionRepository`. Before a save it keeps a deep snapshot; if persistence fails, it restores that snapshot and throws `AppPersistenceException` so the application can report the failure without leaving false in-memory state.
+
+`AutoClickCoordinator` owns the runtime auto-click state. `GlobalHotkeyService` registers one validated Windows hotkey, `AutoClickTargetWindow` captures a fresh virtual-desktop position for every start, and `AutoClickService` moves the pointer and sends left-button input on its configured interval. Only the normalized interval and hotkey are persisted through `CompanionManager`; the target and active state are never saved.
 
 `CompanionActivityState` is runtime-only and distinguishes Idle from Reminder. `FocusModeVisibilityPolicy` combines activity with the persisted focus toggle: normal mode displays the selected companion, while Focus displays it only for Reminder. Consumers use `CompanionManager.ShouldDisplayCompanion` instead of duplicating the rule.
 
@@ -77,7 +83,7 @@ Windows compose controls in XAML. `CompanionCard`, `FieldHelpLabel`, and shared 
 
 All visual colours use semantic `DynamicResource` keys defined by `ThemeTokens` and populated by `ThemeService`. Page, primary, secondary, and input surfaces use their matching background, text, accent, hover, and active roles. Do not add literal UI colours for themed elements.
 
-`TrayService` uses the native `ThemedTrayContextMenu`, while the overlay uses WPF context menus. Both derive presentation from the same theme palette. `TrayToggleMenuItem` owns the notification-menu Focus toggle.
+`TrayService` keeps its native `ThemedTrayContextMenu` populated before Windows opens it, then refreshes it after closure when companion, focus, or theme state changes; the overlay uses WPF context menus. Both derive presentation from the same theme palette. `TrayToggleMenuItem` owns the notification-menu Focus toggle. Tray commands execute directly through the native menu's item callbacks; WPF overlay window-opening commands pass through `DeferredMenuAction` after its menu's closed boundary, preventing WPF menu input mode from leaking into the activated window.
 
 ## Localization
 

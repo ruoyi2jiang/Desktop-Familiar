@@ -23,6 +23,7 @@ public partial class CompanionOverlayWindow : Window
     private readonly CompanionManager _manager;
     private readonly FrameAnimationPlayer _animationPlayer;
     private readonly DispatcherTimer _idleTimer = new();
+    private readonly DeferredMenuAction _menuAction = new();
     private readonly DispatcherTimer _dialogTimer = new();
     private readonly MediaPlayer _voicePlayer = new();
     private readonly Random _random = new();
@@ -89,10 +90,15 @@ public partial class CompanionOverlayWindow : Window
 
     private void BuildContextMenu()
     {
+        _menuAction.InvalidateDispatchedAction();
+        if (ContextMenu is { } previousMenu)
+            previousMenu.Closed -= OverlayContextMenu_Closed;
+
         var menu = new System.Windows.Controls.ContextMenu
         {
             Style = (Style)FindResource("Windows11ContextMenu")
         };
+        menu.Closed += OverlayContextMenu_Closed;
 
         var enterFocus = new System.Windows.Controls.MenuItem
         {
@@ -101,6 +107,14 @@ public partial class CompanionOverlayWindow : Window
         };
         enterFocus.Click += (_, _) => _manager.SetFocusMode(true);
         menu.Items.Add(enterFocus);
+
+        var autoClick = new System.Windows.Controls.MenuItem
+        {
+            Header = LocalizationService.Get("Overlay.AutoClick"),
+            Style = (Style)FindResource("Windows11MenuItem")
+        };
+        autoClick.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ToggleAutoClick);
+        menu.Items.Add(autoClick);
 
         if (_manager.ActivityState == CompanionActivityState.Idle)
         {
@@ -119,13 +133,19 @@ public partial class CompanionOverlayWindow : Window
             Header = LocalizationService.Get("Overlay.ConfigureCompanions"),
             Style = (Style)FindResource("Windows11MenuItem")
         };
-        configure.Click += (_, _) => App.CurrentApp.ShowLibrary();
+        configure.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ShowLibrary);
         var setEvent = new System.Windows.Controls.MenuItem
         {
             Header = LocalizationService.Get("Calendar.Menu.SetEvent"),
             Style = (Style)FindResource("Windows11MenuItem")
         };
-        setEvent.Click += (_, _) => App.CurrentApp.ShowCalendarEvents();
+        setEvent.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ShowCalendarEvents);
+        var settings = new System.Windows.Controls.MenuItem
+        {
+            Header = LocalizationService.Get("Tray.Settings"),
+            Style = (Style)FindResource("Windows11MenuItem")
+        };
+        settings.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ShowSettings);
         var exit = new System.Windows.Controls.MenuItem
         {
             Header = LocalizationService.Get("Overlay.Exit"),
@@ -135,10 +155,15 @@ public partial class CompanionOverlayWindow : Window
         menu.Items.Add(new System.Windows.Controls.Separator { Style = (Style)FindResource("Windows11MenuSeparator") });
         menu.Items.Add(setEvent);
         menu.Items.Add(configure);
+        menu.Items.Add(settings);
         menu.Items.Add(new System.Windows.Controls.Separator { Style = (Style)FindResource("Windows11MenuSeparator") });
         menu.Items.Add(exit);
         ContextMenu = menu;
     }
+
+    private void OverlayContextMenu_Closed(object? sender, RoutedEventArgs e) =>
+        _menuAction.DispatchPending(action =>
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, action));
 
     public void ShowCompanion()
     {

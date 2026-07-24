@@ -2,13 +2,15 @@
 
 ## User data
 
-The root JSON document is `DesktopCompanionData`, stored at `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json`, and currently uses schema version 1. It contains:
+The root JSON document is `DesktopCompanionData`, stored at `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json`, and currently uses schema version 2. It contains:
 
-- `Settings`: selected companion, viewport, overlay position, dialogue behavior, random-idle interval, startup mirror, focus mode, user birthday, and saved themes.
+- `Settings`: selected companion, viewport, overlay position, dialogue behavior, random-idle interval, startup mirror, focus mode, user birthday, saved themes, and auto-click preferences.
 - `Companions`: locally configured `CompanionDefinition` objects.
 - `CalendarEvents`: local event definitions and reminder state.
 
-`CompanionDataNormalizer` repairs invalid current-format values after loading. This clean baseline does not read older product schemas; any future schema change must provide a tested migration before the application accepts the old format.
+`CompanionDataNormalizer` repairs invalid current-format values after loading. Schema 2 migrates schema-1 documents by adding the default auto-click interval (`1000` milliseconds) and hotkey (`Ctrl+Alt+C`). Future schema changes must provide a tested migration before the application accepts the old format.
+
+The auto-click preferences are `AutoClickIntervalMilliseconds` (an integer from 10 to 60,000) and `AutoClickHotkey` (a normalized key combination such as `Ctrl+Alt+C`). The selected target coordinate and whether clicking is active are intentionally runtime-only.
 
 ## Companion and scenes
 

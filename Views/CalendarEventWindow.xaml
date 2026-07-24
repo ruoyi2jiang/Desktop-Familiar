@@ -125,7 +125,7 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="{loc:Loc Calendar.StartTime}" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="StartTimeCombo" Height="38" Margin="0,4,0,10" />
+                                <ComboBox x:Name="StartTimeCombo" Height="38" Margin="0,4,0,10" SelectionChanged="StartTimeCombo_SelectionChanged" />
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="{loc:Loc Calendar.EndTime}" Style="{StaticResource FieldLabel}" />

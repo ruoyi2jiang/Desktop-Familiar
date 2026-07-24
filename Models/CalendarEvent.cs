@@ -8,7 +8,7 @@ public sealed class CalendarEvent
     public string Notes { get; set; } = string.Empty;
     public DateTime Date { get; set; } = DateTime.Today;
     public DateTime? EndDate { get; set; }
-    public bool IsAllDay { get; set; } = true;
+    public bool IsAllDay { get; set; }
     public TimeSpan StartTime { get; set; } = TimeSpan.Zero;
     public TimeSpan EndTime { get; set; } = TimeSpan.FromHours(1);
     public CalendarEventRecurrence Recurrence { get; set; } = CalendarEventRecurrence.OneTime;

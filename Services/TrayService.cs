@@ -16,6 +16,7 @@ public sealed class TrayService : IDisposable
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly ThemedTrayContextMenu _trayMenu;
     private TrayToggleColors _toggleColors;
+    private bool _refreshAfterClose;
 
     public TrayService(
         CompanionManager manager,
@@ -34,7 +35,11 @@ public sealed class TrayService : IDisposable
         // outside-click dismissal. A programmatically opened WPF ContextMenu
         // has no native owner here and can remain open after focus moves away.
         _trayMenu = new ThemedTrayContextMenu();
-        _trayMenu.Opening += TrayMenu_Opening;
+        _trayMenu.Closed += TrayMenu_Closed;
+        _manager.CurrentCompanionChanged += ManagerTrayContentChanged;
+        _manager.CompanionCollectionChanged += ManagerTrayContentChanged;
+        _manager.FocusModeChanged += ManagerTrayContentChanged;
+        _manager.ThemeChanged += ManagerTrayContentChanged;
 
         _notifyIcon = new Forms.NotifyIcon
         {
@@ -43,6 +48,7 @@ public sealed class TrayService : IDisposable
             ContextMenuStrip = _trayMenu,
             Visible = true
         };
+        BuildTrayMenu();
     }
 
     private static Drawing.Icon LoadAppIcon()
@@ -64,7 +70,7 @@ public sealed class TrayService : IDisposable
         }
     }
 
-    private void TrayMenu_Opening(object? sender, System.ComponentModel.CancelEventArgs e)
+    private void BuildTrayMenu()
     {
         ClearTrayItems();
         ApplyTrayTheme(_manager.CurrentSavedTheme.Palette);
@@ -126,6 +132,26 @@ public sealed class TrayService : IDisposable
         _trayMenu.Items.Add(exit);
 
         _trayMenu.ApplyItemTheme(_trayMenu.Items);
+    }
+
+    private void TrayMenu_Closed(object? sender, Forms.ToolStripDropDownClosedEventArgs e)
+    {
+        if (!_refreshAfterClose)
+            return;
+
+        _refreshAfterClose = false;
+        BuildTrayMenu();
+    }
+
+    private void ManagerTrayContentChanged(object? sender, EventArgs e)
+    {
+        if (_trayMenu.Visible)
+        {
+            _refreshAfterClose = true;
+            return;
+        }
+
+        BuildTrayMenu();
     }
 
     private void ClearTrayItems()
@@ -210,7 +236,11 @@ public sealed class TrayService : IDisposable
     public void Dispose()
     {
         _notifyIcon.ContextMenuStrip = null;
-        _trayMenu.Opening -= TrayMenu_Opening;
+        _trayMenu.Closed -= TrayMenu_Closed;
+        _manager.CurrentCompanionChanged -= ManagerTrayContentChanged;
+        _manager.CompanionCollectionChanged -= ManagerTrayContentChanged;
+        _manager.FocusModeChanged -= ManagerTrayContentChanged;
+        _manager.ThemeChanged -= ManagerTrayContentChanged;
         _trayMenu.Dispose();
         _notifyIcon.Visible = false;
         _notifyIcon.Icon?.Dispose();
