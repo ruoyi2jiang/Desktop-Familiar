@@ -4,9 +4,14 @@
         xmlns:loc="clr-namespace:DesktopFamiliar.Localization"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True" Focusable="True"
-        KeyDown="Window_KeyDown" MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        KeyDown="Window_KeyDown" MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        MouseMove="Window_MouseMove" MouseLeftButtonUp="Window_MouseLeftButtonUp">
     <Grid Background="{DynamicResource OverlaySurfaceBrush}" Opacity="0.92"
           TextElement.Foreground="{DynamicResource TextOnOverlayBrush}">
+        <Canvas IsHitTestVisible="False">
+            <Rectangle x:Name="SelectionRectangle" Visibility="Collapsed" Stroke="{DynamicResource PrimaryAccentBrush}"
+                       StrokeThickness="2" Fill="{DynamicResource PrimaryAccentBrush}" Opacity="0.28" />
+        </Canvas>
         <Border HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28,20" CornerRadius="12"
                 Background="{DynamicResource OverlaySurfaceHoverBrush}" BorderBrush="{DynamicResource OverlayBorderBrush}" BorderThickness="1">
             <StackPanel>

@@ -64,6 +64,8 @@ public partial class App : System.Windows.Application
             Manager.ThemeChanged += (_, _) => ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             _autoClickCoordinator = new AutoClickCoordinator(Manager);
             _overlay = new CompanionOverlayWindow(Manager);
+            _autoClickCoordinator.ClickingChanged += (_, args) => Dispatcher.BeginInvoke(
+                () => _overlay?.ShowAutoClickStatus(args.IsClicking));
             Manager.FocusModeChanged += (_, _) => ApplyVisibility();
             Manager.ActivityStateChanged += (_, _) => ApplyVisibility();
             Manager.CurrentCompanionChanged += (_, _) => ApplyVisibility();

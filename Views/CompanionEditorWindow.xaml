@@ -68,7 +68,7 @@
         </Style>
         <Style x:Key="EditorDatePicker" TargetType="DatePicker">
             <Setter Property="Height" Value="38" />
-            <Setter Property="Margin" Value="0,4,0,10" />
+            <Setter Property="Margin" Value="{x:Static controls:FormFieldMetrics.FieldMargin}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="BorderBrush" Value="{DynamicResource InputAccentBrush}" />
             <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
@@ -117,9 +117,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="EditorComboInput" TargetType="ComboBox" BasedOn="{StaticResource ThemedComboBox}">
-            <Setter Property="Margin" Value="0" />
-        </Style>
+        <Style x:Key="EditorComboInput" TargetType="ComboBox" BasedOn="{StaticResource ThemedComboBox}" />
         <Style x:Key="EditorImportButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Height" Value="38" />
             <Setter Property="Padding" Value="14,0" />
@@ -362,6 +360,101 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="EditorTabControl" TargetType="TabControl">
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid KeyboardNavigation.TabNavigation="Local">
+                            <Border Margin="0,48,0,0" ClipToBounds="True">
+                                <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" />
+                            </Border>
+                            <TabPanel x:Name="HeaderPanel" IsItemsHost="True" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,4" Panel.ZIndex="1" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="EditorTabItem" TargetType="TabItem">
+            <Setter Property="Width" Value="128" />
+            <Setter Property="Height" Value="88" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextOnSecondaryBackgroundBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Grid Width="128" Height="88" ClipToBounds="False">
+                            <Path x:Name="TabBottomOutline" Data="M 2,44 L 64,78.21 L 126,44"
+                                  Stroke="{DynamicResource SecondaryAccentBrush}" StrokeThickness="3"
+                                  StrokeLineJoin="Miter" StrokeMiterLimit="10" />
+                            <Path x:Name="TabRhombus" Data="M 64,12 L 122,44 L 64,76 L 6,44 Z"
+                                  Fill="{DynamicResource SecondaryBackgroundActiveBrush}" />
+                            <Path x:Name="TabBorder" Data="M 64,12 L 122,44 L 64,76 L 6,44 Z"
+                                  Fill="Transparent" Stroke="{DynamicResource SecondaryBackgroundBrush}" StrokeThickness="4"
+                                  StrokeLineJoin="Miter" StrokeMiterLimit="10" />
+                            <TextBlock x:Name="TabLabel" Text="{TemplateBinding Header}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{TemplateBinding Foreground}" FontSize="12" FontWeight="SemiBold" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabRhombus" Property="Fill" Value="{DynamicResource SecondaryAccentActiveBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextOnSecondaryAccentBrush}" />
+                                <Setter TargetName="TabLabel" Property="FontWeight" Value="Bold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="AdvancedInteractionExpander" TargetType="Expander">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <ToggleButton x:Name="HeaderToggle" HorizontalAlignment="Left" Background="Transparent" BorderBrush="Transparent" BorderThickness="0" Padding="0"
+                                          Cursor="Hand" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent" BorderBrush="Transparent" BorderThickness="0" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                              Content="{TemplateBinding Content}"
+                                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                              ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentPresenter ContentSource="Header" VerticalAlignment="Center" />
+                                    <Path x:Name="Chevron" Data="M 1,3 L 7,9 L 13,3" Stroke="{DynamicResource PrimaryAccentBrush}" StrokeThickness="1.8"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" VerticalAlignment="Center" Margin="7,0,0,0">
+                                        <Path.RenderTransform>
+                                            <RotateTransform Angle="0" CenterX="7" CenterY="6" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </StackPanel>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ExpandSite" Grid.Row="1" Visibility="Collapsed" ContentSource="Content" Margin="0,14,0,0" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="Chevron" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <RotateTransform Angle="180" CenterX="7" CenterY="6" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <Grid x:Name="CompanionEditorRoot" Background="{DynamicResource PageBackgroundBrush}"
           TextElement.Foreground="{DynamicResource TextOnPageBackgroundBrush}">
@@ -371,17 +464,19 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="{DynamicResource SecondaryBackgroundBrush}" Padding="18,14" BorderBrush="{DynamicResource SecondaryAccentBrush}" BorderThickness="0,0,0,1"
+        <Border Grid.Row="0" Background="{DynamicResource SecondaryBackgroundBrush}" Padding="18,14,18,38" BorderBrush="{DynamicResource SecondaryAccentBrush}" BorderThickness="0,0,0,1"
                 TextElement.Foreground="{DynamicResource TextOnSecondaryBackgroundBrush}">
-            <DockPanel>
+            <DockPanel VerticalAlignment="Top">
                 <Button Content="{loc:Loc Editor.Back}" Style="{StaticResource BackLinkButton}" DockPanel.Dock="Left" Click="Back_Click" />
                 <TextBlock x:Name="BannerTitle" Text="{loc:Loc Editor.Banner.Default}" Foreground="{DynamicResource TextOnSecondaryBackgroundBrush}" FontSize="21" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,48,0" />
             </DockPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="1" Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="28">
+        <TabControl Grid.Row="1" Margin="0,-49,0,0" Panel.ZIndex="1" Style="{StaticResource EditorTabControl}">
+            <TabItem Header="{loc:Loc Editor.Tab.Companion}" Style="{StaticResource EditorTabItem}">
+                <ScrollViewer Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="28,48,28,28">
                 <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
                         TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
                     <StackPanel>
@@ -475,8 +570,13 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-
-                <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" Margin="0,20,0,0" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="{loc:Loc Editor.Tab.Animations}" Style="{StaticResource EditorTabItem}">
+                <ScrollViewer Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="28,48,28,28">
+                <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
                         TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
                     <StackPanel>
                         <DockPanel>
@@ -697,11 +797,17 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-
-                <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" Margin="0,20,0,0" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="{loc:Loc Editor.Tab.States}" Style="{StaticResource EditorTabItem}">
+                <ScrollViewer Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="28,48,28,28">
+                <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
                         TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
                     <StackPanel>
                         <TextBlock Text="{loc:Loc Editor.StateAssignments}" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Text="{loc:Loc Editor.StateGroup.Core}" Style="{StaticResource FieldLabel}" Margin="0,10,0,4" />
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -718,7 +824,33 @@
                             </StackPanel>
                         </Grid>
 
-                        <Grid Margin="0,12,0,0">
+                        <Border Height="1" Background="{DynamicResource PrimaryAccentBrush}" Opacity="0.45" Margin="0,18,0,10" />
+                        <controls:FieldHelpLabel Text="{loc:Loc Editor.StateGroup.Interaction}" HelpText="{loc:Loc Editor.StateGroup.Interaction.Help}" Margin="0,0,0,4" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="24" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="24" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{loc:Loc Editor.DragLeftAssignment}" Style="{StaticResource FieldLabel}" />
+                                <ComboBox x:Name="DragLeftCombo" Style="{StaticResource EditorComboInput}" DisplayMemberPath="DisplayName" SelectionChanged="StateAssignment_SelectionChanged" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="{loc:Loc Editor.DragRightAssignment}" Style="{StaticResource FieldLabel}" />
+                                <ComboBox x:Name="DragRightCombo" Style="{StaticResource EditorComboInput}" DisplayMemberPath="DisplayName" SelectionChanged="StateAssignment_SelectionChanged" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="{loc:Loc Editor.DragHoldAssignment}" Style="{StaticResource FieldLabel}" />
+                                <ComboBox x:Name="DragHoldCombo" Style="{StaticResource EditorComboInput}" DisplayMemberPath="DisplayName" SelectionChanged="StateAssignment_SelectionChanged" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Height="1" Background="{DynamicResource PrimaryAccentBrush}" Opacity="0.45" Margin="0,18,0,10" />
+                        <TextBlock Text="{loc:Loc Editor.StateGroup.Lifecycle}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4" />
+                        <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="24" />
@@ -734,7 +866,9 @@
                             </StackPanel>
                         </Grid>
 
-                        <Grid Margin="0,12,0,0">
+                        <Border Height="1" Background="{DynamicResource PrimaryAccentBrush}" Opacity="0.45" Margin="0,18,0,10" />
+                        <TextBlock Text="{loc:Loc Editor.StateGroup.Ambient}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4" />
+                        <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="24" />
@@ -768,16 +902,57 @@
 
                         <controls:FieldHelpLabel Text="{loc:Loc Editor.IdleRandomAssignment}" HelpText="{loc:Loc Editor.IdleRandomAssignment.Help}" Margin="0,12,0,4" />
                         <WrapPanel x:Name="IdleRandomChecksPanel" />
+
+                        <Expander x:Name="AdvancedInteractionsExpander" Style="{StaticResource AdvancedInteractionExpander}" Margin="0,18,0,0">
+                            <Expander.Header>
+                                <TextBlock Text="{loc:Loc Editor.AdvancedInteractions}" Foreground="{DynamicResource PrimaryAccentBrush}" TextDecorations="Underline" />
+                            </Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="{loc:Loc Editor.ClickInteractions}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4" />
+                                <TextBlock Text="{loc:Loc Editor.AdvancedInteractions.Help}" Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" Opacity="0.72" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="18" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Height="260" Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource InputAccentBrush}" BorderThickness="1" CornerRadius="10" ClipToBounds="True">
+                                        <Grid>
+                                            <Image x:Name="ClickAreaPreviewImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            <TextBlock x:Name="ClickAreaPreviewHint" Text="{loc:Loc Editor.CompanionPreview.Empty}" Foreground="{DynamicResource TextOnInputBackgroundBrush}" Opacity="0.72"
+                                                       TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" />
+                                            <Canvas x:Name="ClickAreaSelectionCanvas" Background="Transparent" Cursor="Cross"
+                                                    MouseLeftButtonDown="ClickAreaPreview_MouseLeftButtonDown"
+                                                    MouseMove="ClickAreaPreview_MouseMove"
+                                                    MouseLeftButtonUp="ClickAreaPreview_MouseLeftButtonUp"
+                                                    SizeChanged="ClickAreaPreview_SizeChanged" />
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="{loc:Loc Editor.ClickAreas.Name}" Style="{StaticResource FieldLabel}" />
+                                        <TextBox x:Name="ClickAreaNameBox" Style="{StaticResource EditorTextInput}" TextChanged="ClickAreaNameBox_TextChanged" />
+                                        <TextBlock Text="{loc:Loc Editor.ClickAreas.Animation}" Style="{StaticResource FieldLabel}" />
+                                        <ComboBox x:Name="ClickAreaAnimationCombo" Style="{StaticResource EditorComboInput}" DisplayMemberPath="DisplayName" SelectionChanged="ClickAreaAnimation_SelectionChanged" />
+                                        <TextBlock Text="{loc:Loc Editor.ClickAreas.Add}" Style="{StaticResource FieldLabel}" Margin="0,8,0,4" />
+                                        <ListBox x:Name="ClickAreaList" Height="96" DisplayMemberPath="Name" Style="{StaticResource EditorSceneList}" ItemContainerStyle="{StaticResource EditorSceneListItem}"
+                                                 SelectionChanged="ClickAreaList_SelectionChanged" />
+                                        <Button Content="{loc:Loc Editor.ClickAreas.Remove}" Style="{StaticResource DangerButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Click="RemoveClickArea_Click" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </Border>
-            </StackPanel>
-        </ScrollViewer>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
 
-        <Border Grid.Row="2" Background="{DynamicResource SecondaryBackgroundBrush}" Padding="20,14" BorderBrush="{DynamicResource SecondaryAccentBrush}" BorderThickness="0,1,0,0"
-                TextElement.Foreground="{DynamicResource TextOnSecondaryBackgroundBrush}">
+        <Border Grid.Row="2" Background="{DynamicResource PrimaryBackgroundBrush}" Padding="20,14" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="0,1,0,0"
+                TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
             <DockPanel>
                 <TextBlock x:Name="ValidationHint" Foreground="{DynamicResource DangerBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                <Button x:Name="SaveButton" Content="{loc:Loc Editor.Save.Update}" Style="{StaticResource SecondaryButton}" DockPanel.Dock="Right" Click="Save_Click" />
+                <Button x:Name="SaveButton" Content="{loc:Loc Editor.Save.Update}" Style="{StaticResource PrimaryButton}" DockPanel.Dock="Right" Click="Save_Click" />
             </DockPanel>
         </Border>
     </Grid>

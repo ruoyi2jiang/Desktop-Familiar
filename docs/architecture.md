@@ -41,9 +41,9 @@ App (composition root)
 
 ## Runtime state
 
-`CompanionManager` owns the loaded `DesktopCompanionData`, exposes the selected companion, and raises narrow events after a successful mutation. It depends only on `ICompanionRepository`. Before a save it keeps a deep snapshot; if persistence fails, it restores that snapshot and throws `AppPersistenceException` so the application can report the failure without leaving false in-memory state.
+`CompanionManager` owns the loaded `DesktopCompanionData`, exposes the selected companion, and raises narrow events after a successful mutation. It depends only on `ICompanionRepository`. `ThemeSelectionPolicy` resolves a saved-theme card to its built-in or custom kind, so selecting a built-in palette cannot be persisted as a custom theme. Before a save the manager keeps a deep snapshot; if persistence fails, it restores that snapshot and throws `AppPersistenceException` so the application can report the failure without leaving false in-memory state.
 
-`AutoClickCoordinator` owns the runtime auto-click state. `GlobalHotkeyService` registers one validated Windows hotkey, `AutoClickTargetWindow` captures a fresh virtual-desktop position for every start, and `AutoClickService` moves the pointer and sends left-button input on its configured interval. Only the normalized interval and hotkey are persisted through `CompanionManager`; the target and active state are never saved.
+`AutoClickCoordinator` owns the runtime auto-click state. Two `GlobalHotkeyService` instances register distinct validated Windows hotkeys: one starts/stops the clicker and the other switches between cursor and background input. `AutoClickTargetWindow` captures a fresh virtual-desktop rectangle for every start, and `AutoClickService` chooses a random point inside it plus a random delay from the configured inclusive interval range. It either moves the pointer and sends left-button input or, when explicitly enabled, posts legacy mouse messages to the window beneath the selected area. The latter keeps the system cursor free but is intentionally best-effort: applications may ignore those messages. The coordinator emits runtime start/stop status changes; the overlay displays them in a temporary bubble layer that pauses and then resumes scene dialogue without changing animation configuration. The persisted enabled switch controls registration and menu availability; only the normalized interval range, hotkeys, enabled preference, and default-off background-click preference are saved through `CompanionManager`. The target window, area, active state, and status dialogue are never saved.
 
 `CompanionActivityState` is runtime-only and distinguishes Idle from Reminder. `FocusModeVisibilityPolicy` combines activity with the persisted focus toggle: normal mode displays the selected companion, while Focus displays it only for Reminder. Consumers use `CompanionManager.ShouldDisplayCompanion` instead of duplicating the rule.
 
@@ -51,7 +51,7 @@ App (composition root)
 
 `WpfAnimationFrameLoader` decodes a GIF, image, or PNG sequence into frozen WPF frames and durations. `AnimationTimeline` is a UI-free index state machine for whole-animation loops and intro/selected-loop/outro transitions. `ScenePlaybackPolicy` owns role completion, reminder ordering, and the Focus rule that permits dialogue and voice only for the reminder role. `IdleSceneSelectionPolicy` selects ordinary random-idle, companion-birthday, or user-birthday scenes. `AnimationFrameSettingsPolicy` owns the PNG-only contract for loop ranges and dialogue start frames. `FrameAnimationPlayer` owns only the dispatcher timer, image target, frame notifications, and event translation.
 
-Keep playback decisions in animation services and WPF decoding in the loader; do not place reusable animation rules in a view.
+`CompanionInteractionStatePolicy` maps drag direction and ordered percentage-based click areas to optional grouped assignments. It returns no scene for an unassigned state, so the overlay only starts interaction playback when that exact state has an animation; it only restores state-default playback after an assigned drag scene has actually started. The overlay owns pointer capture, cursor feedback, window placement, and the short crossfade between assigned interaction scenes; the policy remains WPF-free. The editor owns the direct preview drawing surface for click-area configuration. Keep playback decisions in animation services and WPF decoding in the loader; do not place reusable animation rules in a view.
 
 ## Calendar flow
 
@@ -61,11 +61,11 @@ Keep playback decisions in animation services and WPF decoding in the loader; do
 
 ## Persistence and packages
 
-`JsonAppDataStore` reads and atomically replaces `desktop-familiar.json`. `CompanionDataNormalizer` repairs invalid values in the current schema without performing I/O. `CompanionAssetStore` copies user-selected files. `CompanionBundleService` exports and securely imports `.companionpack` archives through a staging directory, extracting only assets referenced by the manifest.
+`JsonAppDataStore` reads and atomically replaces `desktop-familiar.json`. `CompanionDataNormalizer` repairs invalid values in the current schema without performing I/O. `CompanionAssetStore` copies user-selected files and can remove only the exact asset directory for a confirmed companion deletion. `CompanionBundleService` exports and securely imports `.companionpack` archives through a staging directory, extracting only assets referenced by the manifest.
 
 Fresh installs start with an empty companion library. Private character sources, pack-builder scripts, and generated companion bundles are outside the public source tree and ignored by Git.
 
-The current clean persistence baseline is schema 1. When persisted fields change, update model defaults and `DesktopCompanionData.CurrentSchemaVersion`, implement an explicit migration before accepting older schemas, add migration and normalization tests, and update `docs/data-format.md`.
+The current clean persistence baseline is schema 4. When persisted fields change, update model defaults and `DesktopCompanionData.CurrentSchemaVersion`, implement an explicit migration before accepting older schemas, add migration and normalization tests, and update `docs/data-format.md`.
 
 ## Error boundaries
 

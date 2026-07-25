@@ -12,7 +12,11 @@ public enum AnimationSceneRole
     IdleRandom,
     SelfBirthday,
     UserBirthday,
-    Exit
+    Exit,
+    DragLeft,
+    DragRight,
+    DragHold,
+    Click
 }
 
 /// <summary>
@@ -44,7 +48,14 @@ public static class ScenePlaybackPolicy
         bool focusModeEnabled,
         AnimationSceneRole role) =>
         role != AnimationSceneRole.ReminderFallback
+        && !IsInteractionRole(role)
         && (!focusModeEnabled || role == AnimationSceneRole.Reminder);
+
+    public static bool IsInteractionRole(AnimationSceneRole role) => role is
+        AnimationSceneRole.DragLeft or
+        AnimationSceneRole.DragRight or
+        AnimationSceneRole.DragHold or
+        AnimationSceneRole.Click;
 
     /// <summary>
     /// A calendar reminder may replace the bubble only after its assigned scene

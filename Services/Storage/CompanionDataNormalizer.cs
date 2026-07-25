@@ -1,5 +1,6 @@
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
+using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Animation;
 using DesktopFamiliar.Services.AutoClick;
 using DesktopFamiliar.Services.Calendar;
@@ -49,22 +50,84 @@ public sealed class CompanionDataNormalizer
             settings.AutoClickIntervalMilliseconds,
             AppSettings.MinimumAutoClickIntervalMilliseconds,
             AppSettings.MaximumAutoClickIntervalMilliseconds);
-        if (!AutoClickHotkeyPolicy.TryParse(settings.AutoClickHotkey, out _))
+        settings.AutoClickIntervalMaximumMilliseconds = Math.Clamp(
+            settings.AutoClickIntervalMaximumMilliseconds,
+            settings.AutoClickIntervalMilliseconds,
+            AppSettings.MaximumAutoClickIntervalMilliseconds);
+        if (!AutoClickHotkeyPolicy.TryParse(settings.AutoClickHotkey, out var toggleHotkey))
+        {
             settings.AutoClickHotkey = AppSettings.DefaultAutoClickHotkey;
+            AutoClickHotkeyPolicy.TryParse(settings.AutoClickHotkey, out toggleHotkey);
+        }
+        if (!AutoClickHotkeyPolicy.TryParse(settings.AutoClickBackgroundModeHotkey, out var backgroundModeHotkey)
+            || string.Equals(backgroundModeHotkey.DisplayText, toggleHotkey.DisplayText, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.AutoClickBackgroundModeHotkey = string.Equals(
+                toggleHotkey.DisplayText,
+                AppSettings.DefaultAutoClickBackgroundModeHotkey,
+                StringComparison.OrdinalIgnoreCase)
+                ? AppSettings.FallbackAutoClickBackgroundModeHotkey
+                : AppSettings.DefaultAutoClickBackgroundModeHotkey;
+        }
     }
 
     private static void Migrate(DesktopCompanionData data)
     {
-        if (data.SchemaVersion >= 2)
-            return;
+        if (data.SchemaVersion < 2)
+        {
+            // Schema 2 adds persisted auto-click preferences. Deserialization supplies
+            // the model defaults for absent schema-1 properties; this makes the step
+            // explicit before the normalized document is written back.
+            data.Settings ??= new AppSettings();
+            data.Settings.AutoClickIntervalMilliseconds = AppSettings.DefaultAutoClickIntervalMilliseconds;
+            data.Settings.AutoClickHotkey = AppSettings.DefaultAutoClickHotkey;
+            data.SchemaVersion = 2;
+        }
 
-        // Schema 2 adds persisted auto-click preferences. Deserialization supplies
-        // the model defaults for absent schema-1 properties; this makes the step
-        // explicit before the normalized document is written back.
-        data.Settings ??= new AppSettings();
-        data.Settings.AutoClickIntervalMilliseconds = AppSettings.DefaultAutoClickIntervalMilliseconds;
-        data.Settings.AutoClickHotkey = AppSettings.DefaultAutoClickHotkey;
-        data.SchemaVersion = 2;
+        if (data.SchemaVersion < 3)
+        {
+            // Schema 3 groups optional viewport-interaction assignments. The
+            // default empty object preserves existing idle-only behaviour.
+            data.Companions ??= [];
+            foreach (var companion in data.Companions)
+                companion.InteractionStates ??= new CompanionInteractionStateAssignments();
+            data.SchemaVersion = 3;
+        }
+
+        if (data.SchemaVersion < 4)
+        {
+            // Schema 4 adds an explicit opt-out for the global auto-clicker.
+            // Existing configurations retain the previously available behaviour.
+            data.Settings ??= new AppSettings();
+            data.Settings.AutoClickEnabled = true;
+            data.SchemaVersion = 4;
+        }
+
+        if (data.SchemaVersion < 5)
+        {
+            // Schema 5 adds an explicit opt-in for window-message background clicks.
+            // Existing profiles retain normal cursor-based clicking.
+            data.Settings ??= new AppSettings();
+            data.Settings.AutoClickBackgroundModeEnabled = false;
+            data.SchemaVersion = 5;
+        }
+
+        if (data.SchemaVersion < 6)
+        {
+            // Schema 6 turns the fixed interval into an inclusive random range.
+            // Existing profiles retain their exact interval by using it as both bounds.
+            data.Settings ??= new AppSettings();
+            data.Settings.AutoClickIntervalMaximumMilliseconds = data.Settings.AutoClickIntervalMilliseconds;
+            data.SchemaVersion = 6;
+        }
+
+        if (data.SchemaVersion < 7)
+        {
+            // Schema 7 adds a dedicated toggle for cursor and background input.
+            data.Settings ??= new AppSettings();
+            data.Settings.AutoClickBackgroundModeHotkey = AppSettings.DefaultAutoClickBackgroundModeHotkey;
+            data.SchemaVersion = 7;
+        }
     }
 
     private static void EnsureSavedThemes(AppSettings settings)
@@ -90,9 +153,16 @@ public sealed class CompanionDataNormalizer
             LocalizationService.Get("Settings.Theme.StellaDark"),
             AppTheme.StellaDark);
 
-        var selectedCustomThemeExists = settings.SelectedThemeId is Guid selectedCustomId
-            && settings.SavedThemes.Any(theme => theme.Id == selectedCustomId && !theme.IsBuiltIn);
-        if (settings.Theme == AppTheme.Custom && !selectedCustomThemeExists)
+        var selectedTheme = settings.SelectedThemeId is Guid selectedId
+            ? settings.SavedThemes.FirstOrDefault(theme => theme.Id == selectedId)
+            : null;
+        if (selectedTheme is not null)
+        {
+            settings.Theme = ThemeSelectionPolicy.Resolve(selectedTheme);
+            return;
+        }
+
+        if (settings.Theme == AppTheme.Custom)
         {
             var custom = new SavedTheme
             {
@@ -101,11 +171,6 @@ public sealed class CompanionDataNormalizer
             };
             settings.SavedThemes.Add(custom);
             settings.SelectedThemeId = custom.Id;
-        }
-
-        if (settings.SelectedThemeId is Guid selectedId
-            && settings.SavedThemes.Any(theme => theme.Id == selectedId))
-        {
             return;
         }
 
@@ -206,6 +271,7 @@ public sealed class CompanionDataNormalizer
         companion.UserNickname ??= string.Empty;
         companion.Animations ??= [];
         companion.IdleRandomAnimationIds ??= [];
+        companion.InteractionStates ??= new CompanionInteractionStateAssignments();
 
         foreach (var scene in companion.Animations)
         {
@@ -240,6 +306,32 @@ public sealed class CompanionDataNormalizer
             .Where(id => companion.Animations.Any(scene => scene.Id == id))
             .Distinct()
             .ToList();
+        NormalizeInteractionStates(companion);
+    }
+
+    private static void NormalizeInteractionStates(CompanionDefinition companion)
+    {
+        foreach (var state in Enum.GetValues<CompanionInteractionState>())
+        {
+            var animationId = companion.InteractionStates.GetAnimationId(state);
+            if (animationId is not null && companion.FindAnimation(animationId) is null)
+                companion.InteractionStates.ClearAnimationId(animationId.Value);
+        }
+
+        companion.InteractionStates.ClickAreas ??= [];
+        companion.InteractionStates.ClickAreas = companion.InteractionStates.ClickAreas
+            .Where(area => area is not null)
+            .ToList();
+        foreach (var clickArea in companion.InteractionStates.ClickAreas)
+        {
+            clickArea.Name ??= string.Empty;
+            clickArea.LeftPercent = Math.Clamp(clickArea.LeftPercent, 0, 100);
+            clickArea.TopPercent = Math.Clamp(clickArea.TopPercent, 0, 100);
+            clickArea.WidthPercent = Math.Clamp(clickArea.WidthPercent, 0, 100 - clickArea.LeftPercent);
+            clickArea.HeightPercent = Math.Clamp(clickArea.HeightPercent, 0, 100 - clickArea.TopPercent);
+            if (clickArea.AnimationId is Guid animationId && companion.FindAnimation(animationId) is null)
+                clickArea.AnimationId = null;
+        }
     }
 
     private static TimeSpan ClampTime(TimeSpan value)

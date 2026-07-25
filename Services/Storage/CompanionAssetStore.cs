@@ -44,6 +44,19 @@ public sealed class CompanionAssetStore
         .OrderBy(Path.GetFileName)
         .ToList();
 
+    public void DeleteCompanionResources(Guid companionId)
+    {
+        var assetsRoot = Path.GetFullPath(Path.Combine(RootDirectory, "Assets"));
+        var companionDirectory = Path.GetFullPath(Path.Combine(assetsRoot, companionId.ToString("N")));
+        var requiredPrefix = assetsRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        if (!companionDirectory.StartsWith(requiredPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The companion asset directory is outside the asset store.");
+
+        if (Directory.Exists(companionDirectory))
+            Directory.Delete(companionDirectory, recursive: true);
+    }
+
     private static bool PathsEqual(string first, string second) => string.Equals(
         Path.GetFullPath(first),
         Path.GetFullPath(second),

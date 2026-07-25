@@ -75,10 +75,26 @@ public sealed class CompanionStorage : ICompanionRepository
             }
         }
 
+        var themeBeforeNormalization = data.Settings?.Theme;
+        var selectedThemeIdBeforeNormalization = data.Settings?.SelectedThemeId;
+        var savedThemeIdsBeforeNormalization = data.Settings?.SavedThemes?
+            .Where(theme => theme is not null)
+            .Select(theme => theme.Id)
+            .Order()
+            .ToArray() ?? [];
         var requiresNormalizationSave = data.SchemaVersion != DesktopCompanionData.CurrentSchemaVersion
             || data.Settings?.SavedThemes?.Count is not > 0;
         _normalizer.Normalize(data);
-        if (requiresNormalizationSave)
+        var normalizedSettings = data.Settings
+            ?? throw new InvalidOperationException("Configuration normalization did not create app settings.");
+        var savedThemeIdsAfterNormalization = normalizedSettings.SavedThemes
+            .Select(theme => theme.Id)
+            .Order()
+            .ToArray();
+        var normalizedThemeSelection = themeBeforeNormalization != normalizedSettings.Theme
+            || selectedThemeIdBeforeNormalization != normalizedSettings.SelectedThemeId
+            || !savedThemeIdsBeforeNormalization.SequenceEqual(savedThemeIdsAfterNormalization);
+        if (requiresNormalizationSave || normalizedThemeSelection)
             Save(data);
         return data;
     }
@@ -90,6 +106,9 @@ public sealed class CompanionStorage : ICompanionRepository
 
     public IReadOnlyList<string> GetImportedBubbleImages(DesktopCompanionData data) =>
         _assetStore.GetImportedBubbleImages(data);
+
+    public void DeleteCompanionResources(Guid companionId) =>
+        _assetStore.DeleteCompanionResources(companionId);
 
     public void ExportCompanion(CompanionDefinition companion, string destinationPath) =>
         _bundleService.Export(companion, destinationPath);

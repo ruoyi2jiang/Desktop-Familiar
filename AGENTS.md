@@ -20,6 +20,7 @@ This file applies to the entire repository.
 - Domain rules must not depend on WPF, timers, the registry, the filesystem, or message boxes.
 - Models do not perform I/O and must deep-clone mutable child collections.
 - UI code-behind coordinates controls; move reusable calculations and persistence out of it.
+- Viewport context-menu commands that open WPF windows must use `DeferredMenuAction` and dispatch only after `ContextMenu.Closed` at `DispatcherPriority.ContextIdle`. Do not change this to `Normal`: the menu can retain keyboard input otherwise, leaving the opened window unable to accept typing.
 - Use `DynamicResource` semantic theme tokens. Do not add unthemed literal control colours.
 - Put every user-facing string in `Resources/Strings/en.json`.
 - Keep the current `%LOCALAPPDATA%\DesktopFamiliar` data contract explicit. Do not add compatibility aliases or accept older schemas without a tested migration.

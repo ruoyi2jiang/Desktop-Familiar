@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DesktopFamiliar.Localization;
@@ -19,12 +20,17 @@ namespace DesktopFamiliar.Views;
 public partial class CompanionOverlayWindow : Window
 {
     private const double ReservedDialogHeight = 96;
+    private const double DragStartThreshold = 4;
+    private static readonly TimeSpan DragHoldDelay = TimeSpan.FromMilliseconds(160);
+    private static readonly TimeSpan AutoClickStatusDuration = TimeSpan.FromSeconds(3);
 
     private readonly CompanionManager _manager;
     private readonly FrameAnimationPlayer _animationPlayer;
     private readonly DispatcherTimer _idleTimer = new();
     private readonly DeferredMenuAction _menuAction = new();
     private readonly DispatcherTimer _dialogTimer = new();
+    private readonly DispatcherTimer _autoClickStatusTimer = new();
+    private readonly DispatcherTimer _dragHoldTimer = new();
     private readonly MediaPlayer _voicePlayer = new();
     private readonly Random _random = new();
     private AnimationScene? _activeScene;
@@ -32,9 +38,18 @@ public partial class CompanionOverlayWindow : Window
     private int _dialogIndex;
     private bool _closingForExit;
     private bool _dragged;
+    private bool _dragInteractionPlaybackStarted;
+    private bool _pointerDown;
+    private Point _pointerDownScreen;
+    private Point _lastPointerScreen;
+    private bool _sceneTransitionPending;
+    private int _sceneTransitionVersion;
     private bool _playStartOnNextShow = true;
     private Action? _afterLoopFinishes;
     private int? _pendingDialogStartFrame;
+    private bool _showingAutoClickStatus;
+    private string _interruptedDialogText = string.Empty;
+    private Visibility _interruptedReminderActionsVisibility;
     // The restore indicator is armed only by the user's hide action.
     private bool _inactiveDialogButtonDismissed = true;
     private double _dialogAreaHeight = ReservedDialogHeight;
@@ -55,6 +70,8 @@ public partial class CompanionOverlayWindow : Window
         _animationPlayer.FramePresented += AnimationFramePresented;
         _idleTimer.Tick += IdleTimerTick;
         _dialogTimer.Tick += DialogTimerTick;
+        _autoClickStatusTimer.Tick += AutoClickStatusTimerTick;
+        _dragHoldTimer.Tick += DragHoldTimerTick;
         _voicePlayer.MediaEnded += VoicePlayerEnded;
         _voicePlayer.MediaFailed += VoicePlayerFailed;
         _manager.CurrentCompanionChanged += ManagerCurrentCompanionChanged;
@@ -108,13 +125,16 @@ public partial class CompanionOverlayWindow : Window
         enterFocus.Click += (_, _) => _manager.SetFocusMode(true);
         menu.Items.Add(enterFocus);
 
-        var autoClick = new System.Windows.Controls.MenuItem
+        if (_manager.Data.Settings.AutoClickEnabled)
         {
-            Header = LocalizationService.Get("Overlay.AutoClick"),
-            Style = (Style)FindResource("Windows11MenuItem")
-        };
-        autoClick.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ToggleAutoClick);
-        menu.Items.Add(autoClick);
+            var autoClick = new System.Windows.Controls.MenuItem
+            {
+                Header = LocalizationService.Get("Overlay.AutoClick"),
+                Style = (Style)FindResource("Windows11MenuItem")
+            };
+            autoClick.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ToggleAutoClick);
+            menu.Items.Add(autoClick);
+        }
 
         if (_manager.ActivityState == CompanionActivityState.Idle)
         {
@@ -163,7 +183,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void OverlayContextMenu_Closed(object? sender, RoutedEventArgs e) =>
         _menuAction.DispatchPending(action =>
-            Dispatcher.BeginInvoke(DispatcherPriority.Normal, action));
+            Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, action));
 
     public void ShowCompanion()
     {
@@ -181,6 +201,32 @@ public partial class CompanionOverlayWindow : Window
     {
         StopAll(clearFrame: true);
         Hide();
+    }
+
+    public void ShowAutoClickStatus(bool isClicking)
+    {
+        if (!IsVisible)
+            return;
+
+        if (!_showingAutoClickStatus)
+        {
+            _showingAutoClickStatus = true;
+            _interruptedDialogText = DialogText.Text;
+            _interruptedReminderActionsVisibility = ReminderActions.Visibility;
+            _dialogTimer.Stop();
+            _voicePlayer.Stop();
+            _voicePlayer.Close();
+            ReminderActions.Visibility = Visibility.Collapsed;
+        }
+
+        DialogText.Text = LocalizationService.Get(isClicking
+            ? "Overlay.AutoClick.Started"
+            : "Overlay.AutoClick.Stopped");
+        _autoClickStatusTimer.Stop();
+        _autoClickStatusTimer.Interval = AutoClickStatusDuration;
+        _autoClickStatusTimer.Start();
+        UpdateDialogBubbleVisibility();
+        UpdateDialogAreaForContent();
     }
 
     public void ShowCalendarReminder(CalendarEvent calendarEvent, DateTime occurrenceStart)
@@ -243,9 +289,11 @@ public partial class CompanionOverlayWindow : Window
     private void ApplySavedPosition()
     {
         var characterHeight = _manager.Data.Settings.ViewportHeight;
+        var characterOffset = OverlayLayoutPolicy.GetCharacterHorizontalOffset(
+            _manager.Data.Settings.ViewportWidth);
         if (_manager.Data.Settings.CompanionLeft is double left && _manager.Data.Settings.CompanionTop is double top)
         {
-            Left = Math.Clamp(left, SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - Width);
+            Left = Math.Clamp(left - characterOffset, SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - Width);
             Top = Math.Clamp(top - _dialogAreaHeight, SystemParameters.VirtualScreenTop, SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - Height);
         }
         else
@@ -258,10 +306,14 @@ public partial class CompanionOverlayWindow : Window
 
     private void ApplyViewportSize()
     {
-        Width = _manager.Data.Settings.ViewportWidth;
+        var characterWidth = _manager.Data.Settings.ViewportWidth;
+        Width = OverlayLayoutPolicy.GetWindowWidth(characterWidth);
         CharacterRow.Height = new GridLength(_manager.Data.Settings.ViewportHeight);
-        BubbleRoot.Width = Width;
-        BubbleRoot.MaxWidth = Width;
+        CompanionViewport.Width = characterWidth;
+        var dialogWidth = OverlayLayoutPolicy.GetDialogWidth(characterWidth);
+        BubbleRoot.Width = dialogWidth;
+        BubbleRoot.MaxWidth = AppSettings.MaximumDialogBubbleWidth;
+        DialogControlRoot.Width = dialogWidth;
         SetDialogAreaHeight(ReservedDialogHeight, preserveCharacterPosition: false);
         ApplyDialogTextPresentation();
     }
@@ -429,29 +481,29 @@ public partial class CompanionOverlayWindow : Window
         return new FontFamily(companion.FontFamilyName);
     }
 
-    private void StartDefaultForCurrentState(CompanionDefinition companion)
+    private void StartDefaultForCurrentState(CompanionDefinition companion, bool transition = false)
     {
         if (_manager.ActivityState == CompanionActivityState.Reminder)
         {
-            StartReminderState(companion);
+            StartReminderState(companion, transition);
             return;
         }
 
-        StartIdleDefault(companion);
+        StartIdleDefault(companion, transition);
         ScheduleRandomIdle();
     }
 
-    private void StartReminderState(CompanionDefinition companion)
+    private void StartReminderState(CompanionDefinition companion, bool transition = false)
     {
         if (companion.ReminderAnimation is { } reminderScene)
         {
-            StartScene(reminderScene, AnimationSceneRole.Reminder, forceLoop: true);
+            StartScene(reminderScene, AnimationSceneRole.Reminder, forceLoop: true, transition: transition);
             return;
         }
 
         if (companion.IdleDefaultAnimation is { } idleScene)
         {
-            StartScene(idleScene, AnimationSceneRole.ReminderFallback, forceLoop: true);
+            StartScene(idleScene, AnimationSceneRole.ReminderFallback, forceLoop: true, transition: transition);
             return;
         }
 
@@ -459,7 +511,7 @@ public partial class CompanionOverlayWindow : Window
         TryPresentPendingReminder();
     }
 
-    private void StartIdleDefault(CompanionDefinition companion)
+    private void StartIdleDefault(CompanionDefinition companion, bool transition = false)
     {
         var scene = companion.IdleDefaultAnimation;
         if (scene is null)
@@ -467,7 +519,7 @@ public partial class CompanionOverlayWindow : Window
             ShowMissingAsset(LocalizationService.Get("Overlay.IdleDefaultNotAssigned"));
             return;
         }
-        StartScene(scene, AnimationSceneRole.IdleDefault, forceLoop: true);
+        StartScene(scene, AnimationSceneRole.IdleDefault, forceLoop: true, transition: transition);
     }
 
     private void ScheduleRandomIdle()
@@ -550,8 +602,13 @@ public partial class CompanionOverlayWindow : Window
         AnimationScene scene,
         AnimationSceneRole role,
         bool forceLoop,
-        bool forceOneShot = false)
+        bool forceOneShot = false,
+        bool transition = false)
     {
+        if (transition)
+            BeginSceneTransition();
+        else
+            ClearSceneTransition();
         _afterLoopFinishes = null;
         StopDialog();
         _activeScenePlaybackFailed = false;
@@ -615,6 +672,9 @@ public partial class CompanionOverlayWindow : Window
 
     private void ShowDialogLine()
     {
+        if (_showingAutoClickStatus)
+            return;
+
         if (_activeScene is null || _dialogIndex >= _activeScene.DialogLines.Count)
         {
             DialogFinished();
@@ -687,6 +747,9 @@ public partial class CompanionOverlayWindow : Window
 
     private void AdvanceDialog()
     {
+        if (_showingAutoClickStatus)
+            return;
+
         _voicePlayer.Stop();
         _voicePlayer.Close();
         _dialogIndex++;
@@ -739,6 +802,13 @@ public partial class CompanionOverlayWindow : Window
             StopDialog();
             if (_manager.CurrentCompanion is { } companion)
                 StartDefaultForCurrentState(companion);
+            return;
+        }
+
+        if (ScenePlaybackPolicy.IsInteractionRole(_sceneRole))
+        {
+            if (_manager.CurrentCompanion is { } companion)
+                StartDefaultForCurrentState(companion, transition: true);
             return;
         }
 
@@ -833,6 +903,15 @@ public partial class CompanionOverlayWindow : Window
 
     private void UpdateDialogBubbleVisibility()
     {
+        if (_showingAutoClickStatus)
+        {
+            ApplyRestoreIndicatorTone(DialogRestoreIndicatorTone.Inactive);
+            BubbleRoot.Visibility = Visibility.Visible;
+            HideDialogButton.Visibility = Visibility.Collapsed;
+            ShowDialogButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         var presentation = DialogIndicatorPolicy.Resolve(
             HasActiveDialog,
             HasDialogContent,
@@ -861,6 +940,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void StopDialog()
     {
+        ClearAutoClickStatus();
         _pendingDialogStartFrame = null;
         _dialogTimer.Stop();
         _voicePlayer.Stop();
@@ -889,6 +969,14 @@ public partial class CompanionOverlayWindow : Window
 
     private void StopAll(bool clearFrame)
     {
+        _dragHoldTimer.Stop();
+        _pointerDown = false;
+        _dragged = false;
+        _dragInteractionPlaybackStarted = false;
+        Cursor = null;
+        if (Mouse.Captured == this)
+            Mouse.Capture(null);
+        ClearSceneTransition();
         _afterLoopFinishes = null;
         _idleTimer.Stop();
         StopDialog();
@@ -900,12 +988,99 @@ public partial class CompanionOverlayWindow : Window
 
     private void SetFrame(BitmapSource? frame)
     {
+        if (_sceneTransitionPending && frame is not null)
+        {
+            _sceneTransitionPending = false;
+            var transitionVersion = _sceneTransitionVersion;
+            CompanionImage.BeginAnimation(OpacityProperty, null);
+            CompanionImage.Source = frame;
+            CompanionImage.Visibility = Visibility.Visible;
+            CompanionImage.Opacity = 0;
+
+            var duration = new Duration(TimeSpan.FromMilliseconds(120));
+            var fadeIn = new DoubleAnimation(0, 1, duration);
+            var fadeOut = new DoubleAnimation(1, 0, duration);
+            fadeOut.Completed += (_, _) =>
+            {
+                if (transitionVersion != _sceneTransitionVersion)
+                    return;
+                TransitionImage.Source = null;
+                TransitionImage.Opacity = 0;
+            };
+            CompanionImage.BeginAnimation(OpacityProperty, fadeIn);
+            TransitionImage.BeginAnimation(OpacityProperty, fadeOut);
+            return;
+        }
+
+        CompanionImage.BeginAnimation(OpacityProperty, null);
+        CompanionImage.Opacity = 1;
         CompanionImage.Source = frame;
         CompanionImage.Visibility = frame is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    private void AutoClickStatusTimerTick(object? sender, EventArgs e)
+    {
+        _autoClickStatusTimer.Stop();
+        if (!_showingAutoClickStatus)
+            return;
+
+        _showingAutoClickStatus = false;
+        ReminderActions.Visibility = _interruptedReminderActionsVisibility;
+        if (_activeReminder is not null)
+        {
+            DialogText.Text = _interruptedDialogText;
+            UpdateDialogBubbleVisibility();
+            UpdateDialogAreaForContent();
+            return;
+        }
+
+        if (_pendingDialogStartFrame is null && HasSceneDialog)
+        {
+            ShowDialogLine();
+            return;
+        }
+
+        DialogText.Text = _interruptedDialogText;
+        UpdateDialogBubbleVisibility();
+        UpdateDialogAreaForContent();
+    }
+
+    private void ClearAutoClickStatus()
+    {
+        _autoClickStatusTimer.Stop();
+        if (_showingAutoClickStatus)
+            ReminderActions.Visibility = _interruptedReminderActionsVisibility;
+        _showingAutoClickStatus = false;
+        _interruptedDialogText = string.Empty;
+    }
+
+    private void BeginSceneTransition()
+    {
+        _sceneTransitionVersion++;
+        if (CompanionImage.Source is not BitmapSource source)
+        {
+            ClearSceneTransition();
+            return;
+        }
+
+        TransitionImage.BeginAnimation(OpacityProperty, null);
+        TransitionImage.Source = source;
+        TransitionImage.Opacity = 1;
+        _sceneTransitionPending = true;
+    }
+
+    private void ClearSceneTransition()
+    {
+        _sceneTransitionVersion++;
+        _sceneTransitionPending = false;
+        TransitionImage.BeginAnimation(OpacityProperty, null);
+        TransitionImage.Source = null;
+        TransitionImage.Opacity = 0;
+    }
+
     private void ShowMissingAsset(string message)
     {
+        ClearSceneTransition();
         _animationPlayer.Stop(clearFrame: true);
         _sceneRole = AnimationSceneRole.None;
         CompanionImage.Visibility = Visibility.Collapsed;
@@ -942,21 +1117,131 @@ public partial class CompanionOverlayWindow : Window
         if (e.ButtonState != MouseButtonState.Pressed || BubbleRoot.IsMouseOver
             || HideDialogButton.IsMouseOver || ShowDialogButton.IsMouseOver)
             return;
-        _dragged = true;
-        try { DragMove(); }
-        catch (InvalidOperationException exception)
-        {
-            AppLogger.Warning("The companion overlay drag operation was interrupted.", exception);
-        }
-        finally
-        {
-            if (_dragged)
-            {
-                _dragged = false;
-                _manager.SavePosition(Left, Top + _dialogAreaHeight);
-            }
-        }
+        _pointerDown = true;
+        _dragged = false;
+        _dragInteractionPlaybackStarted = false;
+        _pointerDownScreen = PointToScreen(e.GetPosition(this));
+        _lastPointerScreen = _pointerDownScreen;
+        Mouse.Capture(this);
+        e.Handled = true;
     }
+
+    private void Window_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_pointerDown || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var pointerScreen = PointToScreen(e.GetPosition(this));
+        if (!_dragged)
+        {
+            var totalHorizontal = pointerScreen.X - _pointerDownScreen.X;
+            var totalVertical = pointerScreen.Y - _pointerDownScreen.Y;
+            if (Math.Abs(totalHorizontal) < DragStartThreshold
+                && Math.Abs(totalVertical) < DragStartThreshold)
+            {
+                return;
+            }
+
+            _dragged = true;
+            Cursor = Cursors.Hand;
+        }
+
+        var horizontalMovement = pointerScreen.X - _lastPointerScreen.X;
+        var verticalMovement = pointerScreen.Y - _lastPointerScreen.Y;
+        if (horizontalMovement != 0 || verticalMovement != 0)
+        {
+            MoveViewport(horizontalMovement, verticalMovement);
+            if (horizontalMovement != 0)
+            {
+                var state = CompanionInteractionStatePolicy.GetDragState(horizontalMovement);
+                if (_manager.CurrentCompanion is { } companion
+                    && CompanionInteractionStatePolicy.GetAssignedDragScene(companion, state) is not null)
+                {
+                    StartDragInteraction(state);
+                }
+            }
+            _lastPointerScreen = pointerScreen;
+        }
+
+        _dragHoldTimer.Stop();
+        if (_manager.CurrentCompanion is { } holdCompanion
+            && CompanionInteractionStatePolicy.GetAssignedDragScene(
+                holdCompanion,
+                CompanionInteractionState.DragHold) is not null)
+        {
+            _dragHoldTimer.Start();
+        }
+        e.Handled = true;
+    }
+
+    private void MoveViewport(double horizontalMovement, double verticalMovement)
+    {
+        Left = Math.Clamp(
+            Left + horizontalMovement,
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - Width);
+        Top = Math.Clamp(
+            Top + verticalMovement,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - Height);
+    }
+
+    private void DragHoldTimerTick(object? sender, EventArgs e)
+    {
+        _dragHoldTimer.Stop();
+        if (_dragged)
+            StartDragInteraction(CompanionInteractionState.DragHold);
+    }
+
+    private void StartDragInteraction(CompanionInteractionState state)
+    {
+        var companion = _manager.CurrentCompanion;
+        var scene = companion is null
+            ? null
+            : CompanionInteractionStatePolicy.GetAssignedDragScene(companion, state);
+        if (scene is null)
+            return;
+
+        _dragInteractionPlaybackStarted = true;
+        var role = GetInteractionSceneRole(state);
+        if (_sceneRole == role && _activeScene?.Id == scene.Id)
+            return;
+
+        _idleTimer.Stop();
+        StartScene(scene, role, forceLoop: true, transition: true);
+    }
+
+    private void StartClickInteraction(Point viewportPoint)
+    {
+        var companion = _manager.CurrentCompanion;
+        if (companion is null || !CompanionInteractionStatePolicy.HasAnyClickScene(companion))
+            return;
+
+        var scene = CompanionInteractionStatePolicy.GetClickScene(
+            companion,
+            viewportPoint.X,
+            viewportPoint.Y,
+            CompanionViewport.ActualWidth,
+            CompanionViewport.ActualHeight);
+        if (scene is null)
+            return;
+
+        _idleTimer.Stop();
+        StartScene(
+            scene,
+            AnimationSceneRole.Click,
+            forceLoop: false,
+            forceOneShot: true,
+            transition: true);
+    }
+
+    private static AnimationSceneRole GetInteractionSceneRole(CompanionInteractionState state) => state switch
+    {
+        CompanionInteractionState.DragLeft => AnimationSceneRole.DragLeft,
+        CompanionInteractionState.DragRight => AnimationSceneRole.DragRight,
+        CompanionInteractionState.DragHold => AnimationSceneRole.DragHold,
+        _ => AnimationSceneRole.None
+    };
 
     private void RemindLaterButton_Click(object sender, RoutedEventArgs e) =>
         App.CurrentApp.SnoozeCalendarReminder();
@@ -977,11 +1262,69 @@ public partial class CompanionOverlayWindow : Window
 
     private void Window_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (!_dragged)
+        if (!_pointerDown)
             return;
-        _dragged = false;
-        _manager.SavePosition(Left, Top + _dialogAreaHeight);
+
+        var wasDragged = _dragged;
+        var restorePlayback = _dragInteractionPlaybackStarted;
+        EndPointerInteraction();
+        if (wasDragged)
+        {
+            SaveCharacterPosition();
+            RestorePlaybackAfterDrag(restorePlayback);
+        }
+        else if (_manager.CurrentCompanion is { } companion
+            && CompanionInteractionStatePolicy.HasAnyClickScene(companion))
+        {
+            StartClickInteraction(e.GetPosition(CompanionViewport));
+        }
+
+        e.Handled = true;
     }
+
+    private void Window_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (!_pointerDown)
+            return;
+
+        var wasDragged = _dragged;
+        var restorePlayback = _dragInteractionPlaybackStarted;
+        EndPointerInteraction();
+        if (!wasDragged)
+            return;
+
+        SaveCharacterPosition();
+        RestorePlaybackAfterDrag(restorePlayback);
+    }
+
+    private void RestorePlaybackAfterDrag(bool restorePlayback)
+    {
+        if (!restorePlayback || _manager.CurrentCompanion is not { } companion)
+            return;
+
+        if (_manager.ActivityState == CompanionActivityState.Reminder)
+            StartReminderState(companion, transition: true);
+        else
+        {
+            StartIdleDefault(companion, transition: true);
+            ScheduleRandomIdle();
+        }
+    }
+
+    private void EndPointerInteraction()
+    {
+        _dragHoldTimer.Stop();
+        _pointerDown = false;
+        _dragged = false;
+        _dragInteractionPlaybackStarted = false;
+        Cursor = null;
+        if (Mouse.Captured == this)
+            Mouse.Capture(null);
+    }
+
+    private void SaveCharacterPosition() => _manager.SavePosition(
+        Left + OverlayLayoutPolicy.GetCharacterHorizontalOffset(_manager.Data.Settings.ViewportWidth),
+        Top + _dialogAreaHeight);
 
     public void CloseForExit(Action? completed = null)
     {

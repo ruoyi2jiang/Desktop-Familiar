@@ -102,22 +102,22 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="{loc:Loc Calendar.Date}" Style="{StaticResource FieldLabel}" />
-                                <DatePicker x:Name="StartDatePicker" Height="38" Margin="0,4,0,10" SelectedDateChanged="DatePicker_SelectedDateChanged" />
+                                <DatePicker x:Name="StartDatePicker" SelectedDateChanged="DatePicker_SelectedDateChanged" />
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="{loc:Loc Calendar.EndDate}" Style="{StaticResource FieldLabel}" />
-                                <DatePicker x:Name="EndDatePicker" Height="38" Margin="0,4,0,10" SelectedDateChanged="DatePicker_SelectedDateChanged" />
+                                <DatePicker x:Name="EndDatePicker" SelectedDateChanged="DatePicker_SelectedDateChanged" />
                             </StackPanel>
                         </Grid>
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="{loc:Loc Calendar.Category}" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="CategoryCombo" Height="38" Margin="0,4,0,10" />
+                                <ComboBox x:Name="CategoryCombo" />
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="{loc:Loc Calendar.Recurrence}" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="RecurrenceCombo" Height="38" Margin="0,4,0,10" SelectionChanged="RecurrenceCombo_SelectionChanged" />
+                                <ComboBox x:Name="RecurrenceCombo" SelectionChanged="RecurrenceCombo_SelectionChanged" />
                             </StackPanel>
                         </Grid>
                         <CheckBox x:Name="AllDayCheck" Content="{loc:Loc Calendar.AllDay}" Checked="AllDayCheck_Changed" Unchecked="AllDayCheck_Changed" />
@@ -125,11 +125,11 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="{loc:Loc Calendar.StartTime}" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="StartTimeCombo" Height="38" Margin="0,4,0,10" SelectionChanged="StartTimeCombo_SelectionChanged" />
+                                <ComboBox x:Name="StartTimeCombo" SelectionChanged="StartTimeCombo_SelectionChanged" />
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="{loc:Loc Calendar.EndTime}" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="EndTimeCombo" Height="38" Margin="0,4,0,10" />
+                                <ComboBox x:Name="EndTimeCombo" />
                             </StackPanel>
                         </Grid>
                         <WrapPanel x:Name="WeekdaysPanel" Margin="0,0,0,8">

@@ -116,4 +116,17 @@ public sealed class ScenePlaybackPolicyTests
             expected,
             ScenePlaybackPolicy.ShouldPresentSceneDialog(focusModeEnabled, role));
     }
+
+    [Theory]
+    [InlineData(AnimationSceneRole.DragLeft)]
+    [InlineData(AnimationSceneRole.DragRight)]
+    [InlineData(AnimationSceneRole.DragHold)]
+    [InlineData(AnimationSceneRole.Click)]
+    public void InteractionRoles_DoNotPresentSceneDialogue(AnimationSceneRole role)
+    {
+        Assert.True(ScenePlaybackPolicy.IsInteractionRole(role));
+        Assert.False(ScenePlaybackPolicy.ShouldPresentSceneDialog(
+            focusModeEnabled: false,
+            role));
+    }
 }

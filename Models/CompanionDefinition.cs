@@ -23,6 +23,7 @@ public sealed class CompanionDefinition
     public Guid? ExitAnimationId { get; set; }
     public Guid? IdleDefaultAnimationId { get; set; }
     public List<Guid> IdleRandomAnimationIds { get; set; } = [];
+    public CompanionInteractionStateAssignments InteractionStates { get; set; } = new();
 
     [JsonIgnore]
     public AnimationScene? StartAnimation => FindAnimation(StartAnimationId);
@@ -48,6 +49,9 @@ public sealed class CompanionDefinition
     [JsonIgnore]
     public AnimationScene? IdleDefaultAnimation => FindAnimation(IdleDefaultAnimationId);
 
+    public AnimationScene? GetInteractionAnimation(CompanionInteractionState state) =>
+        FindAnimation(InteractionStates?.GetAnimationId(state));
+
     public CompanionDefinition Clone() => new()
     {
         Id = Id,
@@ -67,7 +71,8 @@ public sealed class CompanionDefinition
         UserBirthdayAnimation2Id = UserBirthdayAnimation2Id,
         ExitAnimationId = ExitAnimationId,
         IdleDefaultAnimationId = IdleDefaultAnimationId,
-        IdleRandomAnimationIds = [.. IdleRandomAnimationIds]
+        IdleRandomAnimationIds = [.. IdleRandomAnimationIds],
+        InteractionStates = InteractionStates?.Clone() ?? new()
     };
 
     public AnimationScene? FindAnimation(Guid? id) => id is Guid animationId

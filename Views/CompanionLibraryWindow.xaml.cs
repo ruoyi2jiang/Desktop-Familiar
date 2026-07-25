@@ -201,13 +201,26 @@ public partial class CompanionLibraryWindow : Window
         var companion = _manager.Data.Companions.FirstOrDefault(item => item.Id == id);
         if (companion is null)
             return;
-        var result = MessageBox.Show(
-            LocalizationService.Format("Library.Delete.Message", companion.Name),
-            LocalizationService.Get("Library.Delete.Title"),
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning,
-            MessageBoxResult.No);
-        if (result == MessageBoxResult.Yes)
-            _manager.DeleteCompanion(id);
+        var dialog = new CompanionDeleteDialog(companion.Name) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Choice == CompanionDeleteChoice.Cancel)
+            return;
+
+        _manager.DeleteCompanion(id);
+        if (dialog.Choice != CompanionDeleteChoice.DeleteResources)
+            return;
+
+        try
+        {
+            _storage.DeleteCompanionResources(id);
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("The deleted companion's imported resources could not be removed.", exception);
+            MessageBox.Show(
+                LocalizationService.Format("Library.Delete.ResourcesFailed", exception.Message),
+                LocalizationService.Get("Library.Delete.Title"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 }
