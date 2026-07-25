@@ -190,25 +190,99 @@ public sealed class CompanionManager
         IdleIntervalChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetAutoClickSettings(string hotkey, int intervalMilliseconds)
+    public void SetAutoClickSettings(
+        string hotkey,
+        string backgroundModeHotkey,
+        int intervalMilliseconds,
+        int intervalMaximumMilliseconds,
+        bool backgroundModeEnabled)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hotkey);
         if (!AutoClickHotkeyPolicy.TryParse(hotkey, out var parsedHotkey))
             throw new ArgumentException("The auto-click hotkey is invalid.", nameof(hotkey));
+        if (!AutoClickHotkeyPolicy.TryParse(backgroundModeHotkey, out var parsedBackgroundModeHotkey))
+            throw new ArgumentException("The background-mode hotkey is invalid.", nameof(backgroundModeHotkey));
+        if (string.Equals(parsedHotkey.DisplayText, parsedBackgroundModeHotkey.DisplayText, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The auto-click hotkeys must be different.", nameof(backgroundModeHotkey));
 
         intervalMilliseconds = Math.Clamp(
             intervalMilliseconds,
             AppSettings.MinimumAutoClickIntervalMilliseconds,
             AppSettings.MaximumAutoClickIntervalMilliseconds);
+        intervalMaximumMilliseconds = Math.Clamp(
+            intervalMaximumMilliseconds,
+            intervalMilliseconds,
+            AppSettings.MaximumAutoClickIntervalMilliseconds);
         if (Data.Settings.AutoClickHotkey == parsedHotkey.DisplayText
-            && Data.Settings.AutoClickIntervalMilliseconds == intervalMilliseconds)
+            && Data.Settings.AutoClickBackgroundModeHotkey == parsedBackgroundModeHotkey.DisplayText
+            && Data.Settings.AutoClickIntervalMilliseconds == intervalMilliseconds
+            && Data.Settings.AutoClickIntervalMaximumMilliseconds == intervalMaximumMilliseconds
+            && Data.Settings.AutoClickBackgroundModeEnabled == backgroundModeEnabled)
         {
             return;
         }
 
+        var previousHotkey = Data.Settings.AutoClickHotkey;
+        var previousBackgroundModeHotkey = Data.Settings.AutoClickBackgroundModeHotkey;
+        var previousInterval = Data.Settings.AutoClickIntervalMilliseconds;
+        var previousMaximumInterval = Data.Settings.AutoClickIntervalMaximumMilliseconds;
+        var previousBackgroundMode = Data.Settings.AutoClickBackgroundModeEnabled;
         Data.Settings.AutoClickHotkey = parsedHotkey.DisplayText;
+        Data.Settings.AutoClickBackgroundModeHotkey = parsedBackgroundModeHotkey.DisplayText;
         Data.Settings.AutoClickIntervalMilliseconds = intervalMilliseconds;
-        Persist();
+        Data.Settings.AutoClickIntervalMaximumMilliseconds = intervalMaximumMilliseconds;
+        Data.Settings.AutoClickBackgroundModeEnabled = backgroundModeEnabled;
+        try
+        {
+            Persist();
+        }
+        catch
+        {
+            Data.Settings.AutoClickHotkey = previousHotkey;
+            Data.Settings.AutoClickBackgroundModeHotkey = previousBackgroundModeHotkey;
+            Data.Settings.AutoClickIntervalMilliseconds = previousInterval;
+            Data.Settings.AutoClickIntervalMaximumMilliseconds = previousMaximumInterval;
+            Data.Settings.AutoClickBackgroundModeEnabled = previousBackgroundMode;
+            throw;
+        }
+        AutoClickSettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetAutoClickBackgroundModeEnabled(bool enabled)
+    {
+        if (Data.Settings.AutoClickBackgroundModeEnabled == enabled)
+            return;
+
+        var previous = Data.Settings.AutoClickBackgroundModeEnabled;
+        Data.Settings.AutoClickBackgroundModeEnabled = enabled;
+        try
+        {
+            Persist();
+        }
+        catch
+        {
+            Data.Settings.AutoClickBackgroundModeEnabled = previous;
+            throw;
+        }
+        AutoClickSettingsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetAutoClickEnabled(bool enabled)
+    {
+        if (Data.Settings.AutoClickEnabled == enabled)
+            return;
+
+        var previous = Data.Settings.AutoClickEnabled;
+        Data.Settings.AutoClickEnabled = enabled;
+        try
+        {
+            Persist();
+        }
+        catch
+        {
+            Data.Settings.AutoClickEnabled = previous;
+            throw;
+        }
         AutoClickSettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -227,24 +301,48 @@ public sealed class CompanionManager
 
     public void SelectSavedTheme(Guid themeId)
     {
-        if (Data.Settings.SelectedThemeId == themeId || Data.Settings.SavedThemes.All(theme => theme.Id != themeId))
+        var selectedTheme = Data.Settings.SavedThemes.FirstOrDefault(theme => theme.Id == themeId);
+        if (selectedTheme is null)
             return;
 
+        var selectedThemeKind = ThemeSelectionPolicy.Resolve(selectedTheme);
+        if (Data.Settings.SelectedThemeId == themeId && Data.Settings.Theme == selectedThemeKind)
+            return;
+
+        var previousThemeId = Data.Settings.SelectedThemeId;
+        var previousThemeKind = Data.Settings.Theme;
+        var previousPalette = Data.Settings.CustomTheme.Clone();
         Data.Settings.SelectedThemeId = themeId;
-        Data.Settings.Theme = AppTheme.Custom;
-        Data.Settings.CustomTheme = CurrentSavedTheme.Palette.Clone();
-        Persist();
+        Data.Settings.Theme = selectedThemeKind;
+        Data.Settings.CustomTheme = selectedTheme.Palette.Clone();
+        try
+        {
+            Persist();
+        }
+        catch
+        {
+            Data.Settings.SelectedThemeId = previousThemeId;
+            Data.Settings.Theme = previousThemeKind;
+            Data.Settings.CustomTheme = previousPalette;
+            throw;
+        }
         ThemeChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SaveSavedTheme(SavedTheme theme)
     {
         ArgumentNullException.ThrowIfNull(theme);
+        var existingTheme = Data.Settings.SavedThemes.FirstOrDefault(existing => existing.Id == theme.Id);
+        if (existingTheme?.IsBuiltIn == true)
+            throw new InvalidOperationException("Built-in themes cannot be edited.");
+
         var saved = theme.Clone();
         saved.Name = saved.Name.Trim();
         if (string.IsNullOrWhiteSpace(saved.Name))
             throw new InvalidOperationException("A theme name is required.");
 
+        var previousThemes = Data.Settings.SavedThemes.Select(existing => existing.Clone()).ToList();
+        var previousPalette = Data.Settings.CustomTheme.Clone();
         var index = Data.Settings.SavedThemes.FindIndex(existing => existing.Id == saved.Id);
         if (index >= 0)
             Data.Settings.SavedThemes[index] = saved;
@@ -254,7 +352,16 @@ public sealed class CompanionManager
         if (Data.Settings.SelectedThemeId == saved.Id)
             Data.Settings.CustomTheme = saved.Palette.Clone();
 
-        Persist();
+        try
+        {
+            Persist();
+        }
+        catch
+        {
+            Data.Settings.SavedThemes = previousThemes;
+            Data.Settings.CustomTheme = previousPalette;
+            throw;
+        }
         if (Data.Settings.SelectedThemeId == saved.Id)
             ThemeChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -268,17 +375,34 @@ public sealed class CompanionManager
         if (theme?.IsBuiltIn == true)
             throw new InvalidOperationException("Built-in themes cannot be deleted.");
 
+        var previousThemes = Data.Settings.SavedThemes.Select(existing => existing.Clone()).ToList();
+        var previousThemeId = Data.Settings.SelectedThemeId;
+        var previousThemeKind = Data.Settings.Theme;
+        var previousPalette = Data.Settings.CustomTheme.Clone();
         var removed = Data.Settings.SavedThemes.RemoveAll(theme => theme.Id == themeId);
         if (removed == 0)
             return;
 
         if (Data.Settings.SelectedThemeId == themeId)
         {
-            Data.Settings.SelectedThemeId = Data.Settings.SavedThemes[0].Id;
-            Data.Settings.CustomTheme = Data.Settings.SavedThemes[0].Palette.Clone();
+            var nextTheme = Data.Settings.SavedThemes[0];
+            Data.Settings.SelectedThemeId = nextTheme.Id;
+            Data.Settings.Theme = ThemeSelectionPolicy.Resolve(nextTheme);
+            Data.Settings.CustomTheme = nextTheme.Palette.Clone();
         }
 
-        Persist();
+        try
+        {
+            Persist();
+        }
+        catch
+        {
+            Data.Settings.SavedThemes = previousThemes;
+            Data.Settings.SelectedThemeId = previousThemeId;
+            Data.Settings.Theme = previousThemeKind;
+            Data.Settings.CustomTheme = previousPalette;
+            throw;
+        }
         ThemeChanged?.Invoke(this, EventArgs.Empty);
     }
 

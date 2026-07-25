@@ -7,6 +7,8 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Rectangle = System.Windows.Shapes.Rectangle;
+using Shape = System.Windows.Shapes.Shape;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
@@ -31,8 +33,12 @@ public partial class CompanionEditorWindow : Window
     private readonly bool _isNew;
     private readonly FrameAnimationPlayer _previewPlayer;
     private readonly FrameAnimationPlayer _companionPreviewPlayer;
+    private readonly FrameAnimationPlayer _clickAreaPreviewPlayer;
     private bool _loadingBubbleChoices;
     private bool _updatingFramePlayback;
+    private bool _updatingClickAreaEditor;
+    private Point? _clickAreaSelectionStart;
+    private Rectangle? _clickAreaSelectionRectangle;
 
     public CompanionEditorWindow(CompanionManager manager, CompanionStorage storage, CompanionDefinition? source)
     {
@@ -46,6 +52,11 @@ public partial class CompanionEditorWindow : Window
         {
             CompanionPreviewImage.Source = frame;
             CompanionPreviewHint.Visibility = frame is null ? Visibility.Visible : Visibility.Collapsed;
+        });
+        _clickAreaPreviewPlayer = new FrameAnimationPlayer(frame =>
+        {
+            ClickAreaPreviewImage.Source = frame;
+            ClickAreaPreviewHint.Visibility = frame is null ? Visibility.Visible : Visibility.Collapsed;
         });
         _manager = manager;
         _storage = storage;
@@ -77,6 +88,7 @@ public partial class CompanionEditorWindow : Window
         {
             _previewPlayer.Dispose();
             _companionPreviewPlayer.Dispose();
+            _clickAreaPreviewPlayer.Dispose();
         };
     }
 
@@ -116,6 +128,9 @@ public partial class CompanionEditorWindow : Window
         RefreshAssignmentCombo(ReminderCombo, GetAssignmentId(ReminderCombo, _companion.ReminderAnimationId));
         RefreshAssignmentCombo(IdleDefaultCombo, GetAssignmentId(IdleDefaultCombo, _companion.IdleDefaultAnimationId));
         RefreshAssignmentCombo(ExitCombo, GetAssignmentId(ExitCombo, _companion.ExitAnimationId));
+        RefreshAssignmentCombo(DragLeftCombo, GetAssignmentId(DragLeftCombo, _companion.InteractionStates.DragLeftAnimationId));
+        RefreshAssignmentCombo(DragRightCombo, GetAssignmentId(DragRightCombo, _companion.InteractionStates.DragRightAnimationId));
+        RefreshAssignmentCombo(DragHoldCombo, GetAssignmentId(DragHoldCombo, _companion.InteractionStates.DragHoldAnimationId));
         RefreshAssignmentCombo(SelfBirthday1Combo, GetAssignmentId(SelfBirthday1Combo, _companion.SelfBirthdayAnimation1Id));
         RefreshAssignmentCombo(SelfBirthday2Combo, GetAssignmentId(SelfBirthday2Combo, _companion.SelfBirthdayAnimation2Id));
         RefreshAssignmentCombo(UserBirthday1Combo, GetAssignmentId(UserBirthday1Combo, _companion.UserBirthdayAnimation1Id));
@@ -134,6 +149,7 @@ public partial class CompanionEditorWindow : Window
             };
             IdleRandomChecksPanel.Children.Add(check);
         }
+        RefreshClickAreaEditor();
         RefreshCompanionPreview();
     }
 
@@ -283,7 +299,11 @@ public partial class CompanionEditorWindow : Window
         RefreshFramePlaybackOptions(scene, frameChoices);
     }
 
-    private void StateAssignment_SelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshCompanionPreview();
+    private void StateAssignment_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        RefreshCompanionPreview();
+        RefreshClickAreaPreview();
+    }
 
     private void RefreshCompanionPreview()
     {
@@ -304,6 +324,184 @@ public partial class CompanionEditorWindow : Window
             AppLogger.Warning("The in-editor companion preview could not be played.", exception);
             _companionPreviewPlayer.Stop(clearFrame: true);
         }
+    }
+
+    private void RefreshClickAreaEditor(Guid? selectedId = null)
+    {
+        _updatingClickAreaEditor = true;
+        try
+        {
+            selectedId ??= (ClickAreaList.SelectedItem as CompanionClickArea)?.Id;
+            ClickAreaList.ItemsSource = null;
+            ClickAreaList.ItemsSource = _companion.InteractionStates.ClickAreas;
+            ClickAreaAnimationCombo.ItemsSource = CreateSceneAssignmentChoices();
+            ClickAreaList.SelectedItem = _companion.InteractionStates.ClickAreas
+                .FirstOrDefault(area => area.Id == selectedId)
+                ?? _companion.InteractionStates.ClickAreas.FirstOrDefault();
+            UpdateClickAreaSelectionFields();
+            RenderClickAreas();
+        }
+        finally
+        {
+            _updatingClickAreaEditor = false;
+        }
+        RefreshClickAreaPreview();
+    }
+
+    private IReadOnlyList<SceneAssignmentChoice> CreateSceneAssignmentChoices()
+    {
+        var choices = new List<SceneAssignmentChoice>
+        {
+            new(null, LocalizationService.Get("Editor.StateAssignment.None"))
+        };
+        choices.AddRange(_companion.Animations.Select(scene => new SceneAssignmentChoice(scene.Id, scene.DisplayName)));
+        return choices;
+    }
+
+    private void RefreshClickAreaPreview()
+    {
+        _clickAreaPreviewPlayer.Stop(clearFrame: true);
+        var scene = _companion.FindAnimation(GetAssignmentId(IdleDefaultCombo, _companion.IdleDefaultAnimationId));
+        if (scene is null)
+            return;
+
+        try
+        {
+            _clickAreaPreviewPlayer.Play(scene, loop: true);
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Warning("The click-area idle preview could not be played.", exception);
+            _clickAreaPreviewPlayer.Stop(clearFrame: true);
+        }
+    }
+
+    private void ClickAreaList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingClickAreaEditor)
+            return;
+        UpdateClickAreaSelectionFields();
+        RenderClickAreas();
+    }
+
+    private void UpdateClickAreaSelectionFields()
+    {
+        var area = ClickAreaList.SelectedItem as CompanionClickArea;
+        ClickAreaNameBox.IsEnabled = area is not null;
+        ClickAreaAnimationCombo.IsEnabled = area is not null;
+        ClickAreaNameBox.Text = area?.Name ?? string.Empty;
+        ClickAreaAnimationCombo.SelectedItem = ClickAreaAnimationCombo.Items
+            .OfType<SceneAssignmentChoice>()
+            .FirstOrDefault(choice => choice.Id == area?.AnimationId)
+            ?? ClickAreaAnimationCombo.Items.OfType<SceneAssignmentChoice>().FirstOrDefault();
+    }
+
+    private void ClickAreaNameBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_updatingClickAreaEditor || ClickAreaList.SelectedItem is not CompanionClickArea area)
+            return;
+        area.Name = ClickAreaNameBox.Text.Trim();
+        ClickAreaList.Items.Refresh();
+        RenderClickAreas();
+    }
+
+    private void ClickAreaAnimation_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingClickAreaEditor || ClickAreaList.SelectedItem is not CompanionClickArea area)
+            return;
+        area.AnimationId = GetAssignmentId(ClickAreaAnimationCombo, null);
+    }
+
+    private void RemoveClickArea_Click(object sender, RoutedEventArgs e)
+    {
+        if (ClickAreaList.SelectedItem is not CompanionClickArea area)
+            return;
+        _companion.InteractionStates.ClickAreas.Remove(area);
+        RefreshClickAreaEditor();
+    }
+
+    private void ClickAreaPreview_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _clickAreaSelectionStart = e.GetPosition(ClickAreaSelectionCanvas);
+        _clickAreaSelectionRectangle = new Rectangle
+        {
+            StrokeThickness = 2,
+            Fill = Brushes.Transparent,
+            IsHitTestVisible = false
+        };
+        _clickAreaSelectionRectangle.SetResourceReference(Shape.StrokeProperty, ThemeTokens.PrimaryAccent);
+        ClickAreaSelectionCanvas.Children.Add(_clickAreaSelectionRectangle);
+        ClickAreaSelectionCanvas.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void ClickAreaPreview_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_clickAreaSelectionStart is not Point start || _clickAreaSelectionRectangle is null)
+            return;
+        UpdateSelectionRectangle(start, e.GetPosition(ClickAreaSelectionCanvas), _clickAreaSelectionRectangle);
+        e.Handled = true;
+    }
+
+    private void ClickAreaPreview_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_clickAreaSelectionStart is not Point start || _clickAreaSelectionRectangle is null)
+            return;
+
+        var end = e.GetPosition(ClickAreaSelectionCanvas);
+        var width = Math.Abs(end.X - start.X);
+        var height = Math.Abs(end.Y - start.Y);
+        ClickAreaSelectionCanvas.Children.Remove(_clickAreaSelectionRectangle);
+        ClickAreaSelectionCanvas.ReleaseMouseCapture();
+        _clickAreaSelectionRectangle = null;
+        _clickAreaSelectionStart = null;
+        if (width < 6 || height < 6 || ClickAreaSelectionCanvas.ActualWidth <= 0 || ClickAreaSelectionCanvas.ActualHeight <= 0)
+            return;
+
+        var area = new CompanionClickArea
+        {
+            Name = LocalizationService.Format("Editor.ClickAreas.DefaultName", _companion.InteractionStates.ClickAreas.Count + 1),
+            LeftPercent = Math.Min(start.X, end.X) / ClickAreaSelectionCanvas.ActualWidth * 100d,
+            TopPercent = Math.Min(start.Y, end.Y) / ClickAreaSelectionCanvas.ActualHeight * 100d,
+            WidthPercent = width / ClickAreaSelectionCanvas.ActualWidth * 100d,
+            HeightPercent = height / ClickAreaSelectionCanvas.ActualHeight * 100d
+        };
+        _companion.InteractionStates.ClickAreas.Add(area);
+        RefreshClickAreaEditor(area.Id);
+        e.Handled = true;
+    }
+
+    private void ClickAreaPreview_SizeChanged(object sender, SizeChangedEventArgs e) => RenderClickAreas();
+
+    private void RenderClickAreas()
+    {
+        ClickAreaSelectionCanvas.Children.Clear();
+        if (ClickAreaSelectionCanvas.ActualWidth <= 0 || ClickAreaSelectionCanvas.ActualHeight <= 0)
+            return;
+
+        foreach (var area in _companion.InteractionStates.ClickAreas)
+        {
+            var rectangle = new Rectangle
+            {
+                Width = area.WidthPercent / 100d * ClickAreaSelectionCanvas.ActualWidth,
+                Height = area.HeightPercent / 100d * ClickAreaSelectionCanvas.ActualHeight,
+                StrokeThickness = 2,
+                Fill = Brushes.Transparent,
+                IsHitTestVisible = false
+            };
+            rectangle.SetResourceReference(Shape.StrokeProperty, ThemeTokens.PrimaryAccent);
+            Canvas.SetLeft(rectangle, area.LeftPercent / 100d * ClickAreaSelectionCanvas.ActualWidth);
+            Canvas.SetTop(rectangle, area.TopPercent / 100d * ClickAreaSelectionCanvas.ActualHeight);
+            ClickAreaSelectionCanvas.Children.Add(rectangle);
+        }
+    }
+
+    private static void UpdateSelectionRectangle(Point start, Point end, Rectangle rectangle)
+    {
+        Canvas.SetLeft(rectangle, Math.Min(start.X, end.X));
+        Canvas.SetTop(rectangle, Math.Min(start.Y, end.Y));
+        rectangle.Width = Math.Abs(end.X - start.X);
+        rectangle.Height = Math.Abs(end.Y - start.Y);
     }
 
     private void AddScene_Click(object sender, RoutedEventArgs e)
@@ -346,6 +544,7 @@ public partial class CompanionEditorWindow : Window
             _companion.UserBirthdayAnimation2Id = null;
         if (_companion.ExitAnimationId == scene.Id)
             _companion.ExitAnimationId = null;
+        _companion.InteractionStates.ClearAnimationId(scene.Id);
         RefreshSceneSelectors(_companion.Animations.FirstOrDefault()?.Id);
     }
 
@@ -364,6 +563,12 @@ public partial class CompanionEditorWindow : Window
                     choice.DisplayName = scene.DisplayName;
                 }
                 comboBox.Items.Refresh();
+            }
+            if (ClickAreaAnimationCombo.Items.OfType<SceneAssignmentChoice>()
+                .FirstOrDefault(choice => choice.Id == scene.Id) is { } clickAreaChoice)
+            {
+                clickAreaChoice.DisplayName = scene.DisplayName;
+                ClickAreaAnimationCombo.Items.Refresh();
             }
             var check = IdleRandomChecksPanel.Children.OfType<CheckBox>().FirstOrDefault(item => (Guid)item.Tag == scene.Id);
             if (check is not null)
@@ -932,6 +1137,9 @@ public partial class CompanionEditorWindow : Window
         _companion.ReminderAnimationId = GetAssignmentId(ReminderCombo, null);
         _companion.IdleDefaultAnimationId = GetAssignmentId(IdleDefaultCombo, null);
         _companion.ExitAnimationId = GetAssignmentId(ExitCombo, null);
+        _companion.InteractionStates.DragLeftAnimationId = GetAssignmentId(DragLeftCombo, null);
+        _companion.InteractionStates.DragRightAnimationId = GetAssignmentId(DragRightCombo, null);
+        _companion.InteractionStates.DragHoldAnimationId = GetAssignmentId(DragHoldCombo, null);
         _companion.SelfBirthdayAnimation1Id = GetAssignmentId(SelfBirthday1Combo, null);
         _companion.SelfBirthdayAnimation2Id = GetAssignmentId(SelfBirthday2Combo, null);
         _companion.UserBirthdayAnimation1Id = GetAssignmentId(UserBirthday1Combo, null);
@@ -977,6 +1185,9 @@ public partial class CompanionEditorWindow : Window
         yield return ReminderCombo;
         yield return IdleDefaultCombo;
         yield return ExitCombo;
+        yield return DragLeftCombo;
+        yield return DragRightCombo;
+        yield return DragHoldCombo;
         yield return SelfBirthday1Combo;
         yield return SelfBirthday2Combo;
         yield return UserBirthday1Combo;

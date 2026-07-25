@@ -94,10 +94,10 @@ public partial class SettingsWindow : Window
     private enum SettingsPage
     {
         General,
-        AutoClick,
         User,
         Companion,
-        Theme
+        Theme,
+        Extra
     }
 
     private enum AutoClickIntervalUnit
@@ -106,14 +106,23 @@ public partial class SettingsWindow : Window
         Seconds
     }
 
+    private enum AutoClickHotkeyCaptureTarget
+    {
+        None,
+        Toggle,
+        BackgroundMode
+    }
+
     private readonly CompanionManager _manager;
     private readonly AutoClickCoordinator _autoClickCoordinator;
     private readonly Dictionary<string, CustomThemeTokenControl> _customThemeTokenControls = new(StringComparer.Ordinal);
     private CustomThemePalette _editingPalette = new();
     private Guid? _editingThemeId;
     private bool _loaded;
-    private bool _capturingAutoClickHotkey;
+    private AutoClickHotkeyCaptureTarget _capturingAutoClickHotkey;
+    private bool _updatingAutoClickIntervalInputs;
     private AutoClickHotkey _pendingAutoClickHotkey = null!;
+    private AutoClickHotkey _pendingAutoClickBackgroundModeHotkey = null!;
     private AutoClickIntervalUnit _autoClickIntervalUnit = AutoClickIntervalUnit.Seconds;
 
     public SettingsWindow(CompanionManager manager, AutoClickCoordinator autoClickCoordinator)
@@ -126,13 +135,24 @@ public partial class SettingsWindow : Window
         ViewportWidthBox.Text = _manager.Data.Settings.ViewportWidth.ToString();
         ViewportHeightBox.Text = _manager.Data.Settings.ViewportHeight.ToString();
         TruncateDialogLinesCheck.IsChecked = _manager.Data.Settings.TruncateLongDialogLines;
+        AutoClickEnabledToggle.IsChecked = _manager.Data.Settings.AutoClickEnabled;
+        AutoClickBackgroundModeCheck.IsChecked = _manager.Data.Settings.AutoClickBackgroundModeEnabled;
+        UpdateAutoClickOptionsVisibility();
         IdleIntervalBox.Text = _manager.Data.Settings.IdleDelaySeconds.ToString("0.##", CultureInfo.CurrentCulture);
         _pendingAutoClickHotkey = AutoClickHotkeyPolicy.TryParse(_manager.Data.Settings.AutoClickHotkey, out var savedHotkey)
             ? savedHotkey
             : throw new InvalidOperationException("The normalized auto-click hotkey is invalid.");
         AutoClickHotkeyButton.Content = _pendingAutoClickHotkey.DisplayText;
+        _pendingAutoClickBackgroundModeHotkey = AutoClickHotkeyPolicy.TryParse(
+            _manager.Data.Settings.AutoClickBackgroundModeHotkey,
+            out var savedBackgroundModeHotkey)
+            ? savedBackgroundModeHotkey
+            : throw new InvalidOperationException("The normalized auto-click background-mode hotkey is invalid.");
+        AutoClickBackgroundModeHotkeyButton.Content = _pendingAutoClickBackgroundModeHotkey.DisplayText;
         AutoClickIntervalUnitComboBox.SelectedIndex = 1;
         AutoClickIntervalBox.Text = (_manager.Data.Settings.AutoClickIntervalMilliseconds / 1000d)
+            .ToString("0.###", CultureInfo.CurrentCulture);
+        AutoClickIntervalMaximumBox.Text = (_manager.Data.Settings.AutoClickIntervalMaximumMilliseconds / 1000d)
             .ToString("0.###", CultureInfo.CurrentCulture);
         RefreshThemeCards();
         Loaded += (_, _) => _loaded = true;
@@ -217,31 +237,84 @@ public partial class SettingsWindow : Window
 
     private void GeneralMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.General);
 
-    private void AutoClickMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.AutoClick);
-
     private void UserMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.User);
 
     private void CompanionMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Companion);
 
     private void ThemeMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Theme);
 
+    private void ExtraMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Extra);
+
+    private void AutoClickEnabled_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_loaded)
+            return;
+
+        var enabled = AutoClickEnabledToggle.IsChecked == true;
+        try
+        {
+            if (!_autoClickCoordinator.TrySetEnabled(enabled))
+            {
+                MessageBox.Show(
+                    LocalizationService.Get("Settings.AutoClick.Hotkey.Unavailable"),
+                    LocalizationService.Get("App.Name"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                _loaded = false;
+                AutoClickEnabledToggle.IsChecked = _manager.Data.Settings.AutoClickEnabled;
+                _loaded = true;
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("The auto-clicker enabled setting could not be saved.", exception);
+            MessageBox.Show(
+                LocalizationService.Format("Settings.AutoClick.Enabled.Failed", exception.Message),
+                LocalizationService.Get("App.Name"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            _loaded = false;
+            AutoClickEnabledToggle.IsChecked = _manager.Data.Settings.AutoClickEnabled;
+            _loaded = true;
+        }
+
+        UpdateAutoClickOptionsVisibility();
+    }
+
+    private void UpdateAutoClickOptionsVisibility() =>
+        AutoClickOptionsPanel.Visibility = _manager.Data.Settings.AutoClickEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
     private void AutoClickHotkey_Click(object sender, RoutedEventArgs e)
     {
-        _capturingAutoClickHotkey = true;
-        AutoClickHotkeyButton.Content = LocalizationService.Get("Settings.AutoClick.Hotkey.Capturing");
-        AutoClickHotkeyButton.Focus();
+        BeginAutoClickHotkeyCapture(AutoClickHotkeyCaptureTarget.Toggle);
+    }
+
+    private void AutoClickBackgroundModeHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        BeginAutoClickHotkeyCapture(AutoClickHotkeyCaptureTarget.BackgroundMode);
+    }
+
+    private void BeginAutoClickHotkeyCapture(AutoClickHotkeyCaptureTarget captureTarget)
+    {
+        _capturingAutoClickHotkey = captureTarget;
+        var button = captureTarget == AutoClickHotkeyCaptureTarget.Toggle
+            ? AutoClickHotkeyButton
+            : AutoClickBackgroundModeHotkeyButton;
+        button.Content = LocalizationService.Get("Settings.AutoClick.Hotkey.Capturing");
+        button.Focus();
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (!_capturingAutoClickHotkey)
+        if (_capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.None)
             return;
 
         e.Handled = true;
         if (e.Key == Key.Escape)
         {
-            _capturingAutoClickHotkey = false;
-            AutoClickHotkeyButton.Content = _pendingAutoClickHotkey.DisplayText;
+            RestoreCapturedAutoClickHotkeyButton();
             return;
         }
 
@@ -249,13 +322,33 @@ public partial class SettingsWindow : Window
         var virtualKey = (uint)KeyInterop.VirtualKeyFromKey(key);
         if (!AutoClickHotkeyPolicy.TryCreate(GetAutoClickModifiers(Keyboard.Modifiers), virtualKey, out var hotkey))
         {
-            AutoClickHotkeyButton.Content = LocalizationService.Get("Settings.AutoClick.Hotkey.Invalid");
+            SetCapturedAutoClickHotkeyButtonContent(LocalizationService.Get("Settings.AutoClick.Hotkey.Invalid"));
             return;
         }
 
-        _pendingAutoClickHotkey = hotkey;
-        _capturingAutoClickHotkey = false;
-        AutoClickHotkeyButton.Content = hotkey.DisplayText;
+        if (_capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.Toggle)
+            _pendingAutoClickHotkey = hotkey;
+        else
+            _pendingAutoClickBackgroundModeHotkey = hotkey;
+        SetCapturedAutoClickHotkeyButtonContent(hotkey.DisplayText);
+        _capturingAutoClickHotkey = AutoClickHotkeyCaptureTarget.None;
+    }
+
+    private void RestoreCapturedAutoClickHotkeyButton()
+    {
+        SetCapturedAutoClickHotkeyButtonContent(
+            _capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.Toggle
+                ? _pendingAutoClickHotkey.DisplayText
+                : _pendingAutoClickBackgroundModeHotkey.DisplayText);
+        _capturingAutoClickHotkey = AutoClickHotkeyCaptureTarget.None;
+    }
+
+    private void SetCapturedAutoClickHotkeyButtonContent(string content)
+    {
+        if (_capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.Toggle)
+            AutoClickHotkeyButton.Content = content;
+        else if (_capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.BackgroundMode)
+            AutoClickBackgroundModeHotkeyButton.Content = content;
     }
 
     private void AutoClickIntervalUnit_Changed(object sender, SelectionChangedEventArgs e)
@@ -264,15 +357,47 @@ public partial class SettingsWindow : Window
         if (!_loaded || nextUnit == _autoClickIntervalUnit)
             return;
 
-        if (TryGetAutoClickIntervalMilliseconds(_autoClickIntervalUnit, out var intervalMilliseconds))
-            AutoClickIntervalBox.Text = FormatAutoClickInterval(intervalMilliseconds, nextUnit);
+        _updatingAutoClickIntervalInputs = true;
+        try
+        {
+            if (TryGetAutoClickIntervalMilliseconds(AutoClickIntervalBox, _autoClickIntervalUnit, out var intervalMilliseconds))
+                AutoClickIntervalBox.Text = FormatAutoClickInterval(intervalMilliseconds, nextUnit);
+            if (TryGetAutoClickIntervalMilliseconds(AutoClickIntervalMaximumBox, _autoClickIntervalUnit, out var maximumIntervalMilliseconds))
+                AutoClickIntervalMaximumBox.Text = FormatAutoClickInterval(maximumIntervalMilliseconds, nextUnit);
+        }
+        finally
+        {
+            _updatingAutoClickIntervalInputs = false;
+        }
         _autoClickIntervalUnit = nextUnit;
+    }
+
+    private void AutoClickIntervalMinimum_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_loaded
+            || _updatingAutoClickIntervalInputs
+            || !TryGetAutoClickIntervalMilliseconds(AutoClickIntervalBox, _autoClickIntervalUnit, out var intervalMilliseconds)
+            || !TryGetAutoClickIntervalMilliseconds(AutoClickIntervalMaximumBox, _autoClickIntervalUnit, out var maximumIntervalMilliseconds)
+            || maximumIntervalMilliseconds >= intervalMilliseconds)
+        {
+            return;
+        }
+
+        _updatingAutoClickIntervalInputs = true;
+        try
+        {
+            AutoClickIntervalMaximumBox.Text = FormatAutoClickInterval(intervalMilliseconds, _autoClickIntervalUnit);
+        }
+        finally
+        {
+            _updatingAutoClickIntervalInputs = false;
+        }
     }
 
     private void ApplyAutoClickSettings_Click(object sender, RoutedEventArgs e)
     {
         _autoClickIntervalUnit = GetSelectedAutoClickIntervalUnit();
-        if (!TryGetAutoClickIntervalMilliseconds(_autoClickIntervalUnit, out var intervalMilliseconds)
+        if (!TryGetAutoClickIntervalMilliseconds(AutoClickIntervalBox, _autoClickIntervalUnit, out var intervalMilliseconds)
             || intervalMilliseconds < AppSettings.MinimumAutoClickIntervalMilliseconds
             || intervalMilliseconds > AppSettings.MaximumAutoClickIntervalMilliseconds)
         {
@@ -287,7 +412,27 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        if (!_autoClickCoordinator.TryUpdateSettings(_pendingAutoClickHotkey.DisplayText, intervalMilliseconds))
+        if (!TryGetAutoClickIntervalMilliseconds(AutoClickIntervalMaximumBox, _autoClickIntervalUnit, out var intervalMaximumMilliseconds)
+            || intervalMaximumMilliseconds < intervalMilliseconds
+            || intervalMaximumMilliseconds > AppSettings.MaximumAutoClickIntervalMilliseconds)
+        {
+            MessageBox.Show(
+                LocalizationService.Format(
+                    "Settings.AutoClick.Interval.Range.Invalid",
+                    AppSettings.MinimumAutoClickIntervalMilliseconds,
+                    AppSettings.MaximumAutoClickIntervalMilliseconds),
+                LocalizationService.Get("App.Name"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        if (!_autoClickCoordinator.TryUpdateSettings(
+                _pendingAutoClickHotkey.DisplayText,
+                _pendingAutoClickBackgroundModeHotkey.DisplayText,
+                intervalMilliseconds,
+                intervalMaximumMilliseconds,
+                AutoClickBackgroundModeCheck.IsChecked == true))
         {
             MessageBox.Show(
                 LocalizationService.Get("Settings.AutoClick.Hotkey.Unavailable"),
@@ -301,9 +446,19 @@ public partial class SettingsWindow : Window
             ? savedHotkey
             : _pendingAutoClickHotkey;
         AutoClickHotkeyButton.Content = _pendingAutoClickHotkey.DisplayText;
+        _pendingAutoClickBackgroundModeHotkey = AutoClickHotkeyPolicy.TryParse(
+            _manager.Data.Settings.AutoClickBackgroundModeHotkey,
+            out var savedBackgroundModeHotkey)
+            ? savedBackgroundModeHotkey
+            : _pendingAutoClickBackgroundModeHotkey;
+        AutoClickBackgroundModeHotkeyButton.Content = _pendingAutoClickBackgroundModeHotkey.DisplayText;
         AutoClickIntervalBox.Text = FormatAutoClickInterval(
             _manager.Data.Settings.AutoClickIntervalMilliseconds,
             _autoClickIntervalUnit);
+        AutoClickIntervalMaximumBox.Text = FormatAutoClickInterval(
+            _manager.Data.Settings.AutoClickIntervalMaximumMilliseconds,
+            _autoClickIntervalUnit);
+        AutoClickBackgroundModeCheck.IsChecked = _manager.Data.Settings.AutoClickBackgroundModeEnabled;
     }
 
     private AutoClickIntervalUnit GetSelectedAutoClickIntervalUnit() =>
@@ -311,10 +466,13 @@ public partial class SettingsWindow : Window
             ? AutoClickIntervalUnit.Milliseconds
             : AutoClickIntervalUnit.Seconds;
 
-    private bool TryGetAutoClickIntervalMilliseconds(AutoClickIntervalUnit unit, out int milliseconds)
+    private static bool TryGetAutoClickIntervalMilliseconds(
+        TextBox textBox,
+        AutoClickIntervalUnit unit,
+        out int milliseconds)
     {
-        var valid = double.TryParse(AutoClickIntervalBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value)
-            || double.TryParse(AutoClickIntervalBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        var valid = double.TryParse(textBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value)
+            || double.TryParse(textBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
         if (!valid || value <= 0)
         {
             milliseconds = 0;
@@ -489,7 +647,14 @@ public partial class SettingsWindow : Window
             return;
 
         _manager.SelectSavedTheme(id);
-        OpenThemeEditor(_manager.CurrentSavedTheme);
+        var selectedTheme = _manager.Data.Settings.SavedThemes.FirstOrDefault(theme => theme.Id == id);
+        if (selectedTheme?.IsBuiltIn != true)
+            OpenThemeEditor(_manager.CurrentSavedTheme);
+        else
+        {
+            _editingThemeId = null;
+            ThemeEditor.Visibility = Visibility.Collapsed;
+        }
         RefreshThemeCards();
     }
 
@@ -771,9 +936,9 @@ public partial class SettingsWindow : Window
     private void ShowPage(SettingsPage page)
     {
         GeneralPanel.Visibility = page == SettingsPage.General ? Visibility.Visible : Visibility.Collapsed;
-        AutoClickPanel.Visibility = page == SettingsPage.AutoClick ? Visibility.Visible : Visibility.Collapsed;
         UserPanel.Visibility = page == SettingsPage.User ? Visibility.Visible : Visibility.Collapsed;
         CompanionPanel.Visibility = page == SettingsPage.Companion ? Visibility.Visible : Visibility.Collapsed;
         ThemePanel.Visibility = page == SettingsPage.Theme ? Visibility.Visible : Visibility.Collapsed;
+        ExtraPanel.Visibility = page == SettingsPage.Extra ? Visibility.Visible : Visibility.Collapsed;
     }
 }

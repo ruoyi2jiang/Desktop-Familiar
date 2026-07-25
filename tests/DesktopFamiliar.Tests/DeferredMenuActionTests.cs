@@ -74,7 +74,7 @@ public sealed class DeferredMenuActionTests
 
         Assert.Contains(closedSubscription, source, StringComparison.Ordinal);
         Assert.Contains(queuedWindowAction, source, StringComparison.Ordinal);
-        Assert.Contains("DispatcherPriority.Normal", source, StringComparison.Ordinal);
+        Assert.Contains("DispatcherPriority.ContextIdle", source, StringComparison.Ordinal);
     }
 
     [Theory]

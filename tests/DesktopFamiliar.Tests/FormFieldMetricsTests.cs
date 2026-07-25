@@ -7,6 +7,8 @@ public sealed class FormFieldMetricsTests
     [Fact]
     public void TextInputPadding_CompensatesForItsDifferentContentHost()
     {
+        Assert.Equal(4, FormFieldMetrics.FieldMargin.Top);
+        Assert.Equal(10, FormFieldMetrics.FieldMargin.Bottom);
         Assert.Equal(4, FormFieldMetrics.TextInputPadding.Left);
         Assert.Equal(4, FormFieldMetrics.MultilineTextInputPadding.Left);
         Assert.Equal(8, FormFieldMetrics.SelectionInputPadding.Left);

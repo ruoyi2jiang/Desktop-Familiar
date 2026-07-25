@@ -41,6 +41,8 @@ public sealed class SharedComboBoxStyleTests
 
         Assert.Equal("{StaticResource ThemedComboBox}", (string?)style.Attribute("BasedOn"));
         Assert.DoesNotContain(style.Elements(Presentation + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Margin");
+        Assert.DoesNotContain(style.Elements(Presentation + "Setter"), setter =>
             (string?)setter.Attribute("Property") == "Template");
     }
 

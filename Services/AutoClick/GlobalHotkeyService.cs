@@ -46,10 +46,18 @@ public sealed class GlobalHotkeyService : IDisposable
         return false;
     }
 
+    public void Unregister()
+    {
+        if (_registeredHotkey is null)
+            return;
+
+        UnregisterHotKey(_window.Handle, HotkeyId);
+        _registeredHotkey = null;
+    }
+
     public void Dispose()
     {
-        if (_registeredHotkey is not null)
-            UnregisterHotKey(_window.Handle, HotkeyId);
+        Unregister();
         _window.RemoveHook(WndProc);
         _window.Dispose();
     }

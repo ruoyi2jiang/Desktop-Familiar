@@ -1,3 +1,4 @@
+using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Storage;
@@ -49,10 +50,13 @@ public sealed class UserSettingsManagerTests
         var changed = 0;
         manager.AutoClickSettingsChanged += (_, _) => changed++;
 
-        manager.SetAutoClickSettings("alt+ctrl+F8", 250);
+        manager.SetAutoClickSettings("alt+ctrl+F8", "ctrl+alt+F9", 250, 400, backgroundModeEnabled: true);
 
         Assert.Equal("Ctrl+Alt+F8", manager.Data.Settings.AutoClickHotkey);
+        Assert.Equal("Ctrl+Alt+F9", manager.Data.Settings.AutoClickBackgroundModeHotkey);
         Assert.Equal(250, repository.Load().Settings.AutoClickIntervalMilliseconds);
+        Assert.Equal(400, repository.Load().Settings.AutoClickIntervalMaximumMilliseconds);
+        Assert.True(repository.Load().Settings.AutoClickBackgroundModeEnabled);
         Assert.Equal(1, changed);
     }
 
@@ -65,11 +69,150 @@ public sealed class UserSettingsManagerTests
         manager.AutoClickSettingsChanged += (_, _) => changed = true;
         repository.FailSaves = true;
 
-        Assert.Throws<AppPersistenceException>(() => manager.SetAutoClickSettings("Ctrl+Alt+F8", 250));
+        Assert.Throws<AppPersistenceException>(() => manager.SetAutoClickSettings("Ctrl+Alt+F8", "Ctrl+Alt+F9", 250, 400, backgroundModeEnabled: true));
 
         Assert.Equal(AppSettings.DefaultAutoClickHotkey, manager.Data.Settings.AutoClickHotkey);
+        Assert.Equal(AppSettings.DefaultAutoClickBackgroundModeHotkey, manager.Data.Settings.AutoClickBackgroundModeHotkey);
         Assert.Equal(AppSettings.DefaultAutoClickIntervalMilliseconds, manager.Data.Settings.AutoClickIntervalMilliseconds);
+        Assert.Equal(AppSettings.DefaultAutoClickIntervalMilliseconds, manager.Data.Settings.AutoClickIntervalMaximumMilliseconds);
+        Assert.False(manager.Data.Settings.AutoClickBackgroundModeEnabled);
         Assert.False(changed);
+    }
+
+    [Fact]
+    public void AutoClickSettings_RejectDuplicateHotkeys()
+    {
+        var manager = new CompanionManager(new MemoryCompanionRepository(new DesktopCompanionData()));
+
+        Assert.Throws<ArgumentException>(() =>
+            manager.SetAutoClickSettings("Ctrl+Alt+F8", "Ctrl+Alt+F8", 250, 400, backgroundModeEnabled: false));
+    }
+
+    [Fact]
+    public void AutoClickEnabledIsPersistedAndPublishedAfterSave()
+    {
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData());
+        var manager = new CompanionManager(repository);
+        var changed = 0;
+        manager.AutoClickSettingsChanged += (_, _) => changed++;
+
+        manager.SetAutoClickEnabled(false);
+
+        Assert.False(manager.Data.Settings.AutoClickEnabled);
+        Assert.False(repository.Load().Settings.AutoClickEnabled);
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void SelectingBuiltInSavedTheme_PersistsItsBuiltInThemeKind()
+    {
+        var seaBlue = new SavedTheme
+        {
+            Id = Guid.NewGuid(),
+            IsBuiltIn = true,
+            Name = LocalizationService.Get("Settings.Theme.SeaBlue"),
+            Palette = ThemeService.CreateEditablePalette(AppTheme.SeaBlue)
+        };
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData
+        {
+            Settings = new AppSettings
+            {
+                Theme = AppTheme.Crimson,
+                SavedThemes = [seaBlue]
+            }
+        });
+        var manager = new CompanionManager(repository);
+
+        manager.SelectSavedTheme(seaBlue.Id);
+
+        Assert.Equal(AppTheme.SeaBlue, manager.Data.Settings.Theme);
+        Assert.Equal(seaBlue.Id, repository.Load().Settings.SelectedThemeId);
+        Assert.Equal(AppTheme.SeaBlue, repository.Load().Settings.Theme);
+    }
+
+    [Fact]
+    public void SavingBuiltInTheme_IsRejectedWithoutChangingTheStoredPalette()
+    {
+        var builtIn = new SavedTheme
+        {
+            Id = Guid.NewGuid(),
+            IsBuiltIn = true,
+            Name = LocalizationService.Get("Settings.Theme.Crimson"),
+            Palette = ThemeService.CreateEditablePalette(AppTheme.Crimson)
+        };
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData
+        {
+            Settings = new AppSettings { SavedThemes = [builtIn] }
+        });
+        var manager = new CompanionManager(repository);
+
+        var replacement = builtIn.Clone();
+        replacement.Name = "Edited";
+        replacement.Palette.PageBackground = "#FF123456";
+
+        Assert.Throws<InvalidOperationException>(() => manager.SaveSavedTheme(replacement));
+        var persisted = repository.Load().Settings.SavedThemes.Single(theme => theme.Id == builtIn.Id);
+        Assert.Equal(builtIn.Name, persisted.Name);
+        Assert.Equal(builtIn.Palette.PageBackground, persisted.Palette.PageBackground);
+    }
+
+    [Fact]
+    public void DeletingSelectedCustomTheme_SwitchesToTheReplacementThemeKind()
+    {
+        var builtIn = new SavedTheme
+        {
+            Id = Guid.NewGuid(),
+            IsBuiltIn = true,
+            Name = LocalizationService.Get("Settings.Theme.SeaBlue"),
+            Palette = ThemeService.CreateEditablePalette(AppTheme.SeaBlue)
+        };
+        var custom = new SavedTheme
+        {
+            Id = Guid.NewGuid(),
+            Name = "Mine",
+            Palette = ThemeService.CreateEditablePalette(AppTheme.Crimson)
+        };
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData
+        {
+            Settings = new AppSettings
+            {
+                Theme = AppTheme.Custom,
+                SelectedThemeId = custom.Id,
+                CustomTheme = custom.Palette.Clone(),
+                SavedThemes = [builtIn, custom]
+            }
+        });
+        var manager = new CompanionManager(repository);
+
+        manager.DeleteSavedTheme(custom.Id);
+
+        Assert.Equal(builtIn.Id, manager.Data.Settings.SelectedThemeId);
+        Assert.Equal(AppTheme.SeaBlue, manager.Data.Settings.Theme);
+        Assert.Equal(AppTheme.SeaBlue, repository.Load().Settings.Theme);
+    }
+
+    [Fact]
+    public void SelectingSavedTheme_SaveFailureRestoresTheInMemorySelection()
+    {
+        var first = new SavedTheme { Id = Guid.NewGuid(), Name = "First" };
+        var second = new SavedTheme { Id = Guid.NewGuid(), Name = "Second" };
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData
+        {
+            Settings = new AppSettings
+            {
+                Theme = AppTheme.Custom,
+                SelectedThemeId = first.Id,
+                CustomTheme = first.Palette.Clone(),
+                SavedThemes = [first, second]
+            }
+        });
+        var manager = new CompanionManager(repository);
+        repository.FailSaves = true;
+
+        Assert.Throws<AppPersistenceException>(() => manager.SelectSavedTheme(second.Id));
+
+        Assert.Equal(first.Id, manager.Data.Settings.SelectedThemeId);
+        Assert.Equal(first.Palette.PageBackground, manager.Data.Settings.CustomTheme.PageBackground);
     }
 
     private sealed class MemoryCompanionRepository(DesktopCompanionData data) : ICompanionRepository

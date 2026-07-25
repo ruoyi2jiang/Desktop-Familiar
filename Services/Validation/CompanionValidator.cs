@@ -50,6 +50,19 @@ public static class CompanionValidator
         };
         if (optionalStateIds.Any(id => id is not null && companion.FindAnimation(id) is null))
             errors.Add(LocalizationService.Get("Validation.OptionalStateAnimation"));
+        if (companion.InteractionStates is not null
+            && Enum.GetValues<CompanionInteractionState>()
+                .Select(companion.InteractionStates.GetAnimationId)
+                .Any(id => id is not null && companion.FindAnimation(id) is null))
+        {
+            errors.Add(LocalizationService.Get("Validation.InteractionStateAnimation"));
+        }
+        if (companion.InteractionStates?.ClickAreas is not null
+            && companion.InteractionStates.ClickAreas.Any(area =>
+                area.AnimationId is not null && companion.FindAnimation(area.AnimationId) is null))
+        {
+            errors.Add(LocalizationService.Get("Validation.InteractionStateAnimation"));
+        }
         if (companion.IdleRandomAnimationIds.Any(id => companion.FindAnimation(id) is null))
             errors.Add(LocalizationService.Get("Validation.IdleRandomAnimation"));
         if (companion.Animations.Any(scene => scene.DialogCharactersPerSecond is < 5 or > 40))

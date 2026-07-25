@@ -9,6 +9,12 @@ namespace DesktopFamiliar.Views.Controls;
 /// </summary>
 public static class FormFieldMetrics
 {
+    /// <summary>
+    /// Keeps the label-to-input gap and the following field gap consistent
+    /// across text boxes, selection controls, and date pickers.
+    /// </summary>
+    public static Thickness FieldMargin => new(0, 4, 0, 10);
+
     public static Thickness TextInputPadding => new(4, 0, 4, 0);
 
     public static Thickness MultilineTextInputPadding => new(4, 8, 4, 8);

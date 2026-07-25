@@ -20,16 +20,22 @@ public sealed class PersistenceTests
         data.Settings.UserBirthday = new DateTime(1995, 4, 12);
         var reminderId = Guid.NewGuid();
         var selfBirthdayId = Guid.NewGuid();
+        var dragLeftId = Guid.NewGuid();
         data.Companions.Add(new CompanionDefinition
         {
             Name = "Test companion",
             Animations =
             [
                 new AnimationScene { Id = reminderId },
-                new AnimationScene { Id = selfBirthdayId }
+                new AnimationScene { Id = selfBirthdayId },
+                new AnimationScene { Id = dragLeftId }
             ],
             ReminderAnimationId = reminderId,
-            SelfBirthdayAnimation1Id = selfBirthdayId
+            SelfBirthdayAnimation1Id = selfBirthdayId,
+            InteractionStates = new CompanionInteractionStateAssignments
+            {
+                DragLeftAnimationId = dragLeftId
+            }
         });
         data.CalendarEvents.Add(new CalendarEvent
         {
@@ -49,6 +55,7 @@ public sealed class PersistenceTests
         var loadedCompanion = Assert.Single(loaded.Companions);
         Assert.Equal(reminderId, loadedCompanion.ReminderAnimationId);
         Assert.Equal(selfBirthdayId, loadedCompanion.SelfBirthdayAnimation1Id);
+        Assert.Equal(dragLeftId, loadedCompanion.InteractionStates.DragLeftAnimationId);
         var loadedEvent = Assert.Single(loaded.CalendarEvents);
         Assert.Equal("Dentist", loadedEvent.Title);
         Assert.Equal([new DateTime(2026, 8, 5, 10, 0, 0)], loadedEvent.CompletedOccurrences);
@@ -223,6 +230,72 @@ public sealed class PersistenceTests
     }
 
     [Fact]
+    public void Normalizer_RestoresBuiltInThemeWhenCustomEnumReferencesBuiltInSelection()
+    {
+        var seaBlueId = Guid.NewGuid();
+        var data = new DesktopCompanionData
+        {
+            Settings = new AppSettings
+            {
+                Theme = AppTheme.Custom,
+                SelectedThemeId = seaBlueId,
+                SavedThemes =
+                [
+                    new SavedTheme
+                    {
+                        Id = seaBlueId,
+                        IsBuiltIn = true,
+                        Name = LocalizationService.Get("Settings.Theme.SeaBlue"),
+                        Palette = ThemeService.CreateEditablePalette(AppTheme.SeaBlue)
+                    }
+                ]
+            }
+        };
+
+        new CompanionDataNormalizer().Normalize(data);
+
+        Assert.Equal(AppTheme.SeaBlue, data.Settings.Theme);
+        Assert.Equal(seaBlueId, data.Settings.SelectedThemeId);
+        Assert.DoesNotContain(data.Settings.SavedThemes, theme => !theme.IsBuiltIn);
+    }
+
+    [Fact]
+    public void Storage_PersistsBuiltInThemeRepairInsteadOfCreatingCustomThemeOnEveryStartup()
+    {
+        using var directory = new TemporaryDirectory();
+        var seaBlueId = Guid.NewGuid();
+        var storage = new CompanionStorage(directory.Path);
+        storage.Save(new DesktopCompanionData
+        {
+            SchemaVersion = DesktopCompanionData.CurrentSchemaVersion,
+            Settings = new AppSettings
+            {
+                Theme = AppTheme.Custom,
+                SelectedThemeId = seaBlueId,
+                SavedThemes =
+                [
+                    new SavedTheme
+                    {
+                        Id = seaBlueId,
+                        IsBuiltIn = true,
+                        Name = LocalizationService.Get("Settings.Theme.SeaBlue"),
+                        Palette = ThemeService.CreateEditablePalette(AppTheme.SeaBlue)
+                    }
+                ]
+            }
+        });
+
+        var firstLoad = storage.Load();
+        var secondLoad = storage.Load();
+
+        Assert.Equal(AppTheme.SeaBlue, firstLoad.Settings.Theme);
+        Assert.Equal(seaBlueId, firstLoad.Settings.SelectedThemeId);
+        Assert.Equal(AppTheme.SeaBlue, secondLoad.Settings.Theme);
+        Assert.Equal(seaBlueId, secondLoad.Settings.SelectedThemeId);
+        Assert.DoesNotContain(secondLoad.Settings.SavedThemes, theme => !theme.IsBuiltIn);
+    }
+
+    [Fact]
     public void ConfigurationWithoutFocusMode_DefaultsToDisabled()
     {
         var data = JsonSerializer.Deserialize<DesktopCompanionData>(
@@ -245,9 +318,110 @@ public sealed class PersistenceTests
         Assert.NotNull(data);
         new CompanionDataNormalizer().Normalize(data);
 
-        Assert.Equal(2, data.SchemaVersion);
+        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
         Assert.Equal(AppSettings.DefaultAutoClickIntervalMilliseconds, data.Settings.AutoClickIntervalMilliseconds);
         Assert.Equal(AppSettings.DefaultAutoClickHotkey, data.Settings.AutoClickHotkey);
+    }
+
+    [Fact]
+    public void Schema2Configuration_MigratesEmptyInteractionStates()
+    {
+        var data = JsonSerializer.Deserialize<DesktopCompanionData>(
+            """{"SchemaVersion":2,"Settings":{},"Companions":[{}]}""",
+            CreateOptions());
+
+        Assert.NotNull(data);
+        new CompanionDataNormalizer().Normalize(data);
+
+        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
+        var interactionStates = Assert.Single(data.Companions).InteractionStates;
+        Assert.NotNull(interactionStates);
+        Assert.Null(interactionStates.DragLeftAnimationId);
+        Assert.Empty(interactionStates.ClickAreas);
+    }
+
+    [Fact]
+    public void Normalizer_RemovesMissingInteractionStateAssignments()
+    {
+        var companion = new CompanionDefinition
+        {
+            InteractionStates = new CompanionInteractionStateAssignments
+            {
+                DragLeftAnimationId = Guid.NewGuid(),
+                ClickAreas = [new CompanionClickArea { AnimationId = Guid.NewGuid() }]
+            }
+        };
+
+        new CompanionDataNormalizer().Normalize(new DesktopCompanionData
+        {
+            Companions = [companion]
+        });
+
+        Assert.Null(companion.InteractionStates.DragLeftAnimationId);
+        Assert.Null(Assert.Single(companion.InteractionStates.ClickAreas).AnimationId);
+    }
+
+    [Fact]
+    public void Schema3Configuration_MigratesEnabledAutoClicker()
+    {
+        var data = JsonSerializer.Deserialize<DesktopCompanionData>(
+            """{"SchemaVersion":3,"Settings":{}}""",
+            CreateOptions());
+
+        Assert.NotNull(data);
+        new CompanionDataNormalizer().Normalize(data);
+
+        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
+        Assert.True(data.Settings.AutoClickEnabled);
+        Assert.False(data.Settings.AutoClickBackgroundModeEnabled);
+    }
+
+    [Fact]
+    public void Schema5Configuration_MigratesFixedIntervalToRandomRange()
+    {
+        var data = JsonSerializer.Deserialize<DesktopCompanionData>(
+            """{"SchemaVersion":5,"Settings":{"AutoClickIntervalMilliseconds":275}}""",
+            CreateOptions());
+
+        Assert.NotNull(data);
+        new CompanionDataNormalizer().Normalize(data);
+
+        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
+        Assert.Equal(275, data.Settings.AutoClickIntervalMilliseconds);
+        Assert.Equal(275, data.Settings.AutoClickIntervalMaximumMilliseconds);
+    }
+
+    [Fact]
+    public void Schema6Configuration_MigratesBackgroundModeHotkey()
+    {
+        var data = JsonSerializer.Deserialize<DesktopCompanionData>(
+            """{"SchemaVersion":6,"Settings":{}}""",
+            CreateOptions());
+
+        Assert.NotNull(data);
+        new CompanionDataNormalizer().Normalize(data);
+
+        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
+        Assert.Equal(AppSettings.DefaultAutoClickBackgroundModeHotkey, data.Settings.AutoClickBackgroundModeHotkey);
+    }
+
+    [Fact]
+    public void CompanionAssetStore_DeletesOnlyTheSelectedCompanionResources()
+    {
+        using var directory = new TemporaryDirectory();
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var firstAsset = Path.Combine(directory.Path, "Assets", first.ToString("N"), "Animation", "first.png");
+        var secondAsset = Path.Combine(directory.Path, "Assets", second.ToString("N"), "Animation", "second.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(firstAsset)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(secondAsset)!);
+        File.WriteAllText(firstAsset, "first");
+        File.WriteAllText(secondAsset, "second");
+
+        new CompanionAssetStore(directory.Path).DeleteCompanionResources(first);
+
+        Assert.False(Directory.Exists(Path.GetDirectoryName(firstAsset)!));
+        Assert.True(File.Exists(secondAsset));
     }
 
     [Fact]

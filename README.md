@@ -11,8 +11,8 @@ Desktop Familiar is a Windows WPF desktop-companion application. It displays an 
 - Focus mode that suppresses the companion while idle, reveals it for reminders, and suppresses non-reminder scene dialogue and voice.
 - Whole-animation, selected-range, or single-frame loops for any looping scene.
 - Timed dialogue with a configurable start frame, `{{user}}` nickname replacement, optional voice lines, and a hideable dialogue bubble.
-- Configurable viewport, Windows startup option, and editable semantic colour themes.
-- A configurable global auto-click hotkey with fresh target selection and millisecond or second intervals.
+- Independently sized character viewport (120–1200px) with a centered, capped dialogue bubble, Windows startup option, and editable semantic colour themes.
+- An optional configurable auto-clicker with separate global start/stop and input-mode hotkeys, fresh area selection, and randomized millisecond or second interval ranges.
 - A local month calendar with month/year navigation, one-time, continuous multi-day, and weekly events; occurrence/series deletion, categories, urgency, reminders, snooze, and stop actions.
 - A latest-session log and copyable crash report for fatal errors.
 

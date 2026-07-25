@@ -2,8 +2,10 @@ namespace DesktopFamiliar.Models;
 
 public sealed class AppSettings
 {
-    public const int MinimumViewportSize = 240;
+    public const int MinimumViewportSize = 120;
     public const int MaximumViewportSize = 1200;
+    public const int MinimumDialogBubbleWidth = 240;
+    public const int MaximumDialogBubbleWidth = 480;
     public const int MinimumIdleDelaySeconds = 5;
     public const int MaximumIdleDelaySeconds = 3600;
     public const int DefaultIdleDelaySeconds = 30;
@@ -11,6 +13,8 @@ public sealed class AppSettings
     public const int MaximumAutoClickIntervalMilliseconds = 60000;
     public const int DefaultAutoClickIntervalMilliseconds = 1000;
     public const string DefaultAutoClickHotkey = "Ctrl+Alt+C";
+    public const string DefaultAutoClickBackgroundModeHotkey = "Ctrl+Alt+B";
+    public const string FallbackAutoClickBackgroundModeHotkey = "Ctrl+Alt+V";
 
     public Guid? CurrentCompanionId { get; set; }
 
@@ -27,7 +31,11 @@ public sealed class AppSettings
     public bool TruncateLongDialogLines { get; set; }
     public bool DialogBubbleHidden { get; set; }
     public int AutoClickIntervalMilliseconds { get; set; } = DefaultAutoClickIntervalMilliseconds;
+    public int AutoClickIntervalMaximumMilliseconds { get; set; } = DefaultAutoClickIntervalMilliseconds;
     public string AutoClickHotkey { get; set; } = DefaultAutoClickHotkey;
+    public string AutoClickBackgroundModeHotkey { get; set; } = DefaultAutoClickBackgroundModeHotkey;
+    public bool AutoClickEnabled { get; set; } = true;
+    public bool AutoClickBackgroundModeEnabled { get; set; }
 
     public double? CompanionLeft { get; set; }
 
@@ -49,7 +57,11 @@ public sealed class AppSettings
         TruncateLongDialogLines = TruncateLongDialogLines,
         DialogBubbleHidden = DialogBubbleHidden,
         AutoClickIntervalMilliseconds = AutoClickIntervalMilliseconds,
+        AutoClickIntervalMaximumMilliseconds = AutoClickIntervalMaximumMilliseconds,
         AutoClickHotkey = AutoClickHotkey,
+        AutoClickBackgroundModeHotkey = AutoClickBackgroundModeHotkey,
+        AutoClickEnabled = AutoClickEnabled,
+        AutoClickBackgroundModeEnabled = AutoClickBackgroundModeEnabled,
         CompanionLeft = CompanionLeft,
         CompanionTop = CompanionTop
     };
