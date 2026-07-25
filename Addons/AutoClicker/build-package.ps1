@@ -32,7 +32,9 @@ try {
     New-Item -ItemType Directory -Path $stagingDirectory | Out-Null
     Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stagingDirectory 'addon.json')
     Copy-Item -LiteralPath $assemblyPath -Destination (Join-Path $stagingDirectory $manifest.assemblyFileName)
-    Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath $stagingDirectory -File | Select-Object -ExpandProperty FullName) -DestinationPath $packagePath -NoClobber
+    # The explicit existence check above prevents replacement; Windows PowerShell's
+    # Compress-Archive does not support the PowerShell 7-only -NoClobber switch.
+    Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath $stagingDirectory -File | Select-Object -ExpandProperty FullName) -DestinationPath $packagePath
 
     $hash = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
     Write-Host "Package: $packagePath"
