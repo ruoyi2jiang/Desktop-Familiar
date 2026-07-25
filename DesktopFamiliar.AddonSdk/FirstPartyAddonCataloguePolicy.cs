@@ -11,7 +11,7 @@ public sealed class FirstPartyAddonCataloguePolicy
     public const string GitHubRepository = "Desktop-Familiar";
 
     public static readonly Uri CatalogueUri = new(
-        $"https://raw.githubusercontent.com/{GitHubOwner}/{GitHubRepository}/main/addons/catalogue.json");
+        $"https://raw.githubusercontent.com/{GitHubOwner}/{GitHubRepository}/main/Addons/catalogue.json");
 
     public AddonCompatibilityResult Evaluate(AddonPackageCatalogue catalogue, AddonApiVersion hostApi)
     {

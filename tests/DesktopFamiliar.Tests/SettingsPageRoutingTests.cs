@@ -28,6 +28,10 @@ public sealed class SettingsPageRoutingTests
         Assert.DoesNotContain("?? AvailableAddonsList.Items.OfType<ListBoxItem>().FirstOrDefault()", source, StringComparison.Ordinal);
         Assert.Contains("AvailableAddonsTab.Content = LocalizationService.Format(\"Settings.Addons.AvailableTab\", available.Length);", source, StringComparison.Ordinal);
         Assert.Contains("InstalledAddonsTab.Content = LocalizationService.Format(\"Settings.Addons.InstalledTab\", installed.Length);", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "? LocalizationService.Get(\"Settings.Addons.NoneAvailable\")",
+            source,
+            StringComparison.Ordinal);
     }
 
     private static string FindRepositoryFile(string relativePath)

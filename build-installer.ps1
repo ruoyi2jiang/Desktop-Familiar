@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $project = Join-Path $PSScriptRoot "DesktopFamiliar.csproj"
-$publishDirectory = Join-Path $PSScriptRoot "Artifacts\InstallerStaging\DesktopFamiliar-standalone-win-x64-0.9.0"
+$publishDirectory = Join-Path $PSScriptRoot "Artifacts\InstallerStaging\DesktopFamiliar-standalone-win-x64-0.9.1"
 $installerScript = Join-Path $PSScriptRoot "Installer\DesktopFamiliar.iss"
 
 dotnet publish $project `
@@ -43,7 +43,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Installer compilation failed with exit code $LASTEXITCODE."
 }
 
-$output = Join-Path $PSScriptRoot "Artifacts\Installer\Desktop-Familiar-Setup-0.9.0.exe"
+$output = Join-Path $PSScriptRoot "Artifacts\Installer\Desktop-Familiar-Setup-0.9.1.exe"
 if (-not (Test-Path -LiteralPath $output)) {
     throw "Installer compilation completed but the expected output was not found at $output."
 }

@@ -54,6 +54,11 @@ public sealed class CompanionEditorStateAssignmentLayoutTests
         Assert.Contains("Grid.Row=\"2\" Background=\"{DynamicResource PrimaryBackgroundBrush}\"", source, StringComparison.Ordinal);
         Assert.Contains("BorderBrush=\"{DynamicResource PrimaryAccentBrush}\"", source, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SaveButton\" Content=\"{loc:Loc Editor.Save.Update}\" Style=\"{StaticResource PrimaryButton}\"", source, StringComparison.Ordinal);
+        var validationHint = source.IndexOf("x:Name=\"ValidationHint\"", StringComparison.Ordinal);
+        var saveButton = source.IndexOf("x:Name=\"SaveButton\"", StringComparison.Ordinal);
+        Assert.True(validationHint >= 0);
+        Assert.True(saveButton > validationHint);
+        Assert.Contains("x:Name=\"ValidationHint\" Foreground=\"{DynamicResource DangerBrush}\" TextWrapping=\"Wrap\" Visibility=\"Collapsed\" Margin=\"0,0,0,8\"", source, StringComparison.Ordinal);
         Assert.Contains("SecondaryBackgroundActiveBrush", source, StringComparison.Ordinal);
         Assert.Contains("SecondaryAccentActiveBrush", source, StringComparison.Ordinal);
     }

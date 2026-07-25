@@ -39,7 +39,7 @@ try {
     $hash = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
     Write-Host "Package: $packagePath"
     Write-Host "SHA-256: $hash"
-    Write-Host "Add this version, URL, and SHA-256 to addons/catalogue.json in the release commit."
+    Write-Host "Add this version, URL, and SHA-256 to Addons/catalogue.json in the release commit."
 }
 finally {
     if (Test-Path -LiteralPath $stagingDirectory) {

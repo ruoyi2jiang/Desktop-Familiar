@@ -131,6 +131,14 @@ public sealed class AddonInstallationStoreTests : IDisposable
     }
 
     [Fact]
+    public void FirstPartyCataloguePolicy_UsesTheCaseSensitiveCataloguePath()
+    {
+        Assert.Equal(
+            "https://raw.githubusercontent.com/ruoyi2jiang/Desktop-Familiar/main/Addons/catalogue.json",
+            FirstPartyAddonCataloguePolicy.CatalogueUri.AbsoluteUri);
+    }
+
+    [Fact]
     public void FirstPartyCataloguePolicy_RejectsThirdPartyPackageUrls()
     {
         var catalogue = new AddonPackageCatalogue

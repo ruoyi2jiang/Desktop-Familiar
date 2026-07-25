@@ -1152,7 +1152,7 @@ public partial class CompanionEditorWindow : Window
         var errors = CompanionValidator.Validate(_companion);
         if (errors.Count > 0)
         {
-            ValidationHint.Text = string.Join("  •  ", errors);
+            SetValidationHint(string.Join("  •  ", errors));
             MessageBox.Show(
                 string.Join(Environment.NewLine, errors),
                 LocalizationService.Get("Editor.Save.NotReadyTitle"),
@@ -1172,9 +1172,17 @@ public partial class CompanionEditorWindow : Window
         catch (Exception exception)
         {
             AppLogger.Error("The companion configuration could not be saved.", exception);
-            ValidationHint.Text = exception.Message;
+            SetValidationHint(exception.Message);
             MessageBox.Show(exception.Message, LocalizationService.Get("Editor.Save.FailedTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void SetValidationHint(string message)
+    {
+        ValidationHint.Text = message;
+        ValidationHint.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void Back_Click(object sender, RoutedEventArgs e) => Close();

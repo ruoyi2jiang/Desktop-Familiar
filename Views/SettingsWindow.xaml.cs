@@ -237,7 +237,7 @@ public partial class SettingsWindow : Window
         {
             await _addonManager.RefreshCatalogueAsync();
             AddonsStatusText.Text = _addonManager.LastCatalogueFetchWasNotFound
-                ? string.Empty
+                ? LocalizationService.Get("Settings.Addons.NoneAvailable")
                 : LocalizationService.Get("Settings.Addons.CheckComplete");
             RefreshAddonManagerEntries();
         }

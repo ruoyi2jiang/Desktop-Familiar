@@ -26,7 +26,7 @@ To create a reviewed first-party Auto Clicker package for a separately authorize
 .\Addons\AutoClicker\build-package.ps1 -OutputDirectory .\Artifacts\Addons
 ```
 
-The script does not publish anything. It builds the addon, creates a versioned ZIP containing `addon.json` and the addon assembly, and prints its SHA-256. Upload that ZIP to a GitHub Release, then add its version, release URL, release-notes URL, supported host range, and checksum to `addons/catalogue.json` in a separately reviewed change. The package can be released without a main-app release only when it remains compatible with the published host API.
+The script does not publish anything. It builds the addon, creates a versioned ZIP containing `addon.json` and the addon assembly, and prints its SHA-256. Upload that ZIP to a GitHub Release, then add its version, release URL, release-notes URL, supported host range, and checksum to `Addons/catalogue.json` in a separately reviewed change. The package can be released without a main-app release only when it remains compatible with the published host API.
 
 ## Change workflow
 

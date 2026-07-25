@@ -950,10 +950,10 @@
 
         <Border Grid.Row="2" Background="{DynamicResource PrimaryBackgroundBrush}" Padding="20,14" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="0,1,0,0"
                 TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
-            <DockPanel>
-                <TextBlock x:Name="ValidationHint" Foreground="{DynamicResource DangerBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                <Button x:Name="SaveButton" Content="{loc:Loc Editor.Save.Update}" Style="{StaticResource PrimaryButton}" DockPanel.Dock="Right" Click="Save_Click" />
-            </DockPanel>
+            <StackPanel>
+                <TextBlock x:Name="ValidationHint" Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,0,0,8" />
+                <Button x:Name="SaveButton" Content="{loc:Loc Editor.Save.Update}" Style="{StaticResource PrimaryButton}" Click="Save_Click" />
+            </StackPanel>
         </Border>
     </Grid>
 </Window>
