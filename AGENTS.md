@@ -50,6 +50,14 @@ Update documentation in the same change:
 
 Do not mark work complete with stale documentation.
 
+## Addons
+
+- Read `docs/addons/overview.md` and the relevant addon document before changing addon-owned code.
+- Each addon folder has a scoped `AGENTS.md`; follow it in addition to this file.
+- Public addon contracts live in `DesktopFamiliar.AddonSdk/`. Any API or manifest compatibility change requires tests and an update to `docs/addons/sdk-compatibility.md`.
+- Addon-only settings and migrations belong to that addon’s data contract, not `DesktopCompanionData`.
+- Initial addon distribution is first-party only: use the pinned catalogue, validate the declared API range and SHA-256, and never add arbitrary repository or release-page discovery.
+
 ## Release and licensing
 
 - A source refactor does not authorize an installer build, cache deletion, version bump, signing, publishing, or distribution.

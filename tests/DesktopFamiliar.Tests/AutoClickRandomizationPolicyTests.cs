@@ -1,4 +1,4 @@
-using DesktopFamiliar.Services.AutoClick;
+using DesktopFamiliar.Addons.AutoClicker.Services;
 using DrawingRectangle = System.Drawing.Rectangle;
 
 namespace DesktopFamiliar.Tests;

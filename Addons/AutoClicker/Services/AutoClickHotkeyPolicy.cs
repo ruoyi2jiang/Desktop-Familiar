@@ -1,4 +1,4 @@
-namespace DesktopFamiliar.Services.AutoClick;
+namespace DesktopFamiliar.Addons.AutoClicker.Services;
 
 public sealed record AutoClickHotkey(string DisplayText, uint Modifiers, uint VirtualKey);
 

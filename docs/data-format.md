@@ -2,15 +2,19 @@
 
 ## User data
 
-The root JSON document is `DesktopCompanionData`, stored at `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json`, and currently uses schema version 4. It contains:
+The root JSON document is `DesktopCompanionData`, stored at `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json`, and currently uses schema version 8. It contains:
 
-- `Settings`: selected companion, viewport, overlay position, dialogue behavior, random-idle interval, startup mirror, focus mode, user birthday, saved themes, and auto-click preferences.
+- `Settings`: selected companion, viewport, overlay position, dialogue behavior, random-idle interval, startup mirror, focus mode, user birthday, and saved themes.
 - `Companions`: locally configured `CompanionDefinition` objects.
 - `CalendarEvents`: local event definitions and reminder state.
 
-`CompanionDataNormalizer` repairs invalid current-format values after loading. Schema 2 migrates schema-1 documents by adding the default auto-click interval (`1000` milliseconds) and hotkey (`Ctrl+Alt+C`). Schema 3 adds empty grouped interaction-state assignments to every companion, preserving the existing idle-only behavior. Schema 4 adds `AutoClickEnabled`, defaulting existing profiles to enabled. Schema 5 adds `AutoClickBackgroundModeEnabled`, defaulting existing profiles to cursor-based clicks. Schema 6 adds `AutoClickIntervalMaximumMilliseconds`, initialized from the existing interval so previous profiles retain a fixed delay. Schema 7 adds `AutoClickBackgroundModeHotkey` (`Ctrl+Alt+B`), separate from the start/stop hotkey. Future schema changes must provide a tested migration before the application accepts the old format.
+`CompanionDataNormalizer` repairs invalid current-format values after loading. Schema 3 adds empty grouped interaction-state assignments to every companion, preserving the existing idle-only behavior. Schema 8 retires the former core Auto Clicker fields. Before normalization writes a pre-schema-8 document, startup copies any legacy click preferences to the Auto Clicker addon's scoped settings file if it does not already exist. This preserves the settings even when the addon is installed later. Future schema changes must provide a tested migration before the application accepts the old format.
 
-The auto-click preferences are `AutoClickIntervalMilliseconds` and `AutoClickIntervalMaximumMilliseconds` (inclusive lower and upper bounds, each from 10 to 60,000), `AutoClickHotkey` (the normalized start/stop combination), `AutoClickBackgroundModeHotkey` (the distinct normalized input-mode combination), `AutoClickEnabled`, and the default-off `AutoClickBackgroundModeEnabled`. The selected target rectangle, target window handle, active state, and transient status dialogue are intentionally runtime-only. Theme selection stores both `SelectedThemeId` and its `Theme` kind; the saved-theme ID is authoritative, and normalization repairs the kind from a selected built-in or custom theme before writing the repair back.
+Theme selection stores both `SelectedThemeId` and its `Theme` kind; the saved-theme ID is authoritative, and normalization repairs the kind from a selected built-in or custom theme before writing the repair back.
+
+## Addon data and manifests
+
+Addon installation state and addon-owned settings are separate from `DesktopCompanionData`. The host registry is `%LOCALAPPDATA%\DesktopFamiliar\Addons\installed-addons.json` (`schemaVersion: 1`), packages are installed at `Addons\packages\<addon-id>\<version>`, and addon-owned settings are stored at `Addons\data\<addon-id>\settings.json`. The Auto Clicker settings document currently has `schemaVersion: 1` and stores its enable flag, interval range, distinct global hotkeys, and background-mode preference. The selected target area, target window handle, active state, and transient dialogue are runtime-only. The first-party catalogue lists an addon ID, display name, short description, version, compatibility range, package URL, SHA-256 checksum, and release-notes URL for the Available-tab detail pane. The core addon manifest uses `manifestVersion: 1` and is parsed with the canonical `AddonManifestJson` options, including string capability names. A package has `addon.json` plus its named root assembly; extraction rejects traversal paths, a bad checksum, or a manifest that differs from its trusted catalogue record. The full compatibility range and manifest example are documented in `docs/addons/sdk-compatibility.md`.
 
 ## Companion and scenes
 

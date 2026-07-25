@@ -5,14 +5,14 @@ public sealed class AutoClickHotkeySettingsTests
     [Fact]
     public void AutoClickSettings_ExposeSeparateStartStopAndInputModeHotkeys()
     {
-        var markup = File.ReadAllText(FindRepositoryFile(Path.Combine("Views", "SettingsWindow.xaml")));
-        var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Services", "AutoClick", "AutoClickCoordinator.cs")));
+        var settingsSource = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "Views", "AutoClickerSettingsSection.cs")));
+        var coordinatorSource = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "Services", "AutoClickerCoordinator.cs")));
 
-        Assert.Contains("AutoClickBackgroundModeHotkeyButton", markup, StringComparison.Ordinal);
-        Assert.Contains("AutoClickBackgroundModeHotkey_Click", markup, StringComparison.Ordinal);
-        Assert.Contains("private readonly GlobalHotkeyService _backgroundModeHotkeyService;", source, StringComparison.Ordinal);
-        Assert.Contains("public void ToggleBackgroundMode()", source, StringComparison.Ordinal);
-        Assert.Contains("InputModeChanged?.Invoke(this, new AutoClickInputModeChangedEventArgs(backgroundModeEnabled));", source, StringComparison.Ordinal);
+        Assert.Contains("_backgroundModeHotkeyButton", settingsSource, StringComparison.Ordinal);
+        Assert.Contains("AutoClickBackgroundModeHotkey_Click", settingsSource, StringComparison.Ordinal);
+        Assert.Contains("_backgroundModeHotkeyService", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("public void ToggleBackgroundMode()", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("Overlay.AutoClick.BackgroundModeEnabled", coordinatorSource, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryFile(string relativePath)

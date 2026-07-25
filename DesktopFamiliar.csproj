@@ -17,6 +17,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="DesktopFamiliar.AddonSdk\DesktopFamiliar.AddonSdk.csproj" />
+    <Compile Remove="Addons\AutoClicker\**\*.cs" />
+    <Compile Remove="DesktopFamiliar.AddonSdk\**\*.cs" />
     <Compile Remove="tests\**\*.cs" />
     <Resource Include="Assets\AppIcon.ico" />
     <EmbeddedResource Include="Resources\Strings\en.json" LogicalName="DesktopFamiliar.Localization.Strings.en.json" />

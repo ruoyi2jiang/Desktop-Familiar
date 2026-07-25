@@ -1,0 +1,22 @@
+{
+  "manifestVersion": 1,
+  "id": "desktopfamiliar.auto-clicker",
+  "displayName": "Auto clicker",
+  "version": "1.0.0",
+  "minimumHostApi": {
+    "major": 1,
+    "minor": 2
+  },
+  "maximumHostApiExclusive": {
+    "major": 2,
+    "minor": 0
+  },
+  "assemblyFileName": "DesktopFamiliar.Addons.AutoClicker.dll",
+  "entryPoint": "DesktopFamiliar.Addons.AutoClicker.AutoClickerAddon",
+  "capabilities": [
+    "SettingsPage",
+    "ViewportMenu",
+    "GlobalHotkeys",
+    "InputInjection"
+  ]
+}

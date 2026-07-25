@@ -5,13 +5,11 @@ public sealed class AutoClickIntervalRangeInputTests
     [Fact]
     public void RaisingMinimumInterval_RaisesLowerMaximumImmediately()
     {
-        var markup = File.ReadAllText(FindRepositoryFile(Path.Combine("Views", "SettingsWindow.xaml")));
-        var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Views", "SettingsWindow.xaml.cs")));
+        var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "Views", "AutoClickerSettingsSection.cs")));
 
-        Assert.Contains("TextChanged=\"AutoClickIntervalMinimum_TextChanged\"", markup, StringComparison.Ordinal);
-        Assert.Contains("maximumIntervalMilliseconds >= intervalMilliseconds", source, StringComparison.Ordinal);
-        Assert.Contains("AutoClickIntervalMaximumBox.Text = FormatAutoClickInterval(intervalMilliseconds, _autoClickIntervalUnit);", source, StringComparison.Ordinal);
-        Assert.Contains("_updatingAutoClickIntervalInputs", source, StringComparison.Ordinal);
+        Assert.Contains("maximum >= minimum", source, StringComparison.Ordinal);
+        Assert.Contains("_intervalMaximumBox.Text = FormatInterval(minimum, _intervalUnit);", source, StringComparison.Ordinal);
+        Assert.Contains("_updatingIntervalInputs", source, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryFile(string relativePath)

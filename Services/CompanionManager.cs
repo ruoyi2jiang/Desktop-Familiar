@@ -2,7 +2,6 @@ using DesktopFamiliar.Models;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Services.Calendar;
 using DesktopFamiliar.Services.Focus;
-using DesktopFamiliar.Services.AutoClick;
 using DesktopFamiliar.Services.Storage;
 using DesktopFamiliar.Services.Validation;
 
@@ -30,7 +29,6 @@ public sealed class CompanionManager
     public event EventHandler? ViewportChanged;
     public event EventHandler? DialogPresentationChanged;
     public event EventHandler? IdleIntervalChanged;
-    public event EventHandler? AutoClickSettingsChanged;
     public event EventHandler? UserBirthdayChanged;
     public event EventHandler? ThemeChanged;
     public event EventHandler? CalendarEventsChanged;
@@ -188,102 +186,6 @@ public sealed class CompanionManager
         Data.Settings.IdleDelaySeconds = seconds;
         Persist();
         IdleIntervalChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    public void SetAutoClickSettings(
-        string hotkey,
-        string backgroundModeHotkey,
-        int intervalMilliseconds,
-        int intervalMaximumMilliseconds,
-        bool backgroundModeEnabled)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(hotkey);
-        if (!AutoClickHotkeyPolicy.TryParse(hotkey, out var parsedHotkey))
-            throw new ArgumentException("The auto-click hotkey is invalid.", nameof(hotkey));
-        if (!AutoClickHotkeyPolicy.TryParse(backgroundModeHotkey, out var parsedBackgroundModeHotkey))
-            throw new ArgumentException("The background-mode hotkey is invalid.", nameof(backgroundModeHotkey));
-        if (string.Equals(parsedHotkey.DisplayText, parsedBackgroundModeHotkey.DisplayText, StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("The auto-click hotkeys must be different.", nameof(backgroundModeHotkey));
-
-        intervalMilliseconds = Math.Clamp(
-            intervalMilliseconds,
-            AppSettings.MinimumAutoClickIntervalMilliseconds,
-            AppSettings.MaximumAutoClickIntervalMilliseconds);
-        intervalMaximumMilliseconds = Math.Clamp(
-            intervalMaximumMilliseconds,
-            intervalMilliseconds,
-            AppSettings.MaximumAutoClickIntervalMilliseconds);
-        if (Data.Settings.AutoClickHotkey == parsedHotkey.DisplayText
-            && Data.Settings.AutoClickBackgroundModeHotkey == parsedBackgroundModeHotkey.DisplayText
-            && Data.Settings.AutoClickIntervalMilliseconds == intervalMilliseconds
-            && Data.Settings.AutoClickIntervalMaximumMilliseconds == intervalMaximumMilliseconds
-            && Data.Settings.AutoClickBackgroundModeEnabled == backgroundModeEnabled)
-        {
-            return;
-        }
-
-        var previousHotkey = Data.Settings.AutoClickHotkey;
-        var previousBackgroundModeHotkey = Data.Settings.AutoClickBackgroundModeHotkey;
-        var previousInterval = Data.Settings.AutoClickIntervalMilliseconds;
-        var previousMaximumInterval = Data.Settings.AutoClickIntervalMaximumMilliseconds;
-        var previousBackgroundMode = Data.Settings.AutoClickBackgroundModeEnabled;
-        Data.Settings.AutoClickHotkey = parsedHotkey.DisplayText;
-        Data.Settings.AutoClickBackgroundModeHotkey = parsedBackgroundModeHotkey.DisplayText;
-        Data.Settings.AutoClickIntervalMilliseconds = intervalMilliseconds;
-        Data.Settings.AutoClickIntervalMaximumMilliseconds = intervalMaximumMilliseconds;
-        Data.Settings.AutoClickBackgroundModeEnabled = backgroundModeEnabled;
-        try
-        {
-            Persist();
-        }
-        catch
-        {
-            Data.Settings.AutoClickHotkey = previousHotkey;
-            Data.Settings.AutoClickBackgroundModeHotkey = previousBackgroundModeHotkey;
-            Data.Settings.AutoClickIntervalMilliseconds = previousInterval;
-            Data.Settings.AutoClickIntervalMaximumMilliseconds = previousMaximumInterval;
-            Data.Settings.AutoClickBackgroundModeEnabled = previousBackgroundMode;
-            throw;
-        }
-        AutoClickSettingsChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    public void SetAutoClickBackgroundModeEnabled(bool enabled)
-    {
-        if (Data.Settings.AutoClickBackgroundModeEnabled == enabled)
-            return;
-
-        var previous = Data.Settings.AutoClickBackgroundModeEnabled;
-        Data.Settings.AutoClickBackgroundModeEnabled = enabled;
-        try
-        {
-            Persist();
-        }
-        catch
-        {
-            Data.Settings.AutoClickBackgroundModeEnabled = previous;
-            throw;
-        }
-        AutoClickSettingsChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    public void SetAutoClickEnabled(bool enabled)
-    {
-        if (Data.Settings.AutoClickEnabled == enabled)
-            return;
-
-        var previous = Data.Settings.AutoClickEnabled;
-        Data.Settings.AutoClickEnabled = enabled;
-        try
-        {
-            Persist();
-        }
-        catch
-        {
-            Data.Settings.AutoClickEnabled = previous;
-            throw;
-        }
-        AutoClickSettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetTheme(AppTheme theme)

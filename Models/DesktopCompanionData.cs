@@ -2,7 +2,7 @@ namespace DesktopFamiliar.Models;
 
 public sealed class DesktopCompanionData
 {
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public AppSettings Settings { get; set; } = new();
 

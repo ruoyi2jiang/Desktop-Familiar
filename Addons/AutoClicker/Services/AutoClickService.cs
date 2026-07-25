@@ -1,10 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Threading;
-using DesktopFamiliar.Models;
+using DesktopFamiliar.Addons.AutoClicker.Models;
 using DrawingPoint = System.Drawing.Point;
 using DrawingRectangle = System.Drawing.Rectangle;
 
-namespace DesktopFamiliar.Services.AutoClick;
+namespace DesktopFamiliar.Addons.AutoClicker.Services;
 
 /// <summary>Performs scheduled cursor input or targeted background window clicks.</summary>
 public sealed class AutoClickService : IDisposable
@@ -43,12 +43,12 @@ public sealed class AutoClickService : IDisposable
         targetArea = AutoClickRandomizationPolicy.NormalizeTargetArea(targetArea);
         intervalMinimumMilliseconds = Math.Clamp(
             intervalMinimumMilliseconds,
-            AppSettings.MinimumAutoClickIntervalMilliseconds,
-            AppSettings.MaximumAutoClickIntervalMilliseconds);
+            AutoClickerSettings.MinimumIntervalMilliseconds,
+            AutoClickerSettings.MaximumIntervalMilliseconds);
         intervalMaximumMilliseconds = Math.Clamp(
             intervalMaximumMilliseconds,
             intervalMinimumMilliseconds,
-            AppSettings.MaximumAutoClickIntervalMilliseconds);
+            AutoClickerSettings.MaximumIntervalMilliseconds);
 
         var backgroundTarget = useBackgroundClick ? TryCreateBackgroundTarget(targetArea) : null;
         if (useBackgroundClick && backgroundTarget is null)
@@ -68,10 +68,9 @@ public sealed class AutoClickService : IDisposable
                 _timer = new Timer(_ => ClickSafely(), null, Timeout.Infinite, Timeout.Infinite);
                 ScheduleNextClick();
             }
-            catch (Exception exception)
+            catch
             {
                 StopTimer();
-                AppLogger.Error("The auto-clicker could not start.", exception);
                 return false;
             }
         }
@@ -115,9 +114,9 @@ public sealed class AutoClickService : IDisposable
                 }
             }
         }
-        catch (Exception exception)
+        catch
         {
-            AppLogger.Error("The auto-clicker could not send mouse input.", exception);
+            Stop();
         }
     }
 
@@ -158,10 +157,7 @@ public sealed class AutoClickService : IDisposable
             targetArea.Left + targetArea.Width / 2,
             targetArea.Top + targetArea.Height / 2);
         var windowHandle = WindowFromPoint(new NativePoint(target.X, target.Y));
-        if (windowHandle == IntPtr.Zero)
-            return null;
-
-        return new BackgroundClickTarget(windowHandle);
+        return windowHandle == IntPtr.Zero ? null : new BackgroundClickTarget(windowHandle);
     }
 
     private static void SendBackgroundClick(BackgroundClickTarget target, DrawingPoint screenPoint)

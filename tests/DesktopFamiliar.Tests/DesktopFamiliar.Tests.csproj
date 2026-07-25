@@ -18,5 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\DesktopFamiliar.csproj" />
+    <ProjectReference Include="..\..\DesktopFamiliar.AddonSdk\DesktopFamiliar.AddonSdk.csproj" />
+    <ProjectReference Include="..\..\Addons\AutoClicker\DesktopFamiliar.Addons.AutoClicker.csproj" />
   </ItemGroup>
 </Project>

@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 
-namespace DesktopFamiliar.Services.AutoClick;
+namespace DesktopFamiliar.Addons.AutoClicker.Services;
 
 /// <summary>Owns one message-only Windows hotkey registration.</summary>
 public sealed class GlobalHotkeyService : IDisposable
@@ -11,10 +11,11 @@ public sealed class GlobalHotkeyService : IDisposable
     private readonly HwndSource _window;
     private AutoClickHotkey? _registeredHotkey;
 
-    public GlobalHotkeyService()
+    public GlobalHotkeyService(string name)
     {
-        _window = new HwndSource(new HwndSourceParameters("Desktop Familiar auto-click hotkey")
+        _window = new HwndSource(new HwndSourceParameters(name)
         {
+            ParentWindow = new IntPtr(-3),
             Width = 0,
             Height = 0,
             WindowStyle = 0
@@ -31,10 +32,7 @@ public sealed class GlobalHotkeyService : IDisposable
             return true;
 
         var previous = _registeredHotkey;
-        if (previous is not null)
-            UnregisterHotKey(_window.Handle, HotkeyId);
-        _registeredHotkey = null;
-
+        Unregister();
         if (RegisterHotKey(_window.Handle, HotkeyId, hotkey.Modifiers, hotkey.VirtualKey))
         {
             _registeredHotkey = hotkey;

@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="DesktopFamiliar.csproj" />
+  <Project Path="DesktopFamiliar.AddonSdk\DesktopFamiliar.AddonSdk.csproj" />
+  <Project Path="Addons\AutoClicker\DesktopFamiliar.Addons.AutoClicker.csproj" />
   <Folder Name="/tests/">
     <Project Path="tests/DesktopFamiliar.Tests/DesktopFamiliar.Tests.csproj" />
   </Folder>

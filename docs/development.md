@@ -18,6 +18,16 @@ dotnet run --project .\DesktopFamiliar.csproj
 
 The xUnit test project targets `net8.0-windows`. Tests should avoid the user's real `%LOCALAPPDATA%`; persistence tests use disposable temporary directories.
 
+`DesktopFamiliar.slnx` also builds `DesktopFamiliar.AddonSdk` and the first-party Auto Clicker addon project. The application installer remains core-only: addon packages are released separately through the first-party catalogue. Do not build or publish an addon package from a source refactor unless the owner explicitly requests it; see `docs/addons/sdk-compatibility.md` before changing the SDK or manifest format.
+
+To create a reviewed first-party Auto Clicker package for a separately authorized addon release:
+
+```powershell
+.\Addons\AutoClicker\build-package.ps1 -OutputDirectory .\Artifacts\Addons
+```
+
+The script does not publish anything. It builds the addon, creates a versioned ZIP containing `addon.json` and the addon assembly, and prints its SHA-256. Upload that ZIP to a GitHub Release, then add its version, release URL, release-notes URL, supported host range, and checksum to `addons/catalogue.json` in a separately reviewed change. The package can be released without a main-app release only when it remains compatible with the published host API.
+
 ## Change workflow
 
 1. Read `AGENTS.md` and the relevant document under `docs/`.
@@ -85,7 +95,8 @@ Do not force-add ignored character assets. The public application and installer 
 - The viewport **Enter focus** command activates Focus; the viewport menu stays suppressed during Focus, the notification-area toggle exits it, and idle/reminder visibility follows the focus policy. Non-reminder scene dialogue and voice stay suppressed in Focus.
 - A due reminder explicitly reveals a Focus-hidden companion, presents after assigned reminder-scene dialogue (or immediately over the idle fallback), and returns to hidden idle after snooze, acknowledgement, or expiration.
 - Library, editor, calendar, and settings open without exceptions. Open Calendar and Configure separately from both the overlay and notification-area menus, then verify ordinary typing, Tab navigation, copy/paste, and Backspace work immediately in their text inputs. Viewport-menu commands that open a WPF window must remain queued through `DeferredMenuAction` until the menu's `Closed` event, then dispatched with `DispatcherPriority.ContextIdle`; `Normal` is too early and can leave the newly opened window unable to receive keyboard input.
-- The auto-clicker hotkey and the viewport **Click the screen for me** command both open the target picker over every monitor; Escape cancels it, selecting a location starts clicks at the saved interval, and pressing the hotkey again stops. Validate both millisecond and second intervals and ensure an unavailable hotkey shows a clear warning. In **Extra**, disable it and confirm the hotkey no longer works and the viewport action disappears; re-enable it and confirm both return.
+- Install and restart the Auto Clicker addon, then verify its hotkey and the viewport **Action > Click the screen for me** command both open the target picker over every monitor; Escape cancels it, selecting a location starts clicks at the saved interval, and pressing the hotkey again stops. Validate both millisecond and second intervals and ensure an unavailable hotkey shows a clear warning. In its settings card, disable it and confirm the hotkey no longer works and the viewport action disappears; re-enable it and confirm both return.
+- In **Addons**, verify that the **Available** and **Installed** tabs show the correct lists, an available selection shows its details and install control, and **No available addons** appears when applicable. Verify that the **Action** viewport submenu is absent when no addon action is visible, and that every visible addon command is grouped below it. Check the catalogue only on user action; installation, update, enable/disable, and uninstall status all state that a restart is required. Do not test against a third-party URL.
 - Set a 120px character viewport and verify it is centered below a 240px dialogue bubble. Set a large viewport and verify dialogue remains capped at 480px while the character remains visible and centered. In the library deletion dialog, verify both keeping and deleting the selected companion's imported resources.
 - Theme edits apply immediately. Crimson Moon renders warm white/deep crimson surfaces with gold and charcoal accents; the Settings sidebar has visibly distinct default, hover, and selected states. Eternal Sea appears under its current name, and Stella Dark renders dark violet surfaces with readable lavender and warm-gold accents. On every dark surface, Settings page titles, calendar event guidance and units, section headings, field labels, selected dropdown values, dropdown items, data-grid text, helper text, and preview captions remain readable and use the text token belonging to that surface rather than the Windows default foreground.
 - Calendar past dates are disabled; month/year selection cannot navigate earlier than the same month one year ago; one-time, multi-day, and weekly events render and remind.

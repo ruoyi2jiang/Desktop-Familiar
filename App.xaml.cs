@@ -1,10 +1,12 @@
 using System.Threading;
 using System.Reflection;
+using System.Net.Http;
 using System.Windows.Threading;
+using DesktopFamiliar.AddonSdk;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Calendar;
-using DesktopFamiliar.Services.AutoClick;
+using DesktopFamiliar.Services.Addons;
 using DesktopFamiliar.Views;
 
 namespace DesktopFamiliar;
@@ -19,12 +21,18 @@ public partial class App : System.Windows.Application
     private CalendarEventWindow? _calendarEvents;
     private CalendarReminderService? _calendarReminders;
     private CalendarReminderPresentationCoordinator? _reminderPresentation;
-    private AutoClickCoordinator? _autoClickCoordinator;
+    private AddonRuntimeLoader? _addonRuntimeLoader;
+    private readonly HttpClient _addonHttpClient = new();
+    private readonly AddonViewportActionRegistry _addonViewportActions = new();
+    private readonly AddonSettingsSectionRegistry _addonSettingsSections = new();
     private int _fatalReportShown;
     private bool _shutdownRequested;
 
     public CompanionStorage Storage { get; private set; } = null!;
     public CompanionManager Manager { get; private set; } = null!;
+    public AddonInstallationStore AddonInstallations { get; private set; } = null!;
+    public AddonSettingsStore AddonSettings { get; private set; } = null!;
+    public AddonManagerService AddonManager { get; private set; } = null!;
 
     public static App CurrentApp => (App)Current;
     public static string DisplayVersion
@@ -58,16 +66,31 @@ public partial class App : System.Windows.Application
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
             AppLogger.Info("Application startup began.");
             Storage = new CompanionStorage();
+            AddonSettings = new AddonSettingsStore(Storage.RootDirectory);
+            try
+            {
+                new LegacyAutoClickerSettingsMigrator(Storage.RootDirectory, AddonSettings).MigrateIfNeeded();
+            }
+            catch (Exception exception)
+            {
+                // Core storage will still run its own corruption recovery. A best-effort
+                // addon migration must never prevent that recovery or application startup.
+                AppLogger.Warning("Could not migrate legacy Auto Clicker settings to addon storage.", exception);
+            }
             Manager = new CompanionManager(Storage);
+            AddonInstallations = new AddonInstallationStore(Storage.RootDirectory);
+            AddonManager = new AddonManagerService(_addonHttpClient, AddonInstallations);
             ShowStorageRecoveryNotice(Storage.LastRecoveryNotice);
             ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             Manager.ThemeChanged += (_, _) => ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
-            _autoClickCoordinator = new AutoClickCoordinator(Manager);
-            _overlay = new CompanionOverlayWindow(Manager);
-            _autoClickCoordinator.ClickingChanged += (_, args) => Dispatcher.BeginInvoke(
-                () => _overlay?.ShowAutoClickStatus(args.IsClicking));
-            _autoClickCoordinator.InputModeChanged += (_, args) => Dispatcher.BeginInvoke(
-                () => _overlay?.ShowAutoClickInputModeStatus(args.BackgroundModeEnabled));
+            _overlay = new CompanionOverlayWindow(Manager, _addonViewportActions);
+            _addonRuntimeLoader = new AddonRuntimeLoader(AddonInstallations, AppLogger.Error);
+            _addonRuntimeLoader.LoadEnabled(new DesktopFamiliarAddonHost(
+                _addonViewportActions,
+                _addonSettingsSections,
+                AddonSettings,
+                new DesktopFamiliarAddonStringProvider(),
+                new DispatcherAddonCompanionStatusPresenter(Dispatcher, message => _overlay?.ShowAddonStatus(message))));
             Manager.FocusModeChanged += (_, _) => ApplyVisibility();
             Manager.ActivityStateChanged += (_, _) => ApplyVisibility();
             Manager.CurrentCompanionChanged += (_, _) => ApplyVisibility();
@@ -257,12 +280,13 @@ public partial class App : System.Windows.Application
             _settings.Activate();
             return;
         }
-        _settings = new SettingsWindow(Manager, _autoClickCoordinator ?? throw new InvalidOperationException("Auto-click services are unavailable."));
+        _settings = new SettingsWindow(
+            Manager,
+            AddonManager,
+            _addonSettingsSections);
         _settings.Show();
         _settings.Activate();
     }
-
-    public void ToggleAutoClick() => _autoClickCoordinator?.Toggle();
 
     public void ShowCalendarEvents()
     {
@@ -330,9 +354,10 @@ public partial class App : System.Windows.Application
             return;
         _shutdownRequested = true;
         AppLogger.Info("Application shutdown was requested.");
-        _autoClickCoordinator?.Dispose();
+        _addonRuntimeLoader?.Dispose();
         _trayService?.Dispose();
         _calendarReminders?.Dispose();
+        _addonHttpClient.Dispose();
         if (_overlay is not null)
         {
             _overlay.CloseForExit(CompleteNormalShutdown);
@@ -355,8 +380,9 @@ public partial class App : System.Windows.Application
         if (_fatalReportShown == 0)
             AppLogger.Info($"Application exited normally with code {e.ApplicationExitCode}.");
         _trayService?.Dispose();
-        _autoClickCoordinator?.Dispose();
+        _addonRuntimeLoader?.Dispose();
         _calendarReminders?.Dispose();
+        _addonHttpClient.Dispose();
         base.OnExit(e);
     }
 }
