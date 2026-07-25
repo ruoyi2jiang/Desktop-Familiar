@@ -66,6 +66,8 @@ public partial class App : System.Windows.Application
             _overlay = new CompanionOverlayWindow(Manager);
             _autoClickCoordinator.ClickingChanged += (_, args) => Dispatcher.BeginInvoke(
                 () => _overlay?.ShowAutoClickStatus(args.IsClicking));
+            _autoClickCoordinator.InputModeChanged += (_, args) => Dispatcher.BeginInvoke(
+                () => _overlay?.ShowAutoClickInputModeStatus(args.BackgroundModeEnabled));
             Manager.FocusModeChanged += (_, _) => ApplyVisibility();
             Manager.ActivityStateChanged += (_, _) => ApplyVisibility();
             Manager.CurrentCompanionChanged += (_, _) => ApplyVisibility();

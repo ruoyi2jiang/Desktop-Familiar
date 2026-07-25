@@ -48,6 +48,7 @@ public partial class CompanionOverlayWindow : Window
     private Action? _afterLoopFinishes;
     private int? _pendingDialogStartFrame;
     private bool _showingAutoClickStatus;
+    private string? _queuedAutoClickStatusMessageKey;
     private string _interruptedDialogText = string.Empty;
     private Visibility _interruptedReminderActionsVisibility;
     // The restore indicator is armed only by the user's hide action.
@@ -203,25 +204,34 @@ public partial class CompanionOverlayWindow : Window
         Hide();
     }
 
-    public void ShowAutoClickStatus(bool isClicking)
+    public void ShowAutoClickStatus(bool isClicking) => ShowAutoClickStatus(
+        isClicking ? "Overlay.AutoClick.Started" : "Overlay.AutoClick.Stopped");
+
+    public void ShowAutoClickInputModeStatus(bool backgroundModeEnabled) => ShowAutoClickStatus(
+        backgroundModeEnabled
+            ? "Overlay.AutoClick.BackgroundModeEnabled"
+            : "Overlay.AutoClick.CursorModeEnabled");
+
+    private void ShowAutoClickStatus(string messageKey)
     {
         if (!IsVisible)
             return;
 
-        if (!_showingAutoClickStatus)
+        if (_showingAutoClickStatus)
         {
-            _showingAutoClickStatus = true;
-            _interruptedDialogText = DialogText.Text;
-            _interruptedReminderActionsVisibility = ReminderActions.Visibility;
-            _dialogTimer.Stop();
-            _voicePlayer.Stop();
-            _voicePlayer.Close();
-            ReminderActions.Visibility = Visibility.Collapsed;
+            _queuedAutoClickStatusMessageKey = messageKey;
+            return;
         }
 
-        DialogText.Text = LocalizationService.Get(isClicking
-            ? "Overlay.AutoClick.Started"
-            : "Overlay.AutoClick.Stopped");
+        _showingAutoClickStatus = true;
+        _interruptedDialogText = DialogText.Text;
+        _interruptedReminderActionsVisibility = ReminderActions.Visibility;
+        _dialogTimer.Stop();
+        _voicePlayer.Stop();
+        _voicePlayer.Close();
+        ReminderActions.Visibility = Visibility.Collapsed;
+
+        DialogText.Text = LocalizationService.Get(messageKey);
         _autoClickStatusTimer.Stop();
         _autoClickStatusTimer.Interval = AutoClickStatusDuration;
         _autoClickStatusTimer.Start();
@@ -1024,6 +1034,17 @@ public partial class CompanionOverlayWindow : Window
         if (!_showingAutoClickStatus)
             return;
 
+        if (_queuedAutoClickStatusMessageKey is { } queuedMessageKey)
+        {
+            _queuedAutoClickStatusMessageKey = null;
+            DialogText.Text = LocalizationService.Get(queuedMessageKey);
+            _autoClickStatusTimer.Interval = AutoClickStatusDuration;
+            _autoClickStatusTimer.Start();
+            UpdateDialogBubbleVisibility();
+            UpdateDialogAreaForContent();
+            return;
+        }
+
         _showingAutoClickStatus = false;
         ReminderActions.Visibility = _interruptedReminderActionsVisibility;
         if (_activeReminder is not null)
@@ -1051,6 +1072,7 @@ public partial class CompanionOverlayWindow : Window
         if (_showingAutoClickStatus)
             ReminderActions.Visibility = _interruptedReminderActionsVisibility;
         _showingAutoClickStatus = false;
+        _queuedAutoClickStatusMessageKey = null;
         _interruptedDialogText = string.Empty;
     }
 

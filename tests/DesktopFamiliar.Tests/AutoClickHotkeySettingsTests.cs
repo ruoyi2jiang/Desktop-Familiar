@@ -12,6 +12,7 @@ public sealed class AutoClickHotkeySettingsTests
         Assert.Contains("AutoClickBackgroundModeHotkey_Click", markup, StringComparison.Ordinal);
         Assert.Contains("private readonly GlobalHotkeyService _backgroundModeHotkeyService;", source, StringComparison.Ordinal);
         Assert.Contains("public void ToggleBackgroundMode()", source, StringComparison.Ordinal);
+        Assert.Contains("InputModeChanged?.Invoke(this, new AutoClickInputModeChangedEventArgs(backgroundModeEnabled));", source, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryFile(string relativePath)

@@ -12,9 +12,16 @@ public sealed class AutoClickStatusDialogueTests
         Assert.Contains("_interruptedDialogText = DialogText.Text;", overlaySource, StringComparison.Ordinal);
         Assert.Contains("Overlay.AutoClick.Started", overlaySource, StringComparison.Ordinal);
         Assert.Contains("Overlay.AutoClick.Stopped", overlaySource, StringComparison.Ordinal);
+        Assert.Contains("public void ShowAutoClickInputModeStatus(bool backgroundModeEnabled)", overlaySource, StringComparison.Ordinal);
+        Assert.Contains("Overlay.AutoClick.BackgroundModeEnabled", overlaySource, StringComparison.Ordinal);
+        Assert.Contains("Overlay.AutoClick.CursorModeEnabled", overlaySource, StringComparison.Ordinal);
+        Assert.Contains("private string? _queuedAutoClickStatusMessageKey;", overlaySource, StringComparison.Ordinal);
+        Assert.Contains("_queuedAutoClickStatusMessageKey = messageKey;", overlaySource, StringComparison.Ordinal);
+        Assert.Contains("if (_queuedAutoClickStatusMessageKey is { } queuedMessageKey)", overlaySource, StringComparison.Ordinal);
         Assert.Contains("if (_showingAutoClickStatus)", overlaySource, StringComparison.Ordinal);
         Assert.Contains("ShowDialogLine();", overlaySource, StringComparison.Ordinal);
         Assert.Contains("_overlay?.ShowAutoClickStatus(args.IsClicking)", appSource, StringComparison.Ordinal);
+        Assert.Contains("_overlay?.ShowAutoClickInputModeStatus(args.BackgroundModeEnabled)", appSource, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryFile(string relativePath)

@@ -159,6 +159,8 @@
   "AutoClick.Target.Cancel": "Press Esc to cancel",
   "Overlay.AutoClick.Started": "I’ll handle the clicking for you!",
   "Overlay.AutoClick.Stopped": "All done — I’ve stopped clicking!",
+  "Overlay.AutoClick.BackgroundModeEnabled": "I’ll click in the background next time!",
+  "Overlay.AutoClick.CursorModeEnabled": "Back to clicking with my cursor next time!",
   "Settings.RandomIdleInterval.Title": "Random idle interval",
   "Settings.RandomIdleInterval.Description": "Wait this long after returning to idle before another random idle animation can play.",
   "Settings.RandomIdleInterval.Seconds": "seconds",

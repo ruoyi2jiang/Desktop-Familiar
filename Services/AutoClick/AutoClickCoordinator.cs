@@ -8,6 +8,11 @@ public sealed class AutoClickStatusChangedEventArgs(bool isClicking) : EventArgs
     public bool IsClicking { get; } = isClicking;
 }
 
+public sealed class AutoClickInputModeChangedEventArgs(bool backgroundModeEnabled) : EventArgs
+{
+    public bool BackgroundModeEnabled { get; } = backgroundModeEnabled;
+}
+
 /// <summary>Coordinates the global toggle, target-selection window, and click engine.</summary>
 public sealed class AutoClickCoordinator : IDisposable
 {
@@ -39,6 +44,7 @@ public sealed class AutoClickCoordinator : IDisposable
     public bool IsClicking => _clickService.IsClicking;
     public event EventHandler? StateChanged;
     public event EventHandler<AutoClickStatusChangedEventArgs>? ClickingChanged;
+    public event EventHandler<AutoClickInputModeChangedEventArgs>? InputModeChanged;
 
     public bool TryUpdateSettings(
         string hotkeyText,
@@ -147,9 +153,11 @@ public sealed class AutoClickCoordinator : IDisposable
         if (!_manager.Data.Settings.AutoClickEnabled)
             return;
 
-        _manager.SetAutoClickBackgroundModeEnabled(!_manager.Data.Settings.AutoClickBackgroundModeEnabled);
+        var backgroundModeEnabled = !_manager.Data.Settings.AutoClickBackgroundModeEnabled;
+        _manager.SetAutoClickBackgroundModeEnabled(backgroundModeEnabled);
         if (IsSelectingTarget || IsClicking)
             Stop();
+        InputModeChanged?.Invoke(this, new AutoClickInputModeChangedEventArgs(backgroundModeEnabled));
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
