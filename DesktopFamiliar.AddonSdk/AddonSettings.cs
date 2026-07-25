@@ -34,6 +34,17 @@ public interface IAddonSettingsSection
     FrameworkElement CreateView();
 }
 
+/// <summary>
+/// Optional host API 1.3 contract for presenting an addon's settings inside its installed-addon card.
+/// </summary>
+public interface IInlineAddonSettingsSection : IAddonSettingsSection
+{
+    AddonInlineSettingsContent CreateInlineContent();
+}
+
+/// <summary>Addon-owned visual fragments composed by the host inside one installed-addon card.</summary>
+public sealed record AddonInlineSettingsContent(FrameworkElement Header, FrameworkElement Settings);
+
 /// <summary>Host service for registering addon-owned settings visuals (host API 1.2 or later).</summary>
 public interface IAddonSettingsSectionRegistry
 {

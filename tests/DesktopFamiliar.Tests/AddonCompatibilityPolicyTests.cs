@@ -23,11 +23,23 @@ public sealed class AddonCompatibilityPolicyTests
         var manifest = AddonManifestJson.Deserialize(json);
 
         Assert.Equal(AutoClickerAddonDefinition.Id, manifest.Id);
-        Assert.Equal(new AddonApiVersion(1, 2), manifest.MinimumHostApi);
+        Assert.Equal("1.0.1", manifest.Version);
+        Assert.Equal(new AddonApiVersion(1, 3), manifest.MinimumHostApi);
         Assert.Equal(new AddonApiVersion(2, 0), manifest.MaximumHostApiExclusive);
         Assert.Contains(AddonCapability.GlobalHotkeys, manifest.Capabilities);
         Assert.Contains(AddonCapability.InputInjection, manifest.Capabilities);
         Assert.True(AddonCompatibilityPolicy.Evaluate(manifest, AddonSdkVersion.CurrentHostApi).IsCompatible);
+    }
+
+    [Fact]
+    public void AutoClickerSettings_UsesTheThemedHelpIconForBackgroundMode()
+    {
+        var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "Views", "AutoClickerSettingsSection.cs")));
+        var markup = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "Views", "AutoClickerHelpIcon.xaml")));
+
+        Assert.Contains("new AutoClickerHelpIcon(", source, StringComparison.Ordinal);
+        Assert.Contains("ToolTipService.InitialShowDelay\" Value=\"0\"", markup, StringComparison.Ordinal);
+        Assert.Contains("DynamicResource PrimaryAccentBrush", markup, StringComparison.Ordinal);
     }
 
     [Fact]

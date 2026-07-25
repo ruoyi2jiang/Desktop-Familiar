@@ -25,6 +25,7 @@ App (composition root)
       -> FrameAnimationPlayer
           -> IAnimationFrameLoader
           -> AnimationTimeline
+  -> ApplicationRestartService
   -> TrayService and WPF windows/controls
 ```
 
@@ -47,6 +48,8 @@ App (composition root)
 `CompanionManager` owns the loaded `DesktopCompanionData`, exposes the selected companion, and raises narrow events after a successful mutation. It depends only on `ICompanionRepository`. `ThemeSelectionPolicy` resolves a saved-theme card to its built-in or custom kind, so selecting a built-in palette cannot be persisted as a custom theme. Before a save the manager keeps a deep snapshot; if persistence fails, it restores that snapshot and throws `AppPersistenceException` so the application can report the failure without leaving false in-memory state.
 
 The addon host exposes API 1.2 through `DesktopFamiliar.AddonSdk`. An addon manifest declares a supported host API range and sensitive capabilities; `AddonCompatibilityPolicy` rejects unknown manifest formats, missing identities/entry points, assemblies, and incompatible hosts before activation. `AddonInstallationStore` owns the atomic local installation registry and safe ZIP extraction. `AddonSettingsStore` atomically persists addon-owned JSON under its data directory; startup transfers legacy Auto Clicker values before schema-8 core-data normalization removes them. `AddonRuntimeLoader` creates a collectible assembly-load context only for enabled packages that have passed those checks. `IAddonViewportActionRegistry` is a host service: every visible addon command is grouped below the overlay's single **Action** submenu and invoked through `DeferredMenuAction` after the menu closes. API 1.2 adds the settings-section registry, scoped settings store, localized-string provider, and transient companion-status presenter. The Auto Clicker uses these services for its runtime, settings UI, target picker, hotkeys, input engine, and short dialogue messages without a reference to the application assembly. `docs/addons/sdk-compatibility.md` is the normative versioning contract; the running app will only be wired to the pinned first-party catalogue, never arbitrary external packages.
+
+`ApplicationRestartService` is the process boundary used after an addon uninstall. It starts the same executable command line before the current WPF application closes, allowing the unloaded addon to finish runtime cleanup in the replacement process.
 
 `CompanionActivityState` is runtime-only and distinguishes Idle from Reminder. `FocusModeVisibilityPolicy` combines activity with the persisted focus toggle: normal mode displays the selected companion, while Focus displays it only for Reminder. Consumers use `CompanionManager.ShouldDisplayCompanion` instead of duplicating the rule.
 

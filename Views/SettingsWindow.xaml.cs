@@ -111,21 +111,25 @@ public partial class SettingsWindow : Window
     private readonly CompanionManager _manager;
     private readonly AddonManagerService _addonManager;
     private readonly IAddonSettingsSectionRegistry _addonSettingsSections;
+    private readonly IApplicationRestartService _applicationRestartService;
     private readonly Dictionary<string, CustomThemeTokenControl> _customThemeTokenControls = new(StringComparer.Ordinal);
     private CustomThemePalette _editingPalette = new();
     private Guid? _editingThemeId;
     private bool _loaded;
     private string? _selectedAvailableAddonId;
+    private bool _isAddonCatalogueRefreshInProgress;
 
     public SettingsWindow(
         CompanionManager manager,
         AddonManagerService addonManager,
-        IAddonSettingsSectionRegistry addonSettingsSections)
+        IAddonSettingsSectionRegistry addonSettingsSections,
+        IApplicationRestartService? applicationRestartService = null)
     {
         InitializeComponent();
         _manager = manager;
         _addonManager = addonManager;
         _addonSettingsSections = addonSettingsSections;
+        _applicationRestartService = applicationRestartService ?? new ApplicationRestartService();
         RunAtStartupCheck.IsChecked = _manager.Data.Settings.RunAtStartup;
         UserBirthdayPicker.SelectedDate = _manager.Data.Settings.UserBirthday;
         ViewportWidthBox.Text = _manager.Data.Settings.ViewportWidth.ToString();
@@ -133,7 +137,6 @@ public partial class SettingsWindow : Window
         TruncateDialogLinesCheck.IsChecked = _manager.Data.Settings.TruncateLongDialogLines;
         IdleIntervalBox.Text = _manager.Data.Settings.IdleDelaySeconds.ToString("0.##", CultureInfo.CurrentCulture);
         RefreshAddonManagerEntries();
-        RefreshAddonSettingsSections();
         RefreshThemeCards();
         Loaded += (_, _) => _loaded = true;
     }
@@ -223,14 +226,25 @@ public partial class SettingsWindow : Window
 
     private void ThemeMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Theme);
 
-    private void AddonsMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Addons);
+    private async void AddonsMenu_Click(object sender, RoutedEventArgs e)
+    {
+        ShowPage(SettingsPage.Addons);
+        if (_addonManager.NeedsCatalogueRefresh)
+            await RefreshAddonsAsync();
+    }
 
     private void AvailableAddonsTab_Click(object sender, RoutedEventArgs e) => ShowAddonManagerTab(AddonManagerTab.Available);
 
     private void InstalledAddonsTab_Click(object sender, RoutedEventArgs e) => ShowAddonManagerTab(AddonManagerTab.Installed);
 
-    private async void RefreshAddons_Click(object sender, RoutedEventArgs e)
+    private async void RefreshAddons_Click(object sender, RoutedEventArgs e) => await RefreshAddonsAsync();
+
+    private async Task RefreshAddonsAsync()
     {
+        if (_isAddonCatalogueRefreshInProgress)
+            return;
+
+        _isAddonCatalogueRefreshInProgress = true;
         SetAddonRefreshBusy(true);
         AddonsStatusText.Text = string.Empty;
         try
@@ -249,6 +263,7 @@ public partial class SettingsWindow : Window
         finally
         {
             SetAddonRefreshBusy(false);
+            _isAddonCatalogueRefreshInProgress = false;
         }
     }
 
@@ -276,6 +291,7 @@ public partial class SettingsWindow : Window
             AddonsStatusText.Text = LocalizationService.Get("Settings.Addons.RestartRequired");
             RefreshAddonManagerEntries();
             ShowAddonManagerTab(AddonManagerTab.Installed);
+            PromptForRestart("Settings.Addons.Install.RestartPrompt", release.DisplayName);
         }
         catch (Exception exception)
         {
@@ -285,24 +301,6 @@ public partial class SettingsWindow : Window
         finally
         {
             button.IsEnabled = true;
-        }
-    }
-
-    private void ToggleAddonEnabled_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: InstalledAddon installed })
-            return;
-
-        try
-        {
-            _addonManager.SetEnabled(installed.Id, !installed.Enabled);
-            AddonsStatusText.Text = LocalizationService.Get("Settings.Addons.RestartRequired");
-            RefreshAddonManagerEntries();
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Error($"The addon '{installed.Id}' enabled state could not be changed.", exception);
-            AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.EnabledFailed", exception.Message);
         }
     }
 
@@ -324,11 +322,34 @@ public partial class SettingsWindow : Window
             _addonManager.Uninstall(installed.Id, deleteSavedData: response == MessageBoxResult.Yes);
             AddonsStatusText.Text = LocalizationService.Get("Settings.Addons.RestartRequired");
             RefreshAddonManagerEntries();
+            PromptForRestart("Settings.Addons.Uninstall.RestartPrompt", installed.Manifest.DisplayName);
         }
         catch (Exception exception)
         {
             AppLogger.Error($"The addon '{installed.Id}' could not be uninstalled.", exception);
             AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.UninstallFailed", exception.Message);
+        }
+    }
+
+    private void PromptForRestart(string promptKey, string addonDisplayName)
+    {
+        var restartNow = MessageBox.Show(
+            LocalizationService.Format(promptKey, addonDisplayName),
+            LocalizationService.Get("Settings.Addons.Restart.Title"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (restartNow != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            _applicationRestartService.RestartCurrentProcess();
+            Application.Current.Shutdown();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("Desktop Familiar could not restart after an addon change.", exception);
+            AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.RestartFailed", exception.Message);
         }
     }
 
@@ -358,6 +379,7 @@ public partial class SettingsWindow : Window
             InstalledAddonsList.Children.Clear();
             InstalledAddonsEmptyText.Visibility = Visibility.Visible;
             UpdateAvailableAddonDetails(null);
+            RefreshAddonSettingsSections(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             return;
         }
 
@@ -390,12 +412,15 @@ public partial class SettingsWindow : Window
         foreach (var entry in installed)
             InstalledAddonsList.Children.Add(CreateInstalledAddonCard(entry));
         InstalledAddonsEmptyText.Visibility = installed.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        RefreshAddonSettingsSections(installed.Select(entry => entry.Id).ToHashSet(StringComparer.OrdinalIgnoreCase));
     }
 
-    private void RefreshAddonSettingsSections()
+    private void RefreshAddonSettingsSections(IReadOnlySet<string> installedAddonIds)
     {
         AddonSettingsSections.Children.Clear();
-        foreach (var section in _addonSettingsSections.GetSections())
+        foreach (var section in _addonSettingsSections.GetSections().Where(section =>
+                     section is not IInlineAddonSettingsSection
+                     && installedAddonIds.Contains(section.Id)))
             AddonSettingsSections.Children.Add(section.CreateView());
         AddonSettingsDivider.Visibility = AddonSettingsSections.Children.Count == 0
             ? Visibility.Collapsed
@@ -405,7 +430,6 @@ public partial class SettingsWindow : Window
     private void UpdateAvailableAddonDetails(AddonManagerEntry? entry)
     {
         AvailableAddonDetailsBorder.Visibility = entry is null ? Visibility.Collapsed : Visibility.Visible;
-        Grid.SetColumnSpan(AvailableAddonsListPanel, entry is null ? 3 : 1);
         if (entry?.AvailableRelease is not { } release)
             return;
 
@@ -434,8 +458,8 @@ public partial class SettingsWindow : Window
             Padding = new Thickness(14),
             Margin = new Thickness(0, 0, 0, 10)
         };
-        card.SetResourceReference(Border.BackgroundProperty, ThemeTokens.SecondaryBackground);
-        card.SetResourceReference(Border.BorderBrushProperty, ThemeTokens.SecondaryAccent);
+        card.SetResourceReference(Border.BackgroundProperty, ThemeTokens.PrimaryBackground);
+        card.SetResourceReference(Border.BorderBrushProperty, ThemeTokens.PrimaryAccent);
         var panel = new StackPanel();
         var title = new TextBlock
         {
@@ -443,32 +467,55 @@ public partial class SettingsWindow : Window
             FontSize = 17,
             FontWeight = FontWeights.SemiBold
         };
-        title.SetResourceReference(TextBlock.ForegroundProperty, ThemeTokens.SecondaryTextOnBackground);
+        title.SetResourceReference(TextBlock.ForegroundProperty, ThemeTokens.PrimaryTextOnBackground);
         panel.Children.Add(title);
-        var status = new TextBlock
-        {
-            Text = GetInstalledAddonStatus(entry),
-            Opacity = 0.72,
-            Margin = new Thickness(0, 4, 0, 10),
-            TextWrapping = TextWrapping.Wrap
-        };
-        status.SetResourceReference(TextBlock.ForegroundProperty, ThemeTokens.SecondaryTextOnBackground);
-        panel.Children.Add(status);
 
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
+        var inlineSettings = _addonSettingsSections.GetSections()
+            .OfType<IInlineAddonSettingsSection>()
+            .FirstOrDefault(section => string.Equals(section.Id, entry.Id, StringComparison.OrdinalIgnoreCase))
+            ?.CreateInlineContent();
+        if (inlineSettings is not null)
+        {
+            panel.Children.Add(inlineSettings.Header);
+            panel.Children.Add(CreateInstalledVersionDetails(entry));
+            inlineSettings.Settings.Margin = new Thickness(0, 20, 0, 0);
+            panel.Children.Add(inlineSettings.Settings);
+        }
+        else
+        {
+            var status = new TextBlock
+            {
+                Text = GetInstalledAddonStatus(entry),
+                Opacity = 0.72,
+                Margin = new Thickness(0, 4, 0, 10),
+                TextWrapping = TextWrapping.Wrap
+            };
+            status.SetResourceReference(TextBlock.ForegroundProperty, ThemeTokens.PrimaryTextOnBackground);
+            panel.Children.Add(status);
+        }
+
         if (entry.Installed is not { } installed)
             throw new InvalidOperationException("An installed addon card requires an installed addon.");
 
-        var enabled = new Button
+        var buttons = new StackPanel
         {
-            Content = LocalizationService.Get(installed.Enabled ? "Settings.Addons.Disable" : "Settings.Addons.Enable"),
-            Style = (Style)FindResource("OutlineButton"),
-            Height = 34,
-            Padding = new Thickness(12, 0, 12, 0),
-            Tag = installed
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 20, 0, 0)
         };
-        enabled.Click += ToggleAddonEnabled_Click;
-        buttons.Children.Add(enabled);
+
+        if (entry.AvailableRelease is { } release && entry.HasUpdate)
+        {
+            var update = new Button
+            {
+                Content = LocalizationService.Get("Settings.Addons.Update"),
+                Style = (Style)FindResource("PrimaryButton"),
+                Height = 34,
+                Padding = new Thickness(12, 0, 12, 0),
+                Tag = release
+            };
+            update.Click += InstallAddon_Click;
+            buttons.Children.Add(update);
+        }
 
         var uninstall = new Button
         {
@@ -476,30 +523,34 @@ public partial class SettingsWindow : Window
             Style = (Style)FindResource("DangerButton"),
             Height = 34,
             Padding = new Thickness(12, 0, 12, 0),
-            Margin = new Thickness(8, 0, 0, 0),
+            Margin = new Thickness(buttons.Children.Count == 0 ? 0 : 8, 0, 0, 0),
             Tag = installed
         };
         uninstall.Click += UninstallAddon_Click;
         buttons.Children.Add(uninstall);
 
-        if (entry.AvailableRelease is { } release && entry.HasUpdate)
-        {
-            var install = new Button
-            {
-                Content = LocalizationService.Get(entry.HasUpdate ? "Settings.Addons.Update" : "Settings.Addons.Install"),
-                Style = (Style)FindResource("PrimaryButton"),
-                Height = 34,
-                Padding = new Thickness(12, 0, 12, 0),
-                Margin = new Thickness(8, 0, 0, 0),
-                Tag = release
-            };
-            install.Click += InstallAddon_Click;
-            buttons.Children.Add(install);
-        }
-
         panel.Children.Add(buttons);
         card.Child = panel;
         return card;
+    }
+
+    private StackPanel CreateInstalledVersionDetails(AddonManagerEntry entry)
+    {
+        var details = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
+        details.Children.Add(CreateInstalledDetailText(
+            LocalizationService.Format("Settings.Addons.InstalledVersion", entry.Installed!.InstalledVersion)));
+        details.Children.Add(CreateInstalledDetailText(
+            LocalizationService.Format(
+                "Settings.Addons.LatestCompatibleVersion",
+                entry.AvailableRelease?.Version ?? LocalizationService.Get("Settings.Addons.LatestCompatibleVersion.Unknown"))));
+        return details;
+    }
+
+    private TextBlock CreateInstalledDetailText(string text)
+    {
+        var detail = new TextBlock { Text = text, Opacity = 0.72, TextWrapping = TextWrapping.Wrap };
+        detail.SetResourceReference(TextBlock.ForegroundProperty, ThemeTokens.PrimaryTextOnBackground);
+        return detail;
     }
 
     private static string GetInstalledAddonStatus(AddonManagerEntry entry)
@@ -943,5 +994,6 @@ public partial class SettingsWindow : Window
         CompanionPanel.Visibility = page == SettingsPage.Companion ? Visibility.Visible : Visibility.Collapsed;
         ThemePanel.Visibility = page == SettingsPage.Theme ? Visibility.Visible : Visibility.Collapsed;
         AddonsPanel.Visibility = page == SettingsPage.Addons ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPageScrollViewer.ScrollToTop();
     }
 }

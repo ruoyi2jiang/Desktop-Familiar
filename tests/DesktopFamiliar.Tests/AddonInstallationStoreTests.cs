@@ -48,7 +48,7 @@ public sealed class AddonInstallationStoreTests : IDisposable
     public void Install_RejectsPackageManifestThatDiffersFromCatalogue()
     {
         var manifest = AutoClickerAddonDefinition.CreateManifest();
-        manifest.Version = "1.0.1";
+        manifest.Version = "1.0.0";
         var packagePath = CreatePackage(manifest);
         var store = new AddonInstallationStore(_temporaryDirectory);
 
@@ -131,6 +131,48 @@ public sealed class AddonInstallationStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task AddonManager_RequestsRefreshUntilTheCatalogueContainsARelease()
+    {
+        var store = new AddonInstallationStore(_temporaryDirectory);
+        using var client = new HttpClient(new StatusResponseHandler(HttpStatusCode.NotFound));
+        var manager = new AddonManagerService(client, store);
+
+        Assert.True(manager.NeedsCatalogueRefresh);
+
+        await manager.RefreshCatalogueAsync();
+
+        Assert.True(manager.HasCatalogue);
+        Assert.True(manager.NeedsCatalogueRefresh);
+
+        var catalogue = new AddonPackageCatalogue
+        {
+            Publisher = FirstPartyAddonCataloguePolicy.Publisher,
+            Releases =
+            [
+                new AddonPackageRelease
+                {
+                    Id = AutoClickerAddonDefinition.Id,
+                    DisplayName = "Auto clicker",
+                    Description = "Repeatedly click an area of the screen.",
+                    Version = "1.0.0",
+                    MinimumHostApi = new AddonApiVersion(1, 2),
+                    MaximumHostApiExclusive = new AddonApiVersion(2, 0),
+                    PackageUrl = "https://github.com/ruoyi2jiang/Desktop-Familiar/releases/download/auto-clicker-v1.0.0/DesktopFamiliar.AutoClicker-1.0.0.zip",
+                    ReleaseNotesUrl = "https://github.com/ruoyi2jiang/Desktop-Familiar/releases/tag/auto-clicker-v1.0.0",
+                    Sha256 = new string('A', 64)
+                }
+            ]
+        };
+        using var populatedClient = new HttpClient(new StaticResponseHandler(
+            JsonSerializer.SerializeToUtf8Bytes(catalogue, AddonManifestJson.Options)));
+        var populatedManager = new AddonManagerService(populatedClient, store);
+
+        await populatedManager.RefreshCatalogueAsync();
+
+        Assert.False(populatedManager.NeedsCatalogueRefresh);
+    }
+
+    [Fact]
     public void FirstPartyCataloguePolicy_UsesTheCaseSensitiveCataloguePath()
     {
         Assert.Equal(
@@ -189,18 +231,22 @@ public sealed class AddonInstallationStoreTests : IDisposable
         return packagePath;
     }
 
-    private static AddonPackageRelease CreateRelease(string packagePath) => new()
+    private static AddonPackageRelease CreateRelease(string packagePath)
     {
-        Id = AutoClickerAddonDefinition.Id,
+        var manifest = AutoClickerAddonDefinition.CreateManifest();
+        return new AddonPackageRelease
+        {
+        Id = manifest.Id,
         DisplayName = "Auto clicker",
         Description = "Repeatedly click an area of the screen.",
-        Version = "1.0.0",
-        MinimumHostApi = new AddonApiVersion(1, 2),
-        MaximumHostApiExclusive = new AddonApiVersion(2, 0),
-        PackageUrl = "https://github.com/ruoyi2jiang/Desktop-Familiar/releases/download/auto-clicker-v1.0.0/auto-clicker.zip",
-        ReleaseNotesUrl = "https://github.com/ruoyi2jiang/Desktop-Familiar/releases/tag/auto-clicker-v1.0.0",
+        Version = manifest.Version,
+        MinimumHostApi = manifest.MinimumHostApi,
+        MaximumHostApiExclusive = manifest.MaximumHostApiExclusive,
+        PackageUrl = $"https://github.com/ruoyi2jiang/Desktop-Familiar/releases/download/auto-clicker-v{manifest.Version}/auto-clicker.zip",
+        ReleaseNotesUrl = $"https://github.com/ruoyi2jiang/Desktop-Familiar/releases/tag/auto-clicker-v{manifest.Version}",
         Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packagePath)))
-    };
+        };
+    }
 
     private static string LoadInstalledAddon(AddonInstallationStore store)
     {

@@ -6,18 +6,18 @@
       "id": "desktopfamiliar.auto-clicker",
       "displayName": "Auto clicker",
       "description": "Choose a fresh screen area and click it repeatedly with randomized intervals.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "minimumHostApi": {
         "major": 1,
-        "minor": 2
+        "minor": 3
       },
       "maximumHostApiExclusive": {
         "major": 2,
         "minor": 0
       },
-      "packageUrl": "https://github.com/ruoyi2jiang/Desktop-Familiar/releases/download/auto-clicker-v1.0.0/DesktopFamiliar.AutoClicker-1.0.0.zip",
-      "sha256": "efd5339a9aef1afc56688cd2cb377e1c62157deac0f6585fb35e369b17dc2af4",
-      "releaseNotesUrl": "https://github.com/ruoyi2jiang/Desktop-Familiar/releases/tag/auto-clicker-v1.0.0"
+      "packageUrl": "https://github.com/ruoyi2jiang/Desktop-Familiar/releases/download/auto-clicker-v1.0.1/DesktopFamiliar.AutoClicker-1.0.1.zip",
+      "sha256": "1de25b73821d8367fbf311ac4a9b147ffa1b2741b5186adbcff977a1012d57e1",
+      "releaseNotesUrl": "https://github.com/ruoyi2jiang/Desktop-Familiar/releases/tag/auto-clicker-v1.0.1"
     }
   ]
 }

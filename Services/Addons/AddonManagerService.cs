@@ -6,7 +6,7 @@ namespace DesktopFamiliar.Services.Addons;
 
 /// <summary>
 /// Application-facing facade for the first-party addon catalogue and local installation store.
-/// It performs no network work until the caller explicitly refreshes the catalogue or installs a release.
+/// The settings page may fetch the first-party catalogue when no releases are cached; installing always requires an explicit user action.
 /// </summary>
 public sealed class AddonManagerService
 {
@@ -26,6 +26,7 @@ public sealed class AddonManagerService
     public event EventHandler? Changed;
 
     public bool HasCatalogue => _catalogue is not null;
+    public bool NeedsCatalogueRefresh => _catalogue is null || _catalogue.Releases.Count == 0;
     public bool LastCatalogueFetchWasNotFound => _catalogueClient.LastFetchWasNotFound;
 
     public async Task RefreshCatalogueAsync(CancellationToken cancellationToken = default)

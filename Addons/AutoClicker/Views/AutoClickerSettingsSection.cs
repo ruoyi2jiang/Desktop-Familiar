@@ -11,7 +11,7 @@ using DesktopFamiliar.Addons.AutoClicker.Services;
 namespace DesktopFamiliar.Addons.AutoClicker.Views;
 
 /// <summary>Registers the Auto Clicker's settings card on the host-managed Addons page.</summary>
-public sealed class AutoClickerSettingsSection : IAddonSettingsSection
+public sealed class AutoClickerSettingsSection : IInlineAddonSettingsSection
 {
     private readonly AutoClickerCoordinator _coordinator;
     private readonly IAddonStringProvider _strings;
@@ -26,6 +26,9 @@ public sealed class AutoClickerSettingsSection : IAddonSettingsSection
     public int Order => 100;
 
     public FrameworkElement CreateView() => new AutoClickerSettingsControl(_coordinator, _strings);
+
+    public AddonInlineSettingsContent CreateInlineContent() =>
+        AutoClickerSettingsControl.CreateInlineContent(_coordinator, _strings);
 }
 
 /// <summary>Addon-owned WPF settings visual for the Auto Clicker.</summary>
@@ -48,6 +51,7 @@ public sealed class AutoClickerSettingsControl : Border
     private readonly IAddonStringProvider _strings;
     private readonly ToggleButton _enabledToggle = new();
     private readonly StackPanel _optionsPanel = new();
+    private readonly FrameworkElement? _inlineHeader;
     private readonly Button _hotkeyButton = new();
     private readonly Button _backgroundModeHotkeyButton = new();
     private readonly TextBox _intervalMinimumBox = new();
@@ -62,19 +66,45 @@ public sealed class AutoClickerSettingsControl : Border
     private bool _updatingIntervalInputs;
 
     public AutoClickerSettingsControl(AutoClickerCoordinator coordinator, IAddonStringProvider strings)
+        : this(coordinator, strings, isInline: false)
+    {
+    }
+
+    private AutoClickerSettingsControl(AutoClickerCoordinator coordinator, IAddonStringProvider strings, bool isInline)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _strings = strings ?? throw new ArgumentNullException(nameof(strings));
-        SetResourceReference(BackgroundProperty, "PrimaryBackgroundBrush");
-        SetResourceReference(BorderBrushProperty, "PrimaryAccentBrush");
-        BorderThickness = new Thickness(1);
-        CornerRadius = new CornerRadius(14);
-        Padding = new Thickness(20);
-        SetResourceReference(TextElement.ForegroundProperty, "TextOnPrimaryBackgroundBrush");
-        Child = BuildContent();
-        PreviewKeyDown += Control_PreviewKeyDown;
+        if (isInline)
+        {
+            _inlineHeader = BuildInlineHeader();
+            BuildOptionsPanel();
+            _inlineHeader.PreviewKeyDown += Control_PreviewKeyDown;
+            _optionsPanel.PreviewKeyDown += Control_PreviewKeyDown;
+        }
+        else
+        {
+            SetResourceReference(BackgroundProperty, "PrimaryBackgroundBrush");
+            SetResourceReference(BorderBrushProperty, "PrimaryAccentBrush");
+            BorderThickness = new Thickness(1);
+            CornerRadius = new CornerRadius(14);
+            Padding = new Thickness(20);
+            SetResourceReference(TextElement.ForegroundProperty, "TextOnPrimaryBackgroundBrush");
+            Child = BuildContent();
+        }
+        if (!isInline)
+            PreviewKeyDown += Control_PreviewKeyDown;
         Populate(_coordinator.Settings);
         _loaded = true;
+    }
+
+    public static AddonInlineSettingsContent CreateInlineContent(
+        AutoClickerCoordinator coordinator,
+        IAddonStringProvider strings)
+    {
+        var control = new AutoClickerSettingsControl(coordinator, strings, isInline: true);
+        return new AddonInlineSettingsContent(
+            control._inlineHeader ?? throw new InvalidOperationException("The inline settings header was not created."),
+            control._optionsPanel);
     }
 
     private FrameworkElement BuildContent()
@@ -90,7 +120,26 @@ public sealed class AutoClickerSettingsControl : Border
         header.Children.Add(Title("Settings.AutoClick.Title", 20));
         panel.Children.Add(header);
         panel.Children.Add(Description("Settings.AutoClick.Description", new Thickness(0, 6, 0, 20)));
+        BuildOptionsPanel();
+        panel.Children.Add(_optionsPanel);
+        return panel;
+    }
 
+    private FrameworkElement BuildInlineHeader()
+    {
+        var header = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+        _enabledToggle.Style = FindStyle("SettingsToggle");
+        _enabledToggle.ToolTip = _strings.Get("Settings.AutoClick.Enabled");
+        _enabledToggle.Checked += EnabledToggle_Changed;
+        _enabledToggle.Unchecked += EnabledToggle_Changed;
+        DockPanel.SetDock(_enabledToggle, Dock.Right);
+        header.Children.Add(_enabledToggle);
+        header.Children.Add(Description("Settings.AutoClick.Description", new Thickness(0, 0, 14, 0)));
+        return header;
+    }
+
+    private void BuildOptionsPanel()
+    {
         _optionsPanel.Children.Add(Title("Settings.AutoClick.Hotkey", 16));
         _optionsPanel.Children.Add(Description("Settings.AutoClick.Hotkey.Description", new Thickness(0, 5, 0, 12)));
         ConfigureActionButton(_hotkeyButton, AutoClickHotkey_Click);
@@ -111,13 +160,8 @@ public sealed class AutoClickerSettingsControl : Border
         _backgroundModeCheck.Content = _strings.Get("Settings.AutoClick.BackgroundMode");
         _backgroundModeCheck.Margin = new Thickness(0);
         backgroundModeRow.Children.Add(_backgroundModeCheck);
-        backgroundModeRow.Children.Add(new TextBlock
-        {
-            Text = "?",
-            FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(8, 0, 0, 0),
-            ToolTip = _strings.Get("Settings.AutoClick.BackgroundMode.Description")
-        });
+        backgroundModeRow.Children.Add(new AutoClickerHelpIcon(
+            _strings.Get("Settings.AutoClick.BackgroundMode.Description")));
         _optionsPanel.Children.Add(backgroundModeRow);
         var backgroundModeWarning = new TextBlock
         {
@@ -127,8 +171,6 @@ public sealed class AutoClickerSettingsControl : Border
         };
         backgroundModeWarning.SetResourceReference(TextBlock.ForegroundProperty, "PrimaryAccentBrush");
         _optionsPanel.Children.Add(backgroundModeWarning);
-        panel.Children.Add(_optionsPanel);
-        return panel;
     }
 
     private FrameworkElement BuildIntervalInputs()

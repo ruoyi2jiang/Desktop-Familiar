@@ -85,22 +85,22 @@
         <Style x:Key="SettingsAddonListItem" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="12,10" />
             <Setter Property="Margin" Value="0,0,0,6" />
-            <Setter Property="Foreground" Value="{DynamicResource TextOnPageBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextOnPrimaryBackgroundBrush}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="ItemSurface" Background="{DynamicResource SecondaryBackgroundBrush}"
-                                BorderBrush="{DynamicResource SecondaryAccentBrush}" BorderThickness="1" CornerRadius="8"
+                        <Border x:Name="ItemSurface" Background="{DynamicResource PrimaryBackgroundBrush}"
+                                BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1" CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
-                            <ContentPresenter />
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource SecondaryBackgroundHoverBrush}" />
+                                <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource PrimaryBackgroundHoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource SecondaryBackgroundActiveBrush}" />
-                                <Setter TargetName="ItemSurface" Property="BorderBrush" Value="{DynamicResource SecondaryAccentBrush}" />
+                                <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource PrimaryBackgroundActiveBrush}" />
+                                <Setter TargetName="ItemSurface" Property="BorderBrush" Value="{DynamicResource PrimaryAccentBrush}" />
                                 <Setter TargetName="ItemSurface" Property="BorderThickness" Value="2" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -168,7 +168,7 @@
                              GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="AddonsMenu_Click" />
             </StackPanel>
         </Border>
-        <ScrollViewer Grid.Column="1" Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer x:Name="SettingsPageScrollViewer" Grid.Column="1" Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto">
             <Grid Margin="38,32">
                 <StackPanel x:Name="GeneralPanel">
                     <TextBlock Text="{loc:Loc Settings.General.Title}" FontSize="27" FontWeight="SemiBold" />
@@ -200,8 +200,15 @@
                     </Grid>
                 </StackPanel>
 
-                <StackPanel x:Name="AddonsPanel" Visibility="Collapsed">
-                    <DockPanel>
+                <Grid x:Name="AddonsPanel" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <DockPanel Grid.Row="0">
                         <Button x:Name="RefreshAddonsButton" Style="{StaticResource OutlineButton}"
                                 DockPanel.Dock="Right" Height="38" Padding="14,0" Margin="14,0,0,0" Click="RefreshAddons_Click">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -217,49 +224,53 @@
                         </Button>
                         <TextBlock Text="{loc:Loc Settings.Addons.Title}" FontSize="27" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </DockPanel>
-                    <TextBlock Text="{loc:Loc Settings.Addons.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,6,0,12" TextWrapping="Wrap" />
-                    <TextBlock x:Name="AddonsStatusText" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,0,0,14" TextWrapping="Wrap" />
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16" VerticalAlignment="Center">
+                    <TextBlock Grid.Row="1" Text="{loc:Loc Settings.Addons.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,6,0,12" TextWrapping="Wrap" />
+                    <TextBlock x:Name="AddonsStatusText" Grid.Row="2" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,0,0,14" TextWrapping="Wrap" />
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,16" VerticalAlignment="Center">
                         <RadioButton x:Name="AvailableAddonsTab" GroupName="AddonTabs" IsChecked="True"
                                      Style="{StaticResource SettingsAddonSwitcher}" Click="AvailableAddonsTab_Click" />
                         <Border Width="1" Height="20" Background="{DynamicResource SecondaryAccentBrush}" Opacity="0.7" Margin="14,0" />
                         <RadioButton x:Name="InstalledAddonsTab" GroupName="AddonTabs"
                                      Style="{StaticResource SettingsAddonSwitcher}" Click="InstalledAddonsTab_Click" />
                     </StackPanel>
-                    <Grid x:Name="AvailableAddonsView">
+                    <Grid x:Name="AvailableAddonsView" Grid.Row="4" MaxHeight="480">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="240" />
                             <ColumnDefinition Width="16" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel x:Name="AvailableAddonsListPanel" Grid.Column="0">
+                        <ScrollViewer x:Name="AvailableAddonsListScrollViewer" Grid.Column="0" Style="{StaticResource OverlayScrollViewer}"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <Grid>
                                 <ListBox x:Name="AvailableAddonsList" BorderThickness="0" Background="Transparent"
-                                         ItemContainerStyle="{StaticResource SettingsAddonListItem}" SelectionChanged="AvailableAddonsList_SelectionChanged" />
+                                         ItemContainerStyle="{StaticResource SettingsAddonListItem}" SelectionChanged="AvailableAddonsList_SelectionChanged"
+                                         ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
                                 <TextBlock x:Name="AvailableAddonsEmptyText" Text="{loc:Loc Settings.Addons.NoneAvailable}"
                                            Opacity="0.72" TextWrapping="Wrap" Visibility="Collapsed" />
                             </Grid>
-                        </StackPanel>
+                        </ScrollViewer>
                         <Border x:Name="AvailableAddonDetailsBorder" Grid.Column="2" Background="{DynamicResource PrimaryBackgroundBrush}" BorderBrush="{DynamicResource PrimaryAccentBrush}"
-                                BorderThickness="1" CornerRadius="10" Padding="18" MinHeight="160"
+                                BorderThickness="1" CornerRadius="10"
                                 TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" Visibility="Collapsed">
-                            <StackPanel x:Name="AvailableAddonDetailsPanel">
-                                <TextBlock x:Name="AvailableAddonTitleText" FontSize="21" FontWeight="SemiBold" />
-                                <TextBlock x:Name="AvailableAddonVersionText" Opacity="0.72" Margin="0,4,0,12" />
-                                <TextBlock x:Name="AvailableAddonDescriptionText" TextWrapping="Wrap" />
-                                <Button x:Name="AvailableAddonInstallButton" Content="{loc:Loc Settings.Addons.Install}" Style="{StaticResource PrimaryButton}"
-                                        HorizontalAlignment="Left" Height="38" Padding="16,0" Margin="0,18,0,0" Click="InstallAddon_Click" />
-                            </StackPanel>
+                            <ScrollViewer Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="AvailableAddonDetailsPanel" Margin="18">
+                                    <TextBlock x:Name="AvailableAddonTitleText" FontSize="21" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="AvailableAddonVersionText" Opacity="0.72" Margin="0,4,0,12" />
+                                    <TextBlock x:Name="AvailableAddonDescriptionText" TextWrapping="Wrap" />
+                                    <Button x:Name="AvailableAddonInstallButton" Content="{loc:Loc Settings.Addons.Install}" Style="{StaticResource PrimaryButton}"
+                                            HorizontalAlignment="Left" Height="38" Padding="16,0" Margin="0,18,0,0" Click="InstallAddon_Click" />
+                                </StackPanel>
+                            </ScrollViewer>
                         </Border>
                     </Grid>
-                    <StackPanel x:Name="InstalledAddonsView" Visibility="Collapsed">
+                    <StackPanel x:Name="InstalledAddonsView" Grid.Row="4" Visibility="Collapsed">
                         <TextBlock x:Name="InstalledAddonsEmptyText" Text="{loc:Loc Settings.Addons.NoneInstalled}"
                                    Opacity="0.72" TextWrapping="Wrap" Visibility="Collapsed" />
                         <StackPanel x:Name="InstalledAddonsList" />
+                        <Border x:Name="AddonSettingsDivider" Style="{StaticResource SettingsDivider}" Visibility="Collapsed" />
+                        <StackPanel x:Name="AddonSettingsSections" />
                     </StackPanel>
-                    <Border x:Name="AddonSettingsDivider" Style="{StaticResource SettingsDivider}" Visibility="Collapsed" />
-                    <StackPanel x:Name="AddonSettingsSections" />
-                </StackPanel>
+                </Grid>
 
                 <StackPanel x:Name="CompanionPanel" Visibility="Collapsed">
                     <TextBlock Text="{loc:Loc Settings.Companion.Title}" FontSize="27" FontWeight="SemiBold" />
