@@ -5,11 +5,10 @@ public sealed class AutoClickTargetAreaSelectionTests
     [Fact]
     public void TargetPicker_DrawsAndReturnsTheDragSelectedArea()
     {
-        var markup = File.ReadAllText(FindRepositoryFile(Path.Combine("Views", "AutoClickTargetWindow.xaml")));
-        var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Views", "AutoClickTargetWindow.xaml.cs")));
+        var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "Views", "AutoClickTargetWindow.cs")));
 
-        Assert.Contains("MouseMove=\"Window_MouseMove\" MouseLeftButtonUp=\"Window_MouseLeftButtonUp\"", markup, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"SelectionRectangle\"", markup, StringComparison.Ordinal);
+        Assert.Contains("_selectionRectangle", source, StringComparison.Ordinal);
+        Assert.Contains("MouseMove += Window_MouseMove;", source, StringComparison.Ordinal);
         Assert.Contains("private static DrawingRectangle CreateTargetArea", source, StringComparison.Ordinal);
         Assert.Contains("new AutoClickTargetSelectedEventArgs(targetArea)", source, StringComparison.Ordinal);
     }

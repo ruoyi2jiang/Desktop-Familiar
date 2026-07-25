@@ -5,6 +5,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DesktopFamiliar.Localization;
+using DesktopFamiliar.AddonSdk;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Animation;
@@ -22,9 +23,10 @@ public partial class CompanionOverlayWindow : Window
     private const double ReservedDialogHeight = 96;
     private const double DragStartThreshold = 4;
     private static readonly TimeSpan DragHoldDelay = TimeSpan.FromMilliseconds(160);
-    private static readonly TimeSpan AutoClickStatusDuration = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan AddonStatusDuration = TimeSpan.FromSeconds(3);
 
     private readonly CompanionManager _manager;
+    private readonly IAddonViewportActionRegistry _addonViewportActions;
     private readonly FrameAnimationPlayer _animationPlayer;
     private readonly DispatcherTimer _idleTimer = new();
     private readonly DeferredMenuAction _menuAction = new();
@@ -47,8 +49,8 @@ public partial class CompanionOverlayWindow : Window
     private bool _playStartOnNextShow = true;
     private Action? _afterLoopFinishes;
     private int? _pendingDialogStartFrame;
-    private bool _showingAutoClickStatus;
-    private string? _queuedAutoClickStatusMessageKey;
+    private bool _showingAddonStatus;
+    private string? _queuedAddonStatusMessage;
     private string _interruptedDialogText = string.Empty;
     private Visibility _interruptedReminderActionsVisibility;
     // The restore indicator is armed only by the user's hide action.
@@ -60,10 +62,11 @@ public partial class CompanionOverlayWindow : Window
     private Action? _exitCompleted;
     private bool _exitCloseCompleted;
 
-    public CompanionOverlayWindow(CompanionManager manager)
+    public CompanionOverlayWindow(CompanionManager manager, IAddonViewportActionRegistry addonViewportActions)
     {
         InitializeComponent();
         _manager = manager;
+        _addonViewportActions = addonViewportActions ?? throw new ArgumentNullException(nameof(addonViewportActions));
         ApplyViewportSize();
         ApplySavedPosition();
         _animationPlayer = new FrameAnimationPlayer(SetFrame);
@@ -71,7 +74,7 @@ public partial class CompanionOverlayWindow : Window
         _animationPlayer.FramePresented += AnimationFramePresented;
         _idleTimer.Tick += IdleTimerTick;
         _dialogTimer.Tick += DialogTimerTick;
-        _autoClickStatusTimer.Tick += AutoClickStatusTimerTick;
+        _autoClickStatusTimer.Tick += AddonStatusTimerTick;
         _dragHoldTimer.Tick += DragHoldTimerTick;
         _voicePlayer.MediaEnded += VoicePlayerEnded;
         _voicePlayer.MediaFailed += VoicePlayerFailed;
@@ -126,15 +129,25 @@ public partial class CompanionOverlayWindow : Window
         enterFocus.Click += (_, _) => _manager.SetFocusMode(true);
         menu.Items.Add(enterFocus);
 
-        if (_manager.Data.Settings.AutoClickEnabled)
+        var addonActions = _addonViewportActions.GetVisibleActions();
+        if (addonActions.Count > 0)
         {
-            var autoClick = new System.Windows.Controls.MenuItem
+            var actions = new System.Windows.Controls.MenuItem
             {
-                Header = LocalizationService.Get("Overlay.AutoClick"),
+                Header = LocalizationService.Get("Overlay.Actions"),
                 Style = (Style)FindResource("Windows11MenuItem")
             };
-            autoClick.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ToggleAutoClick);
-            menu.Items.Add(autoClick);
+            foreach (var action in addonActions)
+            {
+                var actionItem = new System.Windows.Controls.MenuItem
+                {
+                    Header = action.Header,
+                    Style = (Style)FindResource("Windows11MenuItem")
+                };
+                actionItem.Click += (_, _) => _menuAction.Queue(action.Execute);
+                actions.Items.Add(actionItem);
+            }
+            menu.Items.Add(actions);
         }
 
         if (_manager.ActivityState == CompanionActivityState.Idle)
@@ -204,26 +217,20 @@ public partial class CompanionOverlayWindow : Window
         Hide();
     }
 
-    public void ShowAutoClickStatus(bool isClicking) => ShowAutoClickStatus(
-        isClicking ? "Overlay.AutoClick.Started" : "Overlay.AutoClick.Stopped");
-
-    public void ShowAutoClickInputModeStatus(bool backgroundModeEnabled) => ShowAutoClickStatus(
-        backgroundModeEnabled
-            ? "Overlay.AutoClick.BackgroundModeEnabled"
-            : "Overlay.AutoClick.CursorModeEnabled");
-
-    private void ShowAutoClickStatus(string messageKey)
+    /// <summary>Temporarily presents an addon status message without changing the active animation.</summary>
+    public void ShowAddonStatus(string message)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
         if (!IsVisible)
             return;
 
-        if (_showingAutoClickStatus)
+        if (_showingAddonStatus)
         {
-            _queuedAutoClickStatusMessageKey = messageKey;
+            _queuedAddonStatusMessage = message;
             return;
         }
 
-        _showingAutoClickStatus = true;
+        _showingAddonStatus = true;
         _interruptedDialogText = DialogText.Text;
         _interruptedReminderActionsVisibility = ReminderActions.Visibility;
         _dialogTimer.Stop();
@@ -231,9 +238,9 @@ public partial class CompanionOverlayWindow : Window
         _voicePlayer.Close();
         ReminderActions.Visibility = Visibility.Collapsed;
 
-        DialogText.Text = LocalizationService.Get(messageKey);
+        DialogText.Text = message;
         _autoClickStatusTimer.Stop();
-        _autoClickStatusTimer.Interval = AutoClickStatusDuration;
+        _autoClickStatusTimer.Interval = AddonStatusDuration;
         _autoClickStatusTimer.Start();
         UpdateDialogBubbleVisibility();
         UpdateDialogAreaForContent();
@@ -682,7 +689,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void ShowDialogLine()
     {
-        if (_showingAutoClickStatus)
+        if (_showingAddonStatus)
             return;
 
         if (_activeScene is null || _dialogIndex >= _activeScene.DialogLines.Count)
@@ -757,7 +764,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void AdvanceDialog()
     {
-        if (_showingAutoClickStatus)
+        if (_showingAddonStatus)
             return;
 
         _voicePlayer.Stop();
@@ -913,7 +920,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void UpdateDialogBubbleVisibility()
     {
-        if (_showingAutoClickStatus)
+        if (_showingAddonStatus)
         {
             ApplyRestoreIndicatorTone(DialogRestoreIndicatorTone.Inactive);
             BubbleRoot.Visibility = Visibility.Visible;
@@ -950,7 +957,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void StopDialog()
     {
-        ClearAutoClickStatus();
+        ClearAddonStatus();
         _pendingDialogStartFrame = null;
         _dialogTimer.Stop();
         _voicePlayer.Stop();
@@ -1028,24 +1035,24 @@ public partial class CompanionOverlayWindow : Window
         CompanionImage.Visibility = frame is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void AutoClickStatusTimerTick(object? sender, EventArgs e)
+    private void AddonStatusTimerTick(object? sender, EventArgs e)
     {
         _autoClickStatusTimer.Stop();
-        if (!_showingAutoClickStatus)
+        if (!_showingAddonStatus)
             return;
 
-        if (_queuedAutoClickStatusMessageKey is { } queuedMessageKey)
+        if (_queuedAddonStatusMessage is { } queuedMessage)
         {
-            _queuedAutoClickStatusMessageKey = null;
-            DialogText.Text = LocalizationService.Get(queuedMessageKey);
-            _autoClickStatusTimer.Interval = AutoClickStatusDuration;
+            _queuedAddonStatusMessage = null;
+            DialogText.Text = queuedMessage;
+            _autoClickStatusTimer.Interval = AddonStatusDuration;
             _autoClickStatusTimer.Start();
             UpdateDialogBubbleVisibility();
             UpdateDialogAreaForContent();
             return;
         }
 
-        _showingAutoClickStatus = false;
+        _showingAddonStatus = false;
         ReminderActions.Visibility = _interruptedReminderActionsVisibility;
         if (_activeReminder is not null)
         {
@@ -1066,13 +1073,13 @@ public partial class CompanionOverlayWindow : Window
         UpdateDialogAreaForContent();
     }
 
-    private void ClearAutoClickStatus()
+    private void ClearAddonStatus()
     {
         _autoClickStatusTimer.Stop();
-        if (_showingAutoClickStatus)
+        if (_showingAddonStatus)
             ReminderActions.Visibility = _interruptedReminderActionsVisibility;
-        _showingAutoClickStatus = false;
-        _queuedAutoClickStatusMessageKey = null;
+        _showingAddonStatus = false;
+        _queuedAddonStatusMessage = null;
         _interruptedDialogText = string.Empty;
     }
 

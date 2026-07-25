@@ -3,12 +3,14 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Globalization;
 using System.Reflection;
+using DesktopFamiliar.AddonSdk;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
-using DesktopFamiliar.Services.AutoClick;
+using DesktopFamiliar.Services.Addons;
 
 namespace DesktopFamiliar.Views;
 
@@ -97,63 +99,41 @@ public partial class SettingsWindow : Window
         User,
         Companion,
         Theme,
-        Extra
+        Addons
     }
 
-    private enum AutoClickIntervalUnit
+    private enum AddonManagerTab
     {
-        Milliseconds,
-        Seconds
-    }
-
-    private enum AutoClickHotkeyCaptureTarget
-    {
-        None,
-        Toggle,
-        BackgroundMode
+        Available,
+        Installed
     }
 
     private readonly CompanionManager _manager;
-    private readonly AutoClickCoordinator _autoClickCoordinator;
+    private readonly AddonManagerService _addonManager;
+    private readonly IAddonSettingsSectionRegistry _addonSettingsSections;
     private readonly Dictionary<string, CustomThemeTokenControl> _customThemeTokenControls = new(StringComparer.Ordinal);
     private CustomThemePalette _editingPalette = new();
     private Guid? _editingThemeId;
     private bool _loaded;
-    private AutoClickHotkeyCaptureTarget _capturingAutoClickHotkey;
-    private bool _updatingAutoClickIntervalInputs;
-    private AutoClickHotkey _pendingAutoClickHotkey = null!;
-    private AutoClickHotkey _pendingAutoClickBackgroundModeHotkey = null!;
-    private AutoClickIntervalUnit _autoClickIntervalUnit = AutoClickIntervalUnit.Seconds;
+    private string? _selectedAvailableAddonId;
 
-    public SettingsWindow(CompanionManager manager, AutoClickCoordinator autoClickCoordinator)
+    public SettingsWindow(
+        CompanionManager manager,
+        AddonManagerService addonManager,
+        IAddonSettingsSectionRegistry addonSettingsSections)
     {
         InitializeComponent();
         _manager = manager;
-        _autoClickCoordinator = autoClickCoordinator;
+        _addonManager = addonManager;
+        _addonSettingsSections = addonSettingsSections;
         RunAtStartupCheck.IsChecked = _manager.Data.Settings.RunAtStartup;
         UserBirthdayPicker.SelectedDate = _manager.Data.Settings.UserBirthday;
         ViewportWidthBox.Text = _manager.Data.Settings.ViewportWidth.ToString();
         ViewportHeightBox.Text = _manager.Data.Settings.ViewportHeight.ToString();
         TruncateDialogLinesCheck.IsChecked = _manager.Data.Settings.TruncateLongDialogLines;
-        AutoClickEnabledToggle.IsChecked = _manager.Data.Settings.AutoClickEnabled;
-        AutoClickBackgroundModeCheck.IsChecked = _manager.Data.Settings.AutoClickBackgroundModeEnabled;
-        UpdateAutoClickOptionsVisibility();
         IdleIntervalBox.Text = _manager.Data.Settings.IdleDelaySeconds.ToString("0.##", CultureInfo.CurrentCulture);
-        _pendingAutoClickHotkey = AutoClickHotkeyPolicy.TryParse(_manager.Data.Settings.AutoClickHotkey, out var savedHotkey)
-            ? savedHotkey
-            : throw new InvalidOperationException("The normalized auto-click hotkey is invalid.");
-        AutoClickHotkeyButton.Content = _pendingAutoClickHotkey.DisplayText;
-        _pendingAutoClickBackgroundModeHotkey = AutoClickHotkeyPolicy.TryParse(
-            _manager.Data.Settings.AutoClickBackgroundModeHotkey,
-            out var savedBackgroundModeHotkey)
-            ? savedBackgroundModeHotkey
-            : throw new InvalidOperationException("The normalized auto-click background-mode hotkey is invalid.");
-        AutoClickBackgroundModeHotkeyButton.Content = _pendingAutoClickBackgroundModeHotkey.DisplayText;
-        AutoClickIntervalUnitComboBox.SelectedIndex = 1;
-        AutoClickIntervalBox.Text = (_manager.Data.Settings.AutoClickIntervalMilliseconds / 1000d)
-            .ToString("0.###", CultureInfo.CurrentCulture);
-        AutoClickIntervalMaximumBox.Text = (_manager.Data.Settings.AutoClickIntervalMaximumMilliseconds / 1000d)
-            .ToString("0.###", CultureInfo.CurrentCulture);
+        RefreshAddonManagerEntries();
+        RefreshAddonSettingsSections();
         RefreshThemeCards();
         Loaded += (_, _) => _loaded = true;
     }
@@ -243,270 +223,293 @@ public partial class SettingsWindow : Window
 
     private void ThemeMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Theme);
 
-    private void ExtraMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Extra);
+    private void AddonsMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Addons);
 
-    private void AutoClickEnabled_Changed(object sender, RoutedEventArgs e)
+    private void AvailableAddonsTab_Click(object sender, RoutedEventArgs e) => ShowAddonManagerTab(AddonManagerTab.Available);
+
+    private void InstalledAddonsTab_Click(object sender, RoutedEventArgs e) => ShowAddonManagerTab(AddonManagerTab.Installed);
+
+    private async void RefreshAddons_Click(object sender, RoutedEventArgs e)
     {
-        if (!_loaded)
-            return;
-
-        var enabled = AutoClickEnabledToggle.IsChecked == true;
+        SetAddonRefreshBusy(true);
+        AddonsStatusText.Text = string.Empty;
         try
         {
-            if (!_autoClickCoordinator.TrySetEnabled(enabled))
-            {
-                MessageBox.Show(
-                    LocalizationService.Get("Settings.AutoClick.Hotkey.Unavailable"),
-                    LocalizationService.Get("App.Name"),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-                _loaded = false;
-                AutoClickEnabledToggle.IsChecked = _manager.Data.Settings.AutoClickEnabled;
-                _loaded = true;
-            }
+            await _addonManager.RefreshCatalogueAsync();
+            AddonsStatusText.Text = _addonManager.LastCatalogueFetchWasNotFound
+                ? string.Empty
+                : LocalizationService.Get("Settings.Addons.CheckComplete");
+            RefreshAddonManagerEntries();
         }
         catch (Exception exception)
         {
-            AppLogger.Error("The auto-clicker enabled setting could not be saved.", exception);
-            MessageBox.Show(
-                LocalizationService.Format("Settings.AutoClick.Enabled.Failed", exception.Message),
-                LocalizationService.Get("App.Name"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            _loaded = false;
-            AutoClickEnabledToggle.IsChecked = _manager.Data.Settings.AutoClickEnabled;
-            _loaded = true;
-        }
-
-        UpdateAutoClickOptionsVisibility();
-    }
-
-    private void UpdateAutoClickOptionsVisibility() =>
-        AutoClickOptionsPanel.Visibility = _manager.Data.Settings.AutoClickEnabled
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-
-    private void AutoClickHotkey_Click(object sender, RoutedEventArgs e)
-    {
-        BeginAutoClickHotkeyCapture(AutoClickHotkeyCaptureTarget.Toggle);
-    }
-
-    private void AutoClickBackgroundModeHotkey_Click(object sender, RoutedEventArgs e)
-    {
-        BeginAutoClickHotkeyCapture(AutoClickHotkeyCaptureTarget.BackgroundMode);
-    }
-
-    private void BeginAutoClickHotkeyCapture(AutoClickHotkeyCaptureTarget captureTarget)
-    {
-        _capturingAutoClickHotkey = captureTarget;
-        var button = captureTarget == AutoClickHotkeyCaptureTarget.Toggle
-            ? AutoClickHotkeyButton
-            : AutoClickBackgroundModeHotkeyButton;
-        button.Content = LocalizationService.Get("Settings.AutoClick.Hotkey.Capturing");
-        button.Focus();
-    }
-
-    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (_capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.None)
-            return;
-
-        e.Handled = true;
-        if (e.Key == Key.Escape)
-        {
-            RestoreCapturedAutoClickHotkeyButton();
-            return;
-        }
-
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        var virtualKey = (uint)KeyInterop.VirtualKeyFromKey(key);
-        if (!AutoClickHotkeyPolicy.TryCreate(GetAutoClickModifiers(Keyboard.Modifiers), virtualKey, out var hotkey))
-        {
-            SetCapturedAutoClickHotkeyButtonContent(LocalizationService.Get("Settings.AutoClick.Hotkey.Invalid"));
-            return;
-        }
-
-        if (_capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.Toggle)
-            _pendingAutoClickHotkey = hotkey;
-        else
-            _pendingAutoClickBackgroundModeHotkey = hotkey;
-        SetCapturedAutoClickHotkeyButtonContent(hotkey.DisplayText);
-        _capturingAutoClickHotkey = AutoClickHotkeyCaptureTarget.None;
-    }
-
-    private void RestoreCapturedAutoClickHotkeyButton()
-    {
-        SetCapturedAutoClickHotkeyButtonContent(
-            _capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.Toggle
-                ? _pendingAutoClickHotkey.DisplayText
-                : _pendingAutoClickBackgroundModeHotkey.DisplayText);
-        _capturingAutoClickHotkey = AutoClickHotkeyCaptureTarget.None;
-    }
-
-    private void SetCapturedAutoClickHotkeyButtonContent(string content)
-    {
-        if (_capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.Toggle)
-            AutoClickHotkeyButton.Content = content;
-        else if (_capturingAutoClickHotkey == AutoClickHotkeyCaptureTarget.BackgroundMode)
-            AutoClickBackgroundModeHotkeyButton.Content = content;
-    }
-
-    private void AutoClickIntervalUnit_Changed(object sender, SelectionChangedEventArgs e)
-    {
-        var nextUnit = GetSelectedAutoClickIntervalUnit();
-        if (!_loaded || nextUnit == _autoClickIntervalUnit)
-            return;
-
-        _updatingAutoClickIntervalInputs = true;
-        try
-        {
-            if (TryGetAutoClickIntervalMilliseconds(AutoClickIntervalBox, _autoClickIntervalUnit, out var intervalMilliseconds))
-                AutoClickIntervalBox.Text = FormatAutoClickInterval(intervalMilliseconds, nextUnit);
-            if (TryGetAutoClickIntervalMilliseconds(AutoClickIntervalMaximumBox, _autoClickIntervalUnit, out var maximumIntervalMilliseconds))
-                AutoClickIntervalMaximumBox.Text = FormatAutoClickInterval(maximumIntervalMilliseconds, nextUnit);
+            AppLogger.Error("The first-party addon catalogue could not be refreshed.", exception);
+            AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.RefreshFailed", exception.Message);
         }
         finally
         {
-            _updatingAutoClickIntervalInputs = false;
+            SetAddonRefreshBusy(false);
         }
-        _autoClickIntervalUnit = nextUnit;
     }
 
-    private void AutoClickIntervalMinimum_TextChanged(object sender, TextChangedEventArgs e)
+    private void SetAddonRefreshBusy(bool isBusy)
     {
-        if (!_loaded
-            || _updatingAutoClickIntervalInputs
-            || !TryGetAutoClickIntervalMilliseconds(AutoClickIntervalBox, _autoClickIntervalUnit, out var intervalMilliseconds)
-            || !TryGetAutoClickIntervalMilliseconds(AutoClickIntervalMaximumBox, _autoClickIntervalUnit, out var maximumIntervalMilliseconds)
-            || maximumIntervalMilliseconds >= intervalMilliseconds)
-        {
-            return;
-        }
+        RefreshAddonsButton.IsEnabled = !isBusy;
+        RefreshAddonsSpinner.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
+        RefreshAddonsSpinnerRotation.BeginAnimation(
+            RotateTransform.AngleProperty,
+            isBusy
+                ? new DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.85)) { RepeatBehavior = RepeatBehavior.Forever }
+                : null);
+    }
 
-        _updatingAutoClickIntervalInputs = true;
+    private async void InstallAddon_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: AddonPackageRelease release } button)
+            return;
+
+        button.IsEnabled = false;
+        AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.Installing", release.DisplayName);
         try
         {
-            AutoClickIntervalMaximumBox.Text = FormatAutoClickInterval(intervalMilliseconds, _autoClickIntervalUnit);
+            await _addonManager.InstallAsync(release);
+            AddonsStatusText.Text = LocalizationService.Get("Settings.Addons.RestartRequired");
+            RefreshAddonManagerEntries();
+            ShowAddonManagerTab(AddonManagerTab.Installed);
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error($"The addon '{release.Id}' could not be installed.", exception);
+            AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.InstallFailed", release.DisplayName, exception.Message);
         }
         finally
         {
-            _updatingAutoClickIntervalInputs = false;
+            button.IsEnabled = true;
         }
     }
 
-    private void ApplyAutoClickSettings_Click(object sender, RoutedEventArgs e)
+    private void ToggleAddonEnabled_Click(object sender, RoutedEventArgs e)
     {
-        _autoClickIntervalUnit = GetSelectedAutoClickIntervalUnit();
-        if (!TryGetAutoClickIntervalMilliseconds(AutoClickIntervalBox, _autoClickIntervalUnit, out var intervalMilliseconds)
-            || intervalMilliseconds < AppSettings.MinimumAutoClickIntervalMilliseconds
-            || intervalMilliseconds > AppSettings.MaximumAutoClickIntervalMilliseconds)
+        if (sender is not Button { Tag: InstalledAddon installed })
+            return;
+
+        try
         {
-            MessageBox.Show(
-                LocalizationService.Format(
-                    "Settings.AutoClick.Interval.Invalid",
-                    AppSettings.MinimumAutoClickIntervalMilliseconds,
-                    AppSettings.MaximumAutoClickIntervalMilliseconds),
-                LocalizationService.Get("App.Name"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            _addonManager.SetEnabled(installed.Id, !installed.Enabled);
+            AddonsStatusText.Text = LocalizationService.Get("Settings.Addons.RestartRequired");
+            RefreshAddonManagerEntries();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error($"The addon '{installed.Id}' enabled state could not be changed.", exception);
+            AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.EnabledFailed", exception.Message);
+        }
+    }
+
+    private void UninstallAddon_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: InstalledAddon installed })
+            return;
+
+        var response = MessageBox.Show(
+            LocalizationService.Format("Settings.Addons.Uninstall.Confirm", installed.Manifest.DisplayName),
+            LocalizationService.Get("Settings.Addons.Uninstall.Title"),
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Warning);
+        if (response == MessageBoxResult.Cancel)
+            return;
+
+        try
+        {
+            _addonManager.Uninstall(installed.Id, deleteSavedData: response == MessageBoxResult.Yes);
+            AddonsStatusText.Text = LocalizationService.Get("Settings.Addons.RestartRequired");
+            RefreshAddonManagerEntries();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error($"The addon '{installed.Id}' could not be uninstalled.", exception);
+            AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.UninstallFailed", exception.Message);
+        }
+    }
+
+    private void AvailableAddonsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var entry = AvailableAddonsList.SelectedItem is ListBoxItem { Tag: AddonManagerEntry selected }
+            ? selected
+            : null;
+        _selectedAvailableAddonId = entry?.Id;
+        UpdateAvailableAddonDetails(entry);
+    }
+
+    private void RefreshAddonManagerEntries()
+    {
+        IReadOnlyList<AddonManagerEntry> entries;
+        try
+        {
+            entries = _addonManager.GetEntries();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("The installed addon registry could not be read.", exception);
+            AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.RefreshFailed", exception.Message);
+            AvailableAddonsList.Items.Clear();
+            AvailableAddonsList.Visibility = Visibility.Collapsed;
+            AvailableAddonsEmptyText.Visibility = Visibility.Visible;
+            InstalledAddonsList.Children.Clear();
+            InstalledAddonsEmptyText.Visibility = Visibility.Visible;
+            UpdateAvailableAddonDetails(null);
             return;
         }
 
-        if (!TryGetAutoClickIntervalMilliseconds(AutoClickIntervalMaximumBox, _autoClickIntervalUnit, out var intervalMaximumMilliseconds)
-            || intervalMaximumMilliseconds < intervalMilliseconds
-            || intervalMaximumMilliseconds > AppSettings.MaximumAutoClickIntervalMilliseconds)
-        {
-            MessageBox.Show(
-                LocalizationService.Format(
-                    "Settings.AutoClick.Interval.Range.Invalid",
-                    AppSettings.MinimumAutoClickIntervalMilliseconds,
-                    AppSettings.MaximumAutoClickIntervalMilliseconds),
-                LocalizationService.Get("App.Name"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
+        var available = entries.Where(entry => entry.Installed is null).ToArray();
+        var installed = entries.Where(entry => entry.Installed is not null).ToArray();
 
-        if (!_autoClickCoordinator.TryUpdateSettings(
-                _pendingAutoClickHotkey.DisplayText,
-                _pendingAutoClickBackgroundModeHotkey.DisplayText,
-                intervalMilliseconds,
-                intervalMaximumMilliseconds,
-                AutoClickBackgroundModeCheck.IsChecked == true))
-        {
-            MessageBox.Show(
-                LocalizationService.Get("Settings.AutoClick.Hotkey.Unavailable"),
-                LocalizationService.Get("App.Name"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
+        AvailableAddonsTab.Content = LocalizationService.Format("Settings.Addons.AvailableTab", available.Length);
+        InstalledAddonsTab.Content = LocalizationService.Format("Settings.Addons.InstalledTab", installed.Length);
 
-        _pendingAutoClickHotkey = AutoClickHotkeyPolicy.TryParse(_manager.Data.Settings.AutoClickHotkey, out var savedHotkey)
-            ? savedHotkey
-            : _pendingAutoClickHotkey;
-        AutoClickHotkeyButton.Content = _pendingAutoClickHotkey.DisplayText;
-        _pendingAutoClickBackgroundModeHotkey = AutoClickHotkeyPolicy.TryParse(
-            _manager.Data.Settings.AutoClickBackgroundModeHotkey,
-            out var savedBackgroundModeHotkey)
-            ? savedBackgroundModeHotkey
-            : _pendingAutoClickBackgroundModeHotkey;
-        AutoClickBackgroundModeHotkeyButton.Content = _pendingAutoClickBackgroundModeHotkey.DisplayText;
-        AutoClickIntervalBox.Text = FormatAutoClickInterval(
-            _manager.Data.Settings.AutoClickIntervalMilliseconds,
-            _autoClickIntervalUnit);
-        AutoClickIntervalMaximumBox.Text = FormatAutoClickInterval(
-            _manager.Data.Settings.AutoClickIntervalMaximumMilliseconds,
-            _autoClickIntervalUnit);
-        AutoClickBackgroundModeCheck.IsChecked = _manager.Data.Settings.AutoClickBackgroundModeEnabled;
+        AvailableAddonsList.Items.Clear();
+        foreach (var entry in available)
+        {
+            AvailableAddonsList.Items.Add(new ListBoxItem
+            {
+                Content = entry.DisplayName,
+                Tag = entry
+            });
+        }
+        AvailableAddonsList.Visibility = available.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        AvailableAddonsEmptyText.Visibility = available.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        var selectedItem = AvailableAddonsList.Items
+            .OfType<ListBoxItem>()
+            .FirstOrDefault(item => item.Tag is AddonManagerEntry entry
+                && string.Equals(entry.Id, _selectedAvailableAddonId, StringComparison.OrdinalIgnoreCase));
+        AvailableAddonsList.SelectedItem = selectedItem;
+        UpdateAvailableAddonDetails(selectedItem?.Tag as AddonManagerEntry);
+
+        InstalledAddonsList.Children.Clear();
+        foreach (var entry in installed)
+            InstalledAddonsList.Children.Add(CreateInstalledAddonCard(entry));
+        InstalledAddonsEmptyText.Visibility = installed.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private AutoClickIntervalUnit GetSelectedAutoClickIntervalUnit() =>
-        (AutoClickIntervalUnitComboBox.SelectedItem as ComboBoxItem)?.Tag as string == "milliseconds"
-            ? AutoClickIntervalUnit.Milliseconds
-            : AutoClickIntervalUnit.Seconds;
-
-    private static bool TryGetAutoClickIntervalMilliseconds(
-        TextBox textBox,
-        AutoClickIntervalUnit unit,
-        out int milliseconds)
+    private void RefreshAddonSettingsSections()
     {
-        var valid = double.TryParse(textBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value)
-            || double.TryParse(textBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
-        if (!valid || value <= 0)
-        {
-            milliseconds = 0;
-            return false;
-        }
-
-        var rawMilliseconds = unit == AutoClickIntervalUnit.Seconds ? value * 1000d : value;
-        if (rawMilliseconds > int.MaxValue)
-        {
-            milliseconds = 0;
-            return false;
-        }
-
-        milliseconds = (int)Math.Round(rawMilliseconds, MidpointRounding.AwayFromZero);
-        return true;
+        AddonSettingsSections.Children.Clear();
+        foreach (var section in _addonSettingsSections.GetSections())
+            AddonSettingsSections.Children.Add(section.CreateView());
+        AddonSettingsDivider.Visibility = AddonSettingsSections.Children.Count == 0
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
-    private static string FormatAutoClickInterval(int milliseconds, AutoClickIntervalUnit unit) =>
-        (unit == AutoClickIntervalUnit.Seconds ? milliseconds / 1000d : milliseconds)
-            .ToString("0.###", CultureInfo.CurrentCulture);
-
-    private static uint GetAutoClickModifiers(ModifierKeys modifiers)
+    private void UpdateAvailableAddonDetails(AddonManagerEntry? entry)
     {
-        var value = 0u;
-        if ((modifiers & ModifierKeys.Control) != 0)
-            value |= AutoClickHotkeyPolicy.ModifierControl;
-        if ((modifiers & ModifierKeys.Alt) != 0)
-            value |= AutoClickHotkeyPolicy.ModifierAlt;
-        if ((modifiers & ModifierKeys.Shift) != 0)
-            value |= AutoClickHotkeyPolicy.ModifierShift;
-        if ((modifiers & ModifierKeys.Windows) != 0)
-            value |= AutoClickHotkeyPolicy.ModifierWin;
-        return value;
+        AvailableAddonDetailsBorder.Visibility = entry is null ? Visibility.Collapsed : Visibility.Visible;
+        Grid.SetColumnSpan(AvailableAddonsListPanel, entry is null ? 3 : 1);
+        if (entry?.AvailableRelease is not { } release)
+            return;
+
+        AvailableAddonTitleText.Text = entry.DisplayName;
+        AvailableAddonVersionText.Text = LocalizationService.Format("Settings.Addons.Available", release.Version);
+        AvailableAddonDescriptionText.Text = entry.Description;
+        AvailableAddonInstallButton.Tag = release;
+        AvailableAddonInstallButton.Content = LocalizationService.Get("Settings.Addons.Install");
     }
+
+    private void ShowAddonManagerTab(AddonManagerTab tab)
+    {
+        var showAvailable = tab == AddonManagerTab.Available;
+        AvailableAddonsTab.IsChecked = showAvailable;
+        InstalledAddonsTab.IsChecked = !showAvailable;
+        AvailableAddonsView.Visibility = showAvailable ? Visibility.Visible : Visibility.Collapsed;
+        InstalledAddonsView.Visibility = showAvailable ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private Border CreateInstalledAddonCard(AddonManagerEntry entry)
+    {
+        var card = new Border
+        {
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(14),
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+        card.SetResourceReference(Border.BackgroundProperty, ThemeTokens.SecondaryBackground);
+        card.SetResourceReference(Border.BorderBrushProperty, ThemeTokens.SecondaryAccent);
+        var panel = new StackPanel();
+        var title = new TextBlock
+        {
+            Text = entry.DisplayName,
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold
+        };
+        title.SetResourceReference(TextBlock.ForegroundProperty, ThemeTokens.SecondaryTextOnBackground);
+        panel.Children.Add(title);
+        var status = new TextBlock
+        {
+            Text = GetInstalledAddonStatus(entry),
+            Opacity = 0.72,
+            Margin = new Thickness(0, 4, 0, 10),
+            TextWrapping = TextWrapping.Wrap
+        };
+        status.SetResourceReference(TextBlock.ForegroundProperty, ThemeTokens.SecondaryTextOnBackground);
+        panel.Children.Add(status);
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
+        if (entry.Installed is not { } installed)
+            throw new InvalidOperationException("An installed addon card requires an installed addon.");
+
+        var enabled = new Button
+        {
+            Content = LocalizationService.Get(installed.Enabled ? "Settings.Addons.Disable" : "Settings.Addons.Enable"),
+            Style = (Style)FindResource("OutlineButton"),
+            Height = 34,
+            Padding = new Thickness(12, 0, 12, 0),
+            Tag = installed
+        };
+        enabled.Click += ToggleAddonEnabled_Click;
+        buttons.Children.Add(enabled);
+
+        var uninstall = new Button
+        {
+            Content = LocalizationService.Get("Settings.Addons.Uninstall"),
+            Style = (Style)FindResource("DangerButton"),
+            Height = 34,
+            Padding = new Thickness(12, 0, 12, 0),
+            Margin = new Thickness(8, 0, 0, 0),
+            Tag = installed
+        };
+        uninstall.Click += UninstallAddon_Click;
+        buttons.Children.Add(uninstall);
+
+        if (entry.AvailableRelease is { } release && entry.HasUpdate)
+        {
+            var install = new Button
+            {
+                Content = LocalizationService.Get(entry.HasUpdate ? "Settings.Addons.Update" : "Settings.Addons.Install"),
+                Style = (Style)FindResource("PrimaryButton"),
+                Height = 34,
+                Padding = new Thickness(12, 0, 12, 0),
+                Margin = new Thickness(8, 0, 0, 0),
+                Tag = release
+            };
+            install.Click += InstallAddon_Click;
+            buttons.Children.Add(install);
+        }
+
+        panel.Children.Add(buttons);
+        card.Child = panel;
+        return card;
+    }
+
+    private static string GetInstalledAddonStatus(AddonManagerEntry entry)
+    {
+        var installed = entry.Installed
+            ?? throw new InvalidOperationException("An installed addon status requires an installed addon.");
+        var key = installed.Enabled ? "Settings.Addons.InstalledEnabled" : "Settings.Addons.InstalledDisabled";
+        return LocalizationService.Format(key, installed.InstalledVersion);
+    }
+
 
     private void UserBirthdayPicker_SelectedDateChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -939,6 +942,6 @@ public partial class SettingsWindow : Window
         UserPanel.Visibility = page == SettingsPage.User ? Visibility.Visible : Visibility.Collapsed;
         CompanionPanel.Visibility = page == SettingsPage.Companion ? Visibility.Visible : Visibility.Collapsed;
         ThemePanel.Visibility = page == SettingsPage.Theme ? Visibility.Visible : Visibility.Collapsed;
-        ExtraPanel.Visibility = page == SettingsPage.Extra ? Visibility.Visible : Visibility.Collapsed;
+        AddonsPanel.Visibility = page == SettingsPage.Addons ? Visibility.Visible : Visibility.Collapsed;
     }
 }

@@ -1,12 +1,14 @@
-using DesktopFamiliar.Models;
 using DrawingPoint = System.Drawing.Point;
 using DrawingRectangle = System.Drawing.Rectangle;
 
-namespace DesktopFamiliar.Services.AutoClick;
+namespace DesktopFamiliar.Addons.AutoClicker.Services;
 
 /// <summary>Generates bounded auto-click targets and delays without WPF or timer dependencies.</summary>
 public static class AutoClickRandomizationPolicy
 {
+    public const int MinimumIntervalMilliseconds = 10;
+    public const int MaximumIntervalMilliseconds = 60000;
+
     public static DrawingRectangle NormalizeTargetArea(DrawingRectangle area) => new(
         area.Left,
         area.Top,
@@ -30,12 +32,12 @@ public static class AutoClickRandomizationPolicy
         ArgumentNullException.ThrowIfNull(random);
         minimumMilliseconds = Math.Clamp(
             minimumMilliseconds,
-            AppSettings.MinimumAutoClickIntervalMilliseconds,
-            AppSettings.MaximumAutoClickIntervalMilliseconds);
+            MinimumIntervalMilliseconds,
+            MaximumIntervalMilliseconds);
         maximumMilliseconds = Math.Clamp(
             maximumMilliseconds,
             minimumMilliseconds,
-            AppSettings.MaximumAutoClickIntervalMilliseconds);
+            MaximumIntervalMilliseconds);
         return random.Next(minimumMilliseconds, maximumMilliseconds + 1);
     }
 }

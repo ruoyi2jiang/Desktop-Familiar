@@ -2,7 +2,6 @@ using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Animation;
-using DesktopFamiliar.Services.AutoClick;
 using DesktopFamiliar.Services.Calendar;
 
 namespace DesktopFamiliar.Services.Storage;
@@ -46,44 +45,10 @@ public sealed class CompanionDataNormalizer
             settings.ViewportHeight,
             AppSettings.MinimumViewportSize,
             AppSettings.MaximumViewportSize);
-        settings.AutoClickIntervalMilliseconds = Math.Clamp(
-            settings.AutoClickIntervalMilliseconds,
-            AppSettings.MinimumAutoClickIntervalMilliseconds,
-            AppSettings.MaximumAutoClickIntervalMilliseconds);
-        settings.AutoClickIntervalMaximumMilliseconds = Math.Clamp(
-            settings.AutoClickIntervalMaximumMilliseconds,
-            settings.AutoClickIntervalMilliseconds,
-            AppSettings.MaximumAutoClickIntervalMilliseconds);
-        if (!AutoClickHotkeyPolicy.TryParse(settings.AutoClickHotkey, out var toggleHotkey))
-        {
-            settings.AutoClickHotkey = AppSettings.DefaultAutoClickHotkey;
-            AutoClickHotkeyPolicy.TryParse(settings.AutoClickHotkey, out toggleHotkey);
-        }
-        if (!AutoClickHotkeyPolicy.TryParse(settings.AutoClickBackgroundModeHotkey, out var backgroundModeHotkey)
-            || string.Equals(backgroundModeHotkey.DisplayText, toggleHotkey.DisplayText, StringComparison.OrdinalIgnoreCase))
-        {
-            settings.AutoClickBackgroundModeHotkey = string.Equals(
-                toggleHotkey.DisplayText,
-                AppSettings.DefaultAutoClickBackgroundModeHotkey,
-                StringComparison.OrdinalIgnoreCase)
-                ? AppSettings.FallbackAutoClickBackgroundModeHotkey
-                : AppSettings.DefaultAutoClickBackgroundModeHotkey;
-        }
     }
 
     private static void Migrate(DesktopCompanionData data)
     {
-        if (data.SchemaVersion < 2)
-        {
-            // Schema 2 adds persisted auto-click preferences. Deserialization supplies
-            // the model defaults for absent schema-1 properties; this makes the step
-            // explicit before the normalized document is written back.
-            data.Settings ??= new AppSettings();
-            data.Settings.AutoClickIntervalMilliseconds = AppSettings.DefaultAutoClickIntervalMilliseconds;
-            data.Settings.AutoClickHotkey = AppSettings.DefaultAutoClickHotkey;
-            data.SchemaVersion = 2;
-        }
-
         if (data.SchemaVersion < 3)
         {
             // Schema 3 groups optional viewport-interaction assignments. The
@@ -94,40 +59,10 @@ public sealed class CompanionDataNormalizer
             data.SchemaVersion = 3;
         }
 
-        if (data.SchemaVersion < 4)
-        {
-            // Schema 4 adds an explicit opt-out for the global auto-clicker.
-            // Existing configurations retain the previously available behaviour.
-            data.Settings ??= new AppSettings();
-            data.Settings.AutoClickEnabled = true;
-            data.SchemaVersion = 4;
-        }
-
-        if (data.SchemaVersion < 5)
-        {
-            // Schema 5 adds an explicit opt-in for window-message background clicks.
-            // Existing profiles retain normal cursor-based clicking.
-            data.Settings ??= new AppSettings();
-            data.Settings.AutoClickBackgroundModeEnabled = false;
-            data.SchemaVersion = 5;
-        }
-
-        if (data.SchemaVersion < 6)
-        {
-            // Schema 6 turns the fixed interval into an inclusive random range.
-            // Existing profiles retain their exact interval by using it as both bounds.
-            data.Settings ??= new AppSettings();
-            data.Settings.AutoClickIntervalMaximumMilliseconds = data.Settings.AutoClickIntervalMilliseconds;
-            data.SchemaVersion = 6;
-        }
-
-        if (data.SchemaVersion < 7)
-        {
-            // Schema 7 adds a dedicated toggle for cursor and background input.
-            data.Settings ??= new AppSettings();
-            data.Settings.AutoClickBackgroundModeHotkey = AppSettings.DefaultAutoClickBackgroundModeHotkey;
-            data.SchemaVersion = 7;
-        }
+        // Schema 8 removes Auto Clicker preferences from the core document. Startup transfers
+        // legacy values to the addon-owned document before this normalizer rewrites the core data.
+        if (data.SchemaVersion < 8)
+            data.SchemaVersion = 8;
     }
 
     private static void EnsureSavedThemes(AppSettings settings)

@@ -5,7 +5,7 @@ public sealed class AutoClickBackgroundModeTests
     [Fact]
     public void BackgroundMode_UsesTheSelectedWindowWithoutMovingTheSystemCursor()
     {
-        var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Services", "AutoClick", "AutoClickService.cs")));
+        var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "Services", "AutoClickService.cs")));
 
         Assert.Contains("DrawingRectangle targetArea,", source, StringComparison.Ordinal);
         Assert.Contains("var backgroundTarget = useBackgroundClick ? TryCreateBackgroundTarget(targetArea) : null;", source, StringComparison.Ordinal);

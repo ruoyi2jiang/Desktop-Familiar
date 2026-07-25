@@ -16,10 +16,11 @@ App (composition root)
   -> CalendarReminderService
       -> CalendarOccurrenceCalculator
       -> IClock
-  -> AutoClickCoordinator
-      -> GlobalHotkeyService
-      -> AutoClickService
-      -> AutoClickTargetWindow
+  -> Addon host (API 1.2)
+      -> Auto Clicker addon (installed package)
+          -> GlobalHotkeyService
+          -> AutoClickService
+          -> AutoClickTargetWindow
   -> CompanionOverlayWindow
       -> FrameAnimationPlayer
           -> IAnimationFrameLoader
@@ -29,7 +30,9 @@ App (composition root)
 
 ## Folder responsibilities
 
-- `Models/`: serializable data and deep cloning. Models do not perform I/O or show UI.
+- `DesktopFamiliar.AddonSdk/`: versioned addon manifest, compatibility, capability, and lifecycle contracts.
+- `Addons/<addon-id>/`: addon-owned models, pure services, WPF views, manifest, and scoped contributor workflow.
+- `Models/`: serializable core data and deep cloning. Models do not perform I/O or show UI.
 - `Services/Animation/`: pure playback state plus frame-decoding contracts and implementation.
 - `Services/Calendar/`: pure recurrence, status, navigation, retention, and occurrence calculations.
 - `Services/Storage/`: JSON persistence, current-format normalization, asset copies, and portable companion bundles.
@@ -43,7 +46,7 @@ App (composition root)
 
 `CompanionManager` owns the loaded `DesktopCompanionData`, exposes the selected companion, and raises narrow events after a successful mutation. It depends only on `ICompanionRepository`. `ThemeSelectionPolicy` resolves a saved-theme card to its built-in or custom kind, so selecting a built-in palette cannot be persisted as a custom theme. Before a save the manager keeps a deep snapshot; if persistence fails, it restores that snapshot and throws `AppPersistenceException` so the application can report the failure without leaving false in-memory state.
 
-`AutoClickCoordinator` owns the runtime auto-click state. Two `GlobalHotkeyService` instances register distinct validated Windows hotkeys: one starts/stops the clicker and the other switches between cursor and background input. `AutoClickTargetWindow` captures a fresh virtual-desktop rectangle for every start, and `AutoClickService` chooses a random point inside it plus a random delay from the configured inclusive interval range. It either moves the pointer and sends left-button input or, when explicitly enabled, posts legacy mouse messages to the window beneath the selected area. The latter keeps the system cursor free but is intentionally best-effort: applications may ignore those messages. The coordinator emits runtime start/stop and input-mode status changes; the overlay displays them in a temporary bubble layer that pauses and then resumes scene dialogue without changing animation configuration. The persisted enabled switch controls registration and menu availability; only the normalized interval range, hotkeys, enabled preference, and default-off background-click preference are saved through `CompanionManager`. The target window, area, active state, and status dialogue are never saved.
+The addon host exposes API 1.2 through `DesktopFamiliar.AddonSdk`. An addon manifest declares a supported host API range and sensitive capabilities; `AddonCompatibilityPolicy` rejects unknown manifest formats, missing identities/entry points, assemblies, and incompatible hosts before activation. `AddonInstallationStore` owns the atomic local installation registry and safe ZIP extraction. `AddonSettingsStore` atomically persists addon-owned JSON under its data directory; startup transfers legacy Auto Clicker values before schema-8 core-data normalization removes them. `AddonRuntimeLoader` creates a collectible assembly-load context only for enabled packages that have passed those checks. `IAddonViewportActionRegistry` is a host service: every visible addon command is grouped below the overlay's single **Action** submenu and invoked through `DeferredMenuAction` after the menu closes. API 1.2 adds the settings-section registry, scoped settings store, localized-string provider, and transient companion-status presenter. The Auto Clicker uses these services for its runtime, settings UI, target picker, hotkeys, input engine, and short dialogue messages without a reference to the application assembly. `docs/addons/sdk-compatibility.md` is the normative versioning contract; the running app will only be wired to the pinned first-party catalogue, never arbitrary external packages.
 
 `CompanionActivityState` is runtime-only and distinguishes Idle from Reminder. `FocusModeVisibilityPolicy` combines activity with the persisted focus toggle: normal mode displays the selected companion, while Focus displays it only for Reminder. Consumers use `CompanionManager.ShouldDisplayCompanion` instead of duplicating the rule.
 
@@ -65,7 +68,7 @@ App (composition root)
 
 Fresh installs start with an empty companion library. Private character sources, pack-builder scripts, and generated companion bundles are outside the public source tree and ignored by Git.
 
-The current clean persistence baseline is schema 4. When persisted fields change, update model defaults and `DesktopCompanionData.CurrentSchemaVersion`, implement an explicit migration before accepting older schemas, add migration and normalization tests, and update `docs/data-format.md`.
+The current clean persistence baseline is schema 8. When persisted fields change, update model defaults and `DesktopCompanionData.CurrentSchemaVersion`, implement an explicit migration before accepting older schemas, add migration and normalization tests, and update `docs/data-format.md`.
 
 ## Error boundaries
 

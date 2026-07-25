@@ -43,67 +43,6 @@ public sealed class UserSettingsManagerTests
     }
 
     [Fact]
-    public void AutoClickSettingsArePersistedAndPublishedAfterSave()
-    {
-        var repository = new MemoryCompanionRepository(new DesktopCompanionData());
-        var manager = new CompanionManager(repository);
-        var changed = 0;
-        manager.AutoClickSettingsChanged += (_, _) => changed++;
-
-        manager.SetAutoClickSettings("alt+ctrl+F8", "ctrl+alt+F9", 250, 400, backgroundModeEnabled: true);
-
-        Assert.Equal("Ctrl+Alt+F8", manager.Data.Settings.AutoClickHotkey);
-        Assert.Equal("Ctrl+Alt+F9", manager.Data.Settings.AutoClickBackgroundModeHotkey);
-        Assert.Equal(250, repository.Load().Settings.AutoClickIntervalMilliseconds);
-        Assert.Equal(400, repository.Load().Settings.AutoClickIntervalMaximumMilliseconds);
-        Assert.True(repository.Load().Settings.AutoClickBackgroundModeEnabled);
-        Assert.Equal(1, changed);
-    }
-
-    [Fact]
-    public void AutoClickSettingsSaveFailureRestoresPreviousValueAndDoesNotPublishChange()
-    {
-        var repository = new MemoryCompanionRepository(new DesktopCompanionData());
-        var manager = new CompanionManager(repository);
-        var changed = false;
-        manager.AutoClickSettingsChanged += (_, _) => changed = true;
-        repository.FailSaves = true;
-
-        Assert.Throws<AppPersistenceException>(() => manager.SetAutoClickSettings("Ctrl+Alt+F8", "Ctrl+Alt+F9", 250, 400, backgroundModeEnabled: true));
-
-        Assert.Equal(AppSettings.DefaultAutoClickHotkey, manager.Data.Settings.AutoClickHotkey);
-        Assert.Equal(AppSettings.DefaultAutoClickBackgroundModeHotkey, manager.Data.Settings.AutoClickBackgroundModeHotkey);
-        Assert.Equal(AppSettings.DefaultAutoClickIntervalMilliseconds, manager.Data.Settings.AutoClickIntervalMilliseconds);
-        Assert.Equal(AppSettings.DefaultAutoClickIntervalMilliseconds, manager.Data.Settings.AutoClickIntervalMaximumMilliseconds);
-        Assert.False(manager.Data.Settings.AutoClickBackgroundModeEnabled);
-        Assert.False(changed);
-    }
-
-    [Fact]
-    public void AutoClickSettings_RejectDuplicateHotkeys()
-    {
-        var manager = new CompanionManager(new MemoryCompanionRepository(new DesktopCompanionData()));
-
-        Assert.Throws<ArgumentException>(() =>
-            manager.SetAutoClickSettings("Ctrl+Alt+F8", "Ctrl+Alt+F8", 250, 400, backgroundModeEnabled: false));
-    }
-
-    [Fact]
-    public void AutoClickEnabledIsPersistedAndPublishedAfterSave()
-    {
-        var repository = new MemoryCompanionRepository(new DesktopCompanionData());
-        var manager = new CompanionManager(repository);
-        var changed = 0;
-        manager.AutoClickSettingsChanged += (_, _) => changed++;
-
-        manager.SetAutoClickEnabled(false);
-
-        Assert.False(manager.Data.Settings.AutoClickEnabled);
-        Assert.False(repository.Load().Settings.AutoClickEnabled);
-        Assert.Equal(1, changed);
-    }
-
-    [Fact]
     public void SelectingBuiltInSavedTheme_PersistsItsBuiltInThemeKind()
     {
         var seaBlue = new SavedTheme

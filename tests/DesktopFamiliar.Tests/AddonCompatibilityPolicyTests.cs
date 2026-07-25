@@ -1,0 +1,81 @@
+using DesktopFamiliar.AddonSdk;
+using DesktopFamiliar.Addons.AutoClicker.Models;
+
+namespace DesktopFamiliar.Tests;
+
+public sealed class AddonCompatibilityPolicyTests
+{
+    [Fact]
+    public void FirstPartyAutoClicker_IsCompatibleWithTheCurrentHostApi()
+    {
+        var result = AddonCompatibilityPolicy.Evaluate(
+            AutoClickerAddonDefinition.CreateManifest(),
+            AddonSdkVersion.CurrentHostApi);
+
+        Assert.True(result.IsCompatible);
+        Assert.Null(result.Reason);
+    }
+
+    [Fact]
+    public void FirstPartyAutoClickerManifest_MatchesTheDocumentedPackageFormat()
+    {
+        var json = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "addon.json")));
+        var manifest = AddonManifestJson.Deserialize(json);
+
+        Assert.Equal(AutoClickerAddonDefinition.Id, manifest.Id);
+        Assert.Equal(new AddonApiVersion(1, 2), manifest.MinimumHostApi);
+        Assert.Equal(new AddonApiVersion(2, 0), manifest.MaximumHostApiExclusive);
+        Assert.Contains(AddonCapability.GlobalHotkeys, manifest.Capabilities);
+        Assert.Contains(AddonCapability.InputInjection, manifest.Capabilities);
+        Assert.True(AddonCompatibilityPolicy.Evaluate(manifest, AddonSdkVersion.CurrentHostApi).IsCompatible);
+    }
+
+    [Fact]
+    public void Compatibility_RejectsAnAddonThatRequiresANewerHostApi()
+    {
+        var manifest = AutoClickerAddonDefinition.CreateManifest();
+        manifest.MinimumHostApi = new AddonApiVersion(1, 3);
+
+        var result = AddonCompatibilityPolicy.Evaluate(manifest, new AddonApiVersion(1, 2));
+
+        Assert.False(result.IsCompatible);
+        Assert.Contains("1.3", result.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compatibility_RejectsAnAddonOutsideItsMaximumHostApi()
+    {
+        var manifest = AutoClickerAddonDefinition.CreateManifest();
+
+        var result = AddonCompatibilityPolicy.Evaluate(manifest, new AddonApiVersion(2, 0));
+
+        Assert.False(result.IsCompatible);
+        Assert.Contains("2.0", result.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compatibility_RejectsAnUnknownManifestFormat()
+    {
+        var manifest = AutoClickerAddonDefinition.CreateManifest();
+        manifest.ManifestVersion++;
+
+        var result = AddonCompatibilityPolicy.Evaluate(manifest, AddonSdkVersion.CurrentHostApi);
+
+        Assert.False(result.IsCompatible);
+        Assert.NotNull(result.Reason);
+    }
+
+    private static string FindRepositoryFile(string relativePath)
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
+             directory is not null;
+             directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        throw new FileNotFoundException($"Could not locate repository file '{relativePath}'.");
+    }
+}

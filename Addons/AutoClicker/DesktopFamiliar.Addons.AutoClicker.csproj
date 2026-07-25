@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DesktopFamiliar.Addons.AutoClicker</AssemblyName>
+    <RootNamespace>DesktopFamiliar.Addons.AutoClicker</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\DesktopFamiliar.AddonSdk\DesktopFamiliar.AddonSdk.csproj" />
+  </ItemGroup>
+</Project>

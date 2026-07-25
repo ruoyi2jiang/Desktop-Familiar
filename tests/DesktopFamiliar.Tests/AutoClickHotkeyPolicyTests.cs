@@ -1,4 +1,4 @@
-using DesktopFamiliar.Services.AutoClick;
+using DesktopFamiliar.Addons.AutoClicker.Services;
 
 namespace DesktopFamiliar.Tests;
 

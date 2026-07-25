@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:DesktopFamiliar.Localization"
         xmlns:controls="clr-namespace:DesktopFamiliar.Views.Controls"
         Title="{loc:Loc Settings.Window.Title}" Width="980" Height="720" MinWidth="780" MinHeight="560"
-        WindowStartupLocation="CenterScreen" PreviewKeyDown="Window_PreviewKeyDown">
+        WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <Style x:Key="SettingsSidebarItem" TargetType="RadioButton">
             <Setter Property="Height" Value="48" />
@@ -53,34 +53,55 @@
             <Setter Property="Background" Value="{DynamicResource PrimaryAccentBrush}" />
             <Setter Property="Margin" Value="0,26" />
         </Style>
-        <Style x:Key="SettingsToggle" TargetType="ToggleButton">
-            <Setter Property="Width" Value="48" />
-            <Setter Property="Height" Value="26" />
-            <Setter Property="Padding" Value="0" />
+        <Style x:Key="SettingsAddonSwitcher" TargetType="RadioButton">
+            <Setter Property="Padding" Value="0,0,0,7" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextOnPageBackgroundBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource InputAccentBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Track" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="13">
-                            <Ellipse x:Name="Thumb" Width="18" Height="18" Margin="3" HorizontalAlignment="Left"
-                                     Fill="{DynamicResource TextOnInputBackgroundBrush}" />
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="TabSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource PrimaryAccentBrush}" />
-                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource PrimaryAccentHoverBrush}" />
-                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
-                                <Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource TextOnPrimaryAccentBrush}" />
-                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource InputAccentHoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource PageAccentBrush}" />
                             </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5" />
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="TabSurface" Property="BorderBrush" Value="{DynamicResource PrimaryAccentBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource PrimaryAccentBrush}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SettingsAddonListItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Foreground" Value="{DynamicResource TextOnPageBackgroundBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemSurface" Background="{DynamicResource SecondaryBackgroundBrush}"
+                                BorderBrush="{DynamicResource SecondaryAccentBrush}" BorderThickness="1" CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource SecondaryBackgroundHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource SecondaryBackgroundActiveBrush}" />
+                                <Setter TargetName="ItemSurface" Property="BorderBrush" Value="{DynamicResource SecondaryAccentBrush}" />
+                                <Setter TargetName="ItemSurface" Property="BorderThickness" Value="2" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -143,8 +164,8 @@
                              GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="CompanionMenu_Click" />
                 <RadioButton x:Name="ThemeMenuButton" Content="{loc:Loc Settings.Theme.Menu}"
                              GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="ThemeMenu_Click" />
-                <RadioButton x:Name="ExtraMenuButton" Content="{loc:Loc Settings.Extra.Menu}"
-                             GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="ExtraMenu_Click" />
+                <RadioButton x:Name="AddonsMenuButton" Content="{loc:Loc Settings.Addons.Menu}"
+                             GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="AddonsMenu_Click" />
             </StackPanel>
         </Border>
         <ScrollViewer Grid.Column="1" Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto">
@@ -179,58 +200,65 @@
                     </Grid>
                 </StackPanel>
 
-                <StackPanel x:Name="ExtraPanel" Visibility="Collapsed">
-                    <TextBlock Text="{loc:Loc Settings.Extra.Title}" FontSize="27" FontWeight="SemiBold" />
-                    <TextBlock Text="{loc:Loc Settings.Extra.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,6,0,26" TextWrapping="Wrap" />
-                    <Border Background="{DynamicResource PrimaryBackgroundBrush}" BorderBrush="{DynamicResource PrimaryAccentBrush}"
-                            BorderThickness="1" CornerRadius="14" Padding="20" TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
-                        <StackPanel>
-                            <DockPanel>
-                                <ToggleButton x:Name="AutoClickEnabledToggle" DockPanel.Dock="Right" VerticalAlignment="Center"
-                                              Style="{StaticResource SettingsToggle}" ToolTip="{loc:Loc Settings.AutoClick.Enabled}"
-                                              AutomationProperties.Name="{loc:Loc Settings.AutoClick.Enabled}"
-                                              Checked="AutoClickEnabled_Changed" Unchecked="AutoClickEnabled_Changed" />
-                                <TextBlock Text="{loc:Loc Settings.AutoClick.Title}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            </DockPanel>
-                            <TextBlock Text="{loc:Loc Settings.AutoClick.Description}" Opacity="0.72" Margin="0,6,0,20" TextWrapping="Wrap" />
-                            <StackPanel x:Name="AutoClickOptionsPanel">
-                                <TextBlock Text="{loc:Loc Settings.AutoClick.Hotkey}" FontSize="16" FontWeight="SemiBold" />
-                                <TextBlock Text="{loc:Loc Settings.AutoClick.Hotkey.Description}" Opacity="0.72" Margin="0,5,0,12" TextWrapping="Wrap" />
-                                <Button x:Name="AutoClickHotkeyButton" Style="{StaticResource OutlineButton}" HorizontalAlignment="Left"
-                                        Height="38" MinWidth="170" Padding="16,0" Margin="0" Click="AutoClickHotkey_Click" />
-                                <TextBlock Text="{loc:Loc Settings.AutoClick.BackgroundModeHotkey}" FontSize="16" FontWeight="SemiBold" Margin="0,14,0,0" />
-                                <TextBlock Text="{loc:Loc Settings.AutoClick.BackgroundModeHotkey.Description}" Opacity="0.72" Margin="0,5,0,12" TextWrapping="Wrap" />
-                                <Button x:Name="AutoClickBackgroundModeHotkeyButton" Style="{StaticResource OutlineButton}" HorizontalAlignment="Left"
-                                        Height="38" MinWidth="170" Padding="16,0" Margin="0" Click="AutoClickBackgroundModeHotkey_Click" />
-                                <Border Style="{StaticResource SettingsDivider}" />
-                                <TextBlock Text="{loc:Loc Settings.AutoClick.Interval}" FontSize="16" FontWeight="SemiBold" />
-                                <TextBlock Text="{loc:Loc Settings.AutoClick.Interval.Description}" Opacity="0.72" Margin="0,5,0,12" TextWrapping="Wrap" />
-                                <StackPanel Orientation="Horizontal">
-                                    <StackPanel Width="120">
-                                        <TextBlock Text="{loc:Loc Settings.AutoClick.Interval.Minimum}" Margin="0,0,0,4" />
-                                        <TextBox x:Name="AutoClickIntervalBox" Style="{StaticResource SettingsTextInput}" Margin="0"
-                                                 TextChanged="AutoClickIntervalMinimum_TextChanged" />
-                                    </StackPanel>
-                                    <StackPanel Width="120" Margin="10,0,0,0">
-                                        <TextBlock Text="{loc:Loc Settings.AutoClick.Interval.Maximum}" Margin="0,0,0,4" />
-                                        <TextBox x:Name="AutoClickIntervalMaximumBox" Style="{StaticResource SettingsTextInput}" Margin="0" />
-                                    </StackPanel>
-                                    <ComboBox x:Name="AutoClickIntervalUnitComboBox" Width="150" Margin="10,18,14,0" VerticalAlignment="Top" SelectionChanged="AutoClickIntervalUnit_Changed">
-                                        <ComboBoxItem Tag="milliseconds" Content="{loc:Loc Settings.AutoClick.Milliseconds}" />
-                                        <ComboBoxItem Tag="seconds" Content="{loc:Loc Settings.AutoClick.Seconds}" />
-                                    </ComboBox>
-                                    <Button Content="{loc:Loc Settings.AutoClick.Apply}" Style="{StaticResource PrimaryButton}" Height="38" Padding="16,0" Margin="0,18,0,0" VerticalAlignment="Top" Click="ApplyAutoClickSettings_Click" />
-                                </StackPanel>
-                                <Border Style="{StaticResource SettingsDivider}" />
-                                <StackPanel Orientation="Horizontal">
-                                    <CheckBox x:Name="AutoClickBackgroundModeCheck" Content="{loc:Loc Settings.AutoClick.BackgroundMode}" Margin="0" />
-                                    <controls:FieldHelpLabel Text="" HelpText="{loc:Loc Settings.AutoClick.BackgroundMode.Description}"
-                                                             VerticalAlignment="Center" />
-                                </StackPanel>
-                                <TextBlock Text="{loc:Loc Settings.AutoClick.BackgroundMode.Warning}" Foreground="{DynamicResource PrimaryAccentBrush}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                <StackPanel x:Name="AddonsPanel" Visibility="Collapsed">
+                    <DockPanel>
+                        <Button x:Name="RefreshAddonsButton" Style="{StaticResource OutlineButton}"
+                                DockPanel.Dock="Right" Height="38" Padding="14,0" Margin="14,0,0,0" Click="RefreshAddons_Click">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Loc Settings.Addons.Refresh}" VerticalAlignment="Center" />
+                                <TextBlock x:Name="RefreshAddonsSpinner" Text="&#x27F3;" FontSize="16" Width="16" Height="16"
+                                           Margin="8,0,0,0" TextAlignment="Center" LineHeight="16" VerticalAlignment="Center"
+                                           Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
+                                    <TextBlock.RenderTransform>
+                                        <RotateTransform x:Name="RefreshAddonsSpinnerRotation" />
+                                    </TextBlock.RenderTransform>
+                                </TextBlock>
                             </StackPanel>
+                        </Button>
+                        <TextBlock Text="{loc:Loc Settings.Addons.Title}" FontSize="27" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <TextBlock Text="{loc:Loc Settings.Addons.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,6,0,12" TextWrapping="Wrap" />
+                    <TextBlock x:Name="AddonsStatusText" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,0,0,14" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16" VerticalAlignment="Center">
+                        <RadioButton x:Name="AvailableAddonsTab" GroupName="AddonTabs" IsChecked="True"
+                                     Style="{StaticResource SettingsAddonSwitcher}" Click="AvailableAddonsTab_Click" />
+                        <Border Width="1" Height="20" Background="{DynamicResource SecondaryAccentBrush}" Opacity="0.7" Margin="14,0" />
+                        <RadioButton x:Name="InstalledAddonsTab" GroupName="AddonTabs"
+                                     Style="{StaticResource SettingsAddonSwitcher}" Click="InstalledAddonsTab_Click" />
+                    </StackPanel>
+                    <Grid x:Name="AvailableAddonsView">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="240" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel x:Name="AvailableAddonsListPanel" Grid.Column="0">
+                            <Grid>
+                                <ListBox x:Name="AvailableAddonsList" BorderThickness="0" Background="Transparent"
+                                         ItemContainerStyle="{StaticResource SettingsAddonListItem}" SelectionChanged="AvailableAddonsList_SelectionChanged" />
+                                <TextBlock x:Name="AvailableAddonsEmptyText" Text="{loc:Loc Settings.Addons.NoneAvailable}"
+                                           Opacity="0.72" TextWrapping="Wrap" Visibility="Collapsed" />
+                            </Grid>
                         </StackPanel>
-                    </Border>
+                        <Border x:Name="AvailableAddonDetailsBorder" Grid.Column="2" Background="{DynamicResource PrimaryBackgroundBrush}" BorderBrush="{DynamicResource PrimaryAccentBrush}"
+                                BorderThickness="1" CornerRadius="10" Padding="18" MinHeight="160"
+                                TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" Visibility="Collapsed">
+                            <StackPanel x:Name="AvailableAddonDetailsPanel">
+                                <TextBlock x:Name="AvailableAddonTitleText" FontSize="21" FontWeight="SemiBold" />
+                                <TextBlock x:Name="AvailableAddonVersionText" Opacity="0.72" Margin="0,4,0,12" />
+                                <TextBlock x:Name="AvailableAddonDescriptionText" TextWrapping="Wrap" />
+                                <Button x:Name="AvailableAddonInstallButton" Content="{loc:Loc Settings.Addons.Install}" Style="{StaticResource PrimaryButton}"
+                                        HorizontalAlignment="Left" Height="38" Padding="16,0" Margin="0,18,0,0" Click="InstallAddon_Click" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <StackPanel x:Name="InstalledAddonsView" Visibility="Collapsed">
+                        <TextBlock x:Name="InstalledAddonsEmptyText" Text="{loc:Loc Settings.Addons.NoneInstalled}"
+                                   Opacity="0.72" TextWrapping="Wrap" Visibility="Collapsed" />
+                        <StackPanel x:Name="InstalledAddonsList" />
+                    </StackPanel>
+                    <Border x:Name="AddonSettingsDivider" Style="{StaticResource SettingsDivider}" Visibility="Collapsed" />
+                    <StackPanel x:Name="AddonSettingsSections" />
                 </StackPanel>
 
                 <StackPanel x:Name="CompanionPanel" Visibility="Collapsed">

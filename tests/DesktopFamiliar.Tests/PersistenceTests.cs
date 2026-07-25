@@ -309,7 +309,7 @@ public sealed class PersistenceTests
     }
 
     [Fact]
-    public void Schema1Configuration_MigratesAutoClickSettings()
+    public void Schema1Configuration_MigratesToTheCurrentCoreSchema()
     {
         var data = JsonSerializer.Deserialize<DesktopCompanionData>(
             """{"SchemaVersion":1,"Settings":{}}""",
@@ -319,8 +319,6 @@ public sealed class PersistenceTests
         new CompanionDataNormalizer().Normalize(data);
 
         Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
-        Assert.Equal(AppSettings.DefaultAutoClickIntervalMilliseconds, data.Settings.AutoClickIntervalMilliseconds);
-        Assert.Equal(AppSettings.DefaultAutoClickHotkey, data.Settings.AutoClickHotkey);
     }
 
     [Fact]
@@ -359,50 +357,6 @@ public sealed class PersistenceTests
 
         Assert.Null(companion.InteractionStates.DragLeftAnimationId);
         Assert.Null(Assert.Single(companion.InteractionStates.ClickAreas).AnimationId);
-    }
-
-    [Fact]
-    public void Schema3Configuration_MigratesEnabledAutoClicker()
-    {
-        var data = JsonSerializer.Deserialize<DesktopCompanionData>(
-            """{"SchemaVersion":3,"Settings":{}}""",
-            CreateOptions());
-
-        Assert.NotNull(data);
-        new CompanionDataNormalizer().Normalize(data);
-
-        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
-        Assert.True(data.Settings.AutoClickEnabled);
-        Assert.False(data.Settings.AutoClickBackgroundModeEnabled);
-    }
-
-    [Fact]
-    public void Schema5Configuration_MigratesFixedIntervalToRandomRange()
-    {
-        var data = JsonSerializer.Deserialize<DesktopCompanionData>(
-            """{"SchemaVersion":5,"Settings":{"AutoClickIntervalMilliseconds":275}}""",
-            CreateOptions());
-
-        Assert.NotNull(data);
-        new CompanionDataNormalizer().Normalize(data);
-
-        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
-        Assert.Equal(275, data.Settings.AutoClickIntervalMilliseconds);
-        Assert.Equal(275, data.Settings.AutoClickIntervalMaximumMilliseconds);
-    }
-
-    [Fact]
-    public void Schema6Configuration_MigratesBackgroundModeHotkey()
-    {
-        var data = JsonSerializer.Deserialize<DesktopCompanionData>(
-            """{"SchemaVersion":6,"Settings":{}}""",
-            CreateOptions());
-
-        Assert.NotNull(data);
-        new CompanionDataNormalizer().Normalize(data);
-
-        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
-        Assert.Equal(AppSettings.DefaultAutoClickBackgroundModeHotkey, data.Settings.AutoClickBackgroundModeHotkey);
     }
 
     [Fact]
