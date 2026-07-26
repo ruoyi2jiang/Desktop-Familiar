@@ -89,7 +89,7 @@ public sealed class AddonManagerService
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private sealed class AddonVersionComparer : IComparer<string>
+    internal sealed class AddonVersionComparer : IComparer<string>
     {
         public static AddonVersionComparer Instance { get; } = new();
 
@@ -107,16 +107,51 @@ public sealed class AddonManagerService
             var numeric = parsedLeft.Numeric.CompareTo(parsedRight.Numeric);
             if (numeric != 0)
                 return numeric;
-            if (parsedLeft.IsPrerelease != parsedRight.IsPrerelease)
-                return parsedLeft.IsPrerelease ? -1 : 1;
-            return string.Compare(left, right, CultureInfo.InvariantCulture, CompareOptions.Ordinal);
+            if (parsedLeft.Prerelease.Length == 0 || parsedRight.Prerelease.Length == 0)
+            {
+                if (parsedLeft.Prerelease.Length == parsedRight.Prerelease.Length)
+                    return 0;
+                return parsedLeft.Prerelease.Length == 0 ? 1 : -1;
+            }
+
+            for (var index = 0; index < Math.Min(parsedLeft.Prerelease.Length, parsedRight.Prerelease.Length); index++)
+            {
+                var identifier = ComparePrereleaseIdentifier(
+                    parsedLeft.Prerelease[index],
+                    parsedRight.Prerelease[index]);
+                if (identifier != 0)
+                    return identifier;
+            }
+
+            return parsedLeft.Prerelease.Length.CompareTo(parsedRight.Prerelease.Length);
         }
 
-        private static (Version Numeric, bool IsPrerelease) Parse(string version)
+        private static (Version Numeric, string[] Prerelease) Parse(string version)
         {
             var dashIndex = version.IndexOf('-');
             var numericText = dashIndex >= 0 ? version[..dashIndex] : version;
-            return (Version.TryParse(numericText, out var parsed) ? parsed : new Version(0, 0), dashIndex >= 0);
+            var numeric = Version.TryParse(numericText, out var parsed)
+                ? new Version(parsed.Major, parsed.Minor, Math.Max(parsed.Build, 0), Math.Max(parsed.Revision, 0))
+                : new Version(0, 0, 0, 0);
+            var prerelease = dashIndex >= 0
+                ? version[(dashIndex + 1)..].Split('.', StringSplitOptions.RemoveEmptyEntries)
+                : [];
+            return (numeric, prerelease);
+        }
+
+        private static int ComparePrereleaseIdentifier(string left, string right)
+        {
+            var leftIsNumeric = left.All(char.IsAsciiDigit);
+            var rightIsNumeric = right.All(char.IsAsciiDigit);
+            if (leftIsNumeric != rightIsNumeric)
+                return leftIsNumeric ? -1 : 1;
+            if (!leftIsNumeric)
+                return string.Compare(left, right, CultureInfo.InvariantCulture, CompareOptions.Ordinal);
+
+            var length = left.TrimStart('0').Length.CompareTo(right.TrimStart('0').Length);
+            return length != 0
+                ? length
+                : string.Compare(left.TrimStart('0'), right.TrimStart('0'), StringComparison.Ordinal);
         }
     }
 }
@@ -130,5 +165,7 @@ public sealed record AddonManagerEntry(
 {
     public bool HasUpdate => Installed is not null
         && AvailableRelease is not null
-        && !string.Equals(Installed.InstalledVersion, AvailableRelease.Version, StringComparison.Ordinal);
+        && AddonManagerService.AddonVersionComparer.Instance.Compare(
+            AvailableRelease.Version,
+            Installed.InstalledVersion) > 0;
 }

@@ -3,8 +3,17 @@ using System.Windows.Interop;
 
 namespace DesktopFamiliar.Addons.AutoClicker.Services;
 
+internal interface IGlobalHotkeyService : IDisposable
+{
+    event EventHandler? Pressed;
+
+    bool TryRegister(AutoClickHotkey hotkey);
+
+    void Unregister();
+}
+
 /// <summary>Owns one message-only Windows hotkey registration.</summary>
-public sealed class GlobalHotkeyService : IDisposable
+public sealed class GlobalHotkeyService : IGlobalHotkeyService
 {
     private const int HotkeyId = 0x4450;
     private const int WmHotkey = 0x0312;

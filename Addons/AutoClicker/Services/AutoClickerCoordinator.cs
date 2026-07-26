@@ -10,33 +10,58 @@ public sealed class AutoClickerCoordinator : IDisposable
     private readonly AutoClickerSettingsStore _settingsStore;
     private readonly IAddonStringProvider _strings;
     private readonly IAddonCompanionStatusPresenter _statusPresenter;
-    private readonly GlobalHotkeyService _toggleHotkeyService = new("Desktop Familiar Auto Clicker toggle hotkey");
-    private readonly GlobalHotkeyService _backgroundModeHotkeyService = new("Desktop Familiar Auto Clicker input-mode hotkey");
-    private readonly AutoClickService _clickService = new();
+    private readonly IGlobalHotkeyService _toggleHotkeyService;
+    private readonly IGlobalHotkeyService _backgroundModeHotkeyService;
+    private readonly IAutoClickService _clickService;
     private AutoClickerSettings _settings;
     private AutoClickTargetWindow? _targetWindow;
+    private bool _hotkeyRegistrationFailed;
     private bool _disposed;
 
     public AutoClickerCoordinator(
         AutoClickerSettingsStore settingsStore,
         IAddonStringProvider strings,
         IAddonCompanionStatusPresenter statusPresenter)
+        : this(
+            settingsStore,
+            strings,
+            statusPresenter,
+            new GlobalHotkeyService("Desktop Familiar Auto Clicker toggle hotkey"),
+            new GlobalHotkeyService("Desktop Familiar Auto Clicker input-mode hotkey"),
+            new AutoClickService())
+    {
+    }
+
+    internal AutoClickerCoordinator(
+        AutoClickerSettingsStore settingsStore,
+        IAddonStringProvider strings,
+        IAddonCompanionStatusPresenter statusPresenter,
+        IGlobalHotkeyService toggleHotkeyService,
+        IGlobalHotkeyService backgroundModeHotkeyService,
+        IAutoClickService clickService)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _strings = strings ?? throw new ArgumentNullException(nameof(strings));
         _statusPresenter = statusPresenter ?? throw new ArgumentNullException(nameof(statusPresenter));
+        _toggleHotkeyService = toggleHotkeyService ?? throw new ArgumentNullException(nameof(toggleHotkeyService));
+        _backgroundModeHotkeyService = backgroundModeHotkeyService ?? throw new ArgumentNullException(nameof(backgroundModeHotkeyService));
+        _clickService = clickService ?? throw new ArgumentNullException(nameof(clickService));
         _settings = _settingsStore.Load();
         _toggleHotkeyService.Pressed += ToggleHotkeyService_Pressed;
         _backgroundModeHotkeyService.Pressed += BackgroundModeHotkeyService_Pressed;
         _clickService.ClickingChanged += ClickService_ClickingChanged;
 
-        if (_settings.Enabled)
-            TryRegisterConfiguredHotkeys();
+        if (_settings.Enabled && !TryRegisterConfiguredHotkeys())
+        {
+            _hotkeyRegistrationFailed = true;
+            _statusPresenter.Show(_strings.Get("Overlay.AutoClick.HotkeyUnavailable"));
+        }
     }
 
     public AutoClickerSettings Settings => _settings.Clone();
     public bool IsSelectingTarget => _targetWindow is not null;
     public bool IsClicking => _clickService.IsClicking;
+    public bool HotkeyRegistrationFailed => _hotkeyRegistrationFailed;
     public event EventHandler? StateChanged;
 
     public bool TryUpdateSettings(
@@ -57,7 +82,8 @@ public sealed class AutoClickerCoordinator : IDisposable
         var previous = _settings;
         if (previous.Enabled && !TryRegisterHotkeys(hotkey, backgroundModeHotkey))
         {
-            TryRegisterSavedHotkeys(previous.Hotkey, previous.BackgroundModeHotkey);
+            _hotkeyRegistrationFailed = !TryRegisterSavedHotkeys(previous.Hotkey, previous.BackgroundModeHotkey);
+            StateChanged?.Invoke(this, EventArgs.Empty);
             return false;
         }
 
@@ -75,11 +101,13 @@ public sealed class AutoClickerCoordinator : IDisposable
         catch
         {
             if (previous.Enabled)
-                TryRegisterSavedHotkeys(previous.Hotkey, previous.BackgroundModeHotkey);
+                _hotkeyRegistrationFailed = !TryRegisterSavedHotkeys(previous.Hotkey, previous.BackgroundModeHotkey);
             throw;
         }
 
-        Stop();
+        _hotkeyRegistrationFailed = false;
+        _clickService.UpdateIntervals(next.IntervalMilliseconds, next.IntervalMaximumMilliseconds);
+        ApplyInputModeChange(previous.BackgroundModeEnabled, next.BackgroundModeEnabled);
         return true;
     }
 
@@ -91,7 +119,11 @@ public sealed class AutoClickerCoordinator : IDisposable
 
         var previous = _settings;
         if (enabled && !TryRegisterConfiguredHotkeys())
+        {
+            _hotkeyRegistrationFailed = true;
+            StateChanged?.Invoke(this, EventArgs.Empty);
             return false;
+        }
 
         if (!enabled)
         {
@@ -115,6 +147,7 @@ public sealed class AutoClickerCoordinator : IDisposable
             throw;
         }
 
+        _hotkeyRegistrationFailed = false;
         StateChanged?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -143,15 +176,20 @@ public sealed class AutoClickerCoordinator : IDisposable
         if (!_settings.Enabled)
             return;
 
+        var wasClicking = IsClicking;
+        var previousMode = _settings.BackgroundModeEnabled;
         var next = _settings.Clone();
         next.BackgroundModeEnabled = !next.BackgroundModeEnabled;
         _settingsStore.Save(next);
         _settings = next;
-        if (IsSelectingTarget || IsClicking)
-            Stop();
-        _statusPresenter.Show(_strings.Get(next.BackgroundModeEnabled
-            ? "Overlay.AutoClick.BackgroundModeEnabled"
-            : "Overlay.AutoClick.CursorModeEnabled"));
+        var modeChangedForActiveSession = ApplyInputModeChange(previousMode, next.BackgroundModeEnabled);
+        _statusPresenter.Show(_strings.Get(wasClicking && modeChangedForActiveSession
+            ? next.BackgroundModeEnabled
+                ? "Overlay.AutoClick.BackgroundModeActive"
+                : "Overlay.AutoClick.CursorModeActive"
+            : next.BackgroundModeEnabled
+                ? "Overlay.AutoClick.BackgroundModeEnabled"
+                : "Overlay.AutoClick.CursorModeEnabled"));
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -225,6 +263,14 @@ public sealed class AutoClickerCoordinator : IDisposable
     {
         _statusPresenter.Show(_strings.Get(IsClicking ? "Overlay.AutoClick.Started" : "Overlay.AutoClick.Stopped"));
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool ApplyInputModeChange(bool previousMode, bool nextMode)
+    {
+        if (previousMode == nextMode)
+            return IsClicking;
+
+        return _clickService.TryUpdateInputMode(nextMode);
     }
 
     private bool TryRegisterConfiguredHotkeys() =>

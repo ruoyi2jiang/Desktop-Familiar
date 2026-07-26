@@ -16,7 +16,7 @@ public readonly record struct AddonApiVersion(int Major, int Minor) : IComparabl
 public static class AddonSdkVersion
 {
     /// <summary>
-    /// 1.3 adds optional inline installed-addon settings composition.
+    /// 1.4 adds optional title-row actions for inline installed-addon settings.
     /// </summary>
-    public static readonly AddonApiVersion CurrentHostApi = new(1, 3);
+    public static readonly AddonApiVersion CurrentHostApi = new(1, 4);
 }

@@ -48,6 +48,8 @@ public sealed class SettingsPageRoutingTests
         Assert.Contains("installedAddonIds.Contains(section.Id)", source, StringComparison.Ordinal);
         Assert.Contains("Settings.Addons.Uninstall.RestartPrompt", source, StringComparison.Ordinal);
         Assert.Contains("Settings.Addons.Install.RestartPrompt", source, StringComparison.Ordinal);
+        Assert.Contains("Settings.Addons.Enable.RestartPrompt", source, StringComparison.Ordinal);
+        Assert.Contains("EnableAddon_Click", source, StringComparison.Ordinal);
         Assert.Contains("PromptForRestart", source, StringComparison.Ordinal);
         Assert.Contains("_applicationRestartService.RestartCurrentProcess();", source, StringComparison.Ordinal);
         Assert.Contains("Application.Current.Shutdown();", source, StringComparison.Ordinal);
@@ -55,6 +57,10 @@ public sealed class SettingsPageRoutingTests
         Assert.Contains("CreateInstalledVersionDetails", source, StringComparison.Ordinal);
         Assert.Contains("Settings.Addons.InstalledVersion", source, StringComparison.Ordinal);
         Assert.Contains("Settings.Addons.LatestCompatibleVersion", source, StringComparison.Ordinal);
+        Assert.Contains("Orientation = Orientation.Horizontal", source, StringComparison.Ordinal);
+        Assert.True(
+            source.IndexOf("panel.Children.Add(buttons);", StringComparison.Ordinal)
+            < source.IndexOf("panel.Children.Add(inlineSettings.Settings);", StringComparison.Ordinal));
         Assert.DoesNotContain("ToggleAddonEnabled_Click", source, StringComparison.Ordinal);
         Assert.DoesNotContain("?? AvailableAddonsList.Items.OfType<ListBoxItem>().FirstOrDefault()", source, StringComparison.Ordinal);
         Assert.Contains("AvailableAddonsTab.Content = LocalizationService.Format(\"Settings.Addons.AvailableTab\", available.Length);", source, StringComparison.Ordinal);

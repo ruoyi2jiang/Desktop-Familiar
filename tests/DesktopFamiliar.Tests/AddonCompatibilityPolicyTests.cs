@@ -23,8 +23,8 @@ public sealed class AddonCompatibilityPolicyTests
         var manifest = AddonManifestJson.Deserialize(json);
 
         Assert.Equal(AutoClickerAddonDefinition.Id, manifest.Id);
-        Assert.Equal("1.0.1", manifest.Version);
-        Assert.Equal(new AddonApiVersion(1, 3), manifest.MinimumHostApi);
+        Assert.Equal("1.0.2", manifest.Version);
+        Assert.Equal(new AddonApiVersion(1, 4), manifest.MinimumHostApi);
         Assert.Equal(new AddonApiVersion(2, 0), manifest.MaximumHostApiExclusive);
         Assert.Contains(AddonCapability.GlobalHotkeys, manifest.Capabilities);
         Assert.Contains(AddonCapability.InputInjection, manifest.Capabilities);
@@ -40,6 +40,19 @@ public sealed class AddonCompatibilityPolicyTests
         Assert.Contains("new AutoClickerHelpIcon(", source, StringComparison.Ordinal);
         Assert.Contains("ToolTipService.InitialShowDelay\" Value=\"0\"", markup, StringComparison.Ordinal);
         Assert.Contains("DynamicResource PrimaryAccentBrush", markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InlineSettings_TitleActionIsPlacedInTheHostTitleRow()
+    {
+        var sdkSource = File.ReadAllText(FindRepositoryFile(Path.Combine("DesktopFamiliar.AddonSdk", "AddonSettings.cs")));
+        var settingsSource = File.ReadAllText(FindRepositoryFile(Path.Combine("Views", "SettingsWindow.xaml.cs")));
+        var autoClickerSource = File.ReadAllText(FindRepositoryFile(Path.Combine("Addons", "AutoClicker", "Views", "AutoClickerSettingsSection.cs")));
+
+        Assert.Contains("FrameworkElement? TitleAction", sdkSource, StringComparison.Ordinal);
+        Assert.Contains("inlineSettings?.TitleAction", settingsSource, StringComparison.Ordinal);
+        Assert.Contains("DockPanel.SetDock(titleAction, Dock.Right)", settingsSource, StringComparison.Ordinal);
+        Assert.Contains("TitleAction = control._enabledToggle", autoClickerSource, StringComparison.Ordinal);
     }
 
     [Fact]

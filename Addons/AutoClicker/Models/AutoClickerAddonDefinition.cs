@@ -11,8 +11,8 @@ public static class AutoClickerAddonDefinition
     {
         Id = Id,
         DisplayName = "Auto clicker",
-        Version = "1.0.1",
-        MinimumHostApi = new AddonApiVersion(1, 3),
+        Version = "1.0.2",
+        MinimumHostApi = new AddonApiVersion(1, 4),
         MaximumHostApiExclusive = new AddonApiVersion(2, 0),
         AssemblyFileName = "DesktopFamiliar.Addons.AutoClicker.dll",
         EntryPoint = "DesktopFamiliar.Addons.AutoClicker.AutoClickerAddon",

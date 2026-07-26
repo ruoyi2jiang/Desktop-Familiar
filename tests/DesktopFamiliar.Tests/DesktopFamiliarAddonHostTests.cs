@@ -6,7 +6,7 @@ namespace DesktopFamiliar.Tests;
 public sealed class DesktopFamiliarAddonHostTests
 {
     [Fact]
-    public void Services_ExposesTheApi13AddonServices()
+    public void Services_ExposesTheApi14AddonServices()
     {
         IAddonViewportActionRegistry registry = new AddonViewportActionRegistry();
         IAddonSettingsSectionRegistry sections = new AddonSettingsSectionRegistry();
@@ -15,7 +15,7 @@ public sealed class DesktopFamiliarAddonHostTests
         var status = new TestStatusPresenter();
         var host = new DesktopFamiliarAddonHost(registry, sections, settings, strings, status);
 
-        Assert.Equal(new AddonApiVersion(1, 3), host.ApiVersion);
+        Assert.Equal(new AddonApiVersion(1, 4), host.ApiVersion);
         Assert.Same(registry, host.Services.GetService(typeof(IAddonViewportActionRegistry)));
         Assert.Same(sections, host.Services.GetService(typeof(IAddonSettingsSectionRegistry)));
         Assert.Same(settings, host.Services.GetService(typeof(IAddonSettingsStore)));

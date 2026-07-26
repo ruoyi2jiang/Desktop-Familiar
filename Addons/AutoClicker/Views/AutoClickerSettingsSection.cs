@@ -58,6 +58,7 @@ public sealed class AutoClickerSettingsControl : Border
     private readonly TextBox _intervalMaximumBox = new();
     private readonly ComboBox _intervalUnitBox = new();
     private readonly CheckBox _backgroundModeCheck = new();
+    private readonly TextBlock _hotkeyRegistrationWarning = new();
     private HotkeyCaptureTarget _capturingHotkey;
     private AutoClickHotkey _pendingHotkey = null!;
     private AutoClickHotkey _pendingBackgroundModeHotkey = null!;
@@ -104,17 +105,17 @@ public sealed class AutoClickerSettingsControl : Border
         var control = new AutoClickerSettingsControl(coordinator, strings, isInline: true);
         return new AddonInlineSettingsContent(
             control._inlineHeader ?? throw new InvalidOperationException("The inline settings header was not created."),
-            control._optionsPanel);
+            control._optionsPanel)
+        {
+            TitleAction = control._enabledToggle
+        };
     }
 
     private FrameworkElement BuildContent()
     {
         var panel = new StackPanel();
         var header = new DockPanel();
-        _enabledToggle.Style = FindStyle("SettingsToggle");
-        _enabledToggle.ToolTip = _strings.Get("Settings.AutoClick.Enabled");
-        _enabledToggle.Checked += EnabledToggle_Changed;
-        _enabledToggle.Unchecked += EnabledToggle_Changed;
+        ConfigureEnabledToggle();
         DockPanel.SetDock(_enabledToggle, Dock.Right);
         header.Children.Add(_enabledToggle);
         header.Children.Add(Title("Settings.AutoClick.Title", 20));
@@ -127,19 +128,25 @@ public sealed class AutoClickerSettingsControl : Border
 
     private FrameworkElement BuildInlineHeader()
     {
-        var header = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+        ConfigureEnabledToggle();
+        return Description("Settings.AutoClick.Description", new Thickness(0, 6, 0, 0));
+    }
+
+    private void ConfigureEnabledToggle()
+    {
         _enabledToggle.Style = FindStyle("SettingsToggle");
         _enabledToggle.ToolTip = _strings.Get("Settings.AutoClick.Enabled");
         _enabledToggle.Checked += EnabledToggle_Changed;
         _enabledToggle.Unchecked += EnabledToggle_Changed;
-        DockPanel.SetDock(_enabledToggle, Dock.Right);
-        header.Children.Add(_enabledToggle);
-        header.Children.Add(Description("Settings.AutoClick.Description", new Thickness(0, 0, 14, 0)));
-        return header;
     }
 
     private void BuildOptionsPanel()
     {
+        _hotkeyRegistrationWarning.Text = _strings.Get("Settings.AutoClick.Hotkey.StartupUnavailable");
+        _hotkeyRegistrationWarning.Margin = new Thickness(0, 0, 0, 12);
+        _hotkeyRegistrationWarning.TextWrapping = TextWrapping.Wrap;
+        _hotkeyRegistrationWarning.SetResourceReference(TextBlock.ForegroundProperty, "PrimaryAccentBrush");
+        _optionsPanel.Children.Add(_hotkeyRegistrationWarning);
         _optionsPanel.Children.Add(Title("Settings.AutoClick.Hotkey", 16));
         _optionsPanel.Children.Add(Description("Settings.AutoClick.Hotkey.Description", new Thickness(0, 5, 0, 12)));
         ConfigureActionButton(_hotkeyButton, AutoClickHotkey_Click);
@@ -241,6 +248,7 @@ public sealed class AutoClickerSettingsControl : Border
         _intervalMinimumBox.Text = (settings.IntervalMilliseconds / 1000d).ToString("0.###", CultureInfo.CurrentCulture);
         _intervalMaximumBox.Text = (settings.IntervalMaximumMilliseconds / 1000d).ToString("0.###", CultureInfo.CurrentCulture);
         UpdateOptionsVisibility();
+        UpdateHotkeyWarningVisibility();
     }
 
     private void EnabledToggle_Changed(object sender, RoutedEventArgs e)
@@ -251,7 +259,10 @@ public sealed class AutoClickerSettingsControl : Border
         try
         {
             if (!_coordinator.TrySetEnabled(_enabledToggle.IsChecked == true))
+            {
                 ShowWarningForKey("Settings.AutoClick.Hotkey.Unavailable");
+                UpdateHotkeyWarningVisibility();
+            }
         }
         catch (Exception exception)
         {
@@ -267,6 +278,11 @@ public sealed class AutoClickerSettingsControl : Border
 
     private void UpdateOptionsVisibility() =>
         _optionsPanel.Visibility = _coordinator.Settings.Enabled ? Visibility.Visible : Visibility.Collapsed;
+
+    private void UpdateHotkeyWarningVisibility() =>
+        _hotkeyRegistrationWarning.Visibility = _coordinator.HotkeyRegistrationFailed
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     private void AutoClickHotkey_Click(object sender, RoutedEventArgs e) => BeginHotkeyCapture(HotkeyCaptureTarget.Toggle);
 
@@ -392,6 +408,7 @@ public sealed class AutoClickerSettingsControl : Border
                     _backgroundModeCheck.IsChecked == true))
             {
                 ShowWarningForKey("Settings.AutoClick.Hotkey.Unavailable");
+                UpdateHotkeyWarningVisibility();
                 return;
             }
         }

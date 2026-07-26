@@ -1,6 +1,6 @@
 # Addon SDK compatibility
 
-`DesktopFamiliar.AddonSdk` is the versioned contract between the main application and an addon. The running host currently exposes API **1.3**. The SDK version is for developers; end users install addon packages, not SDK assemblies.
+`DesktopFamiliar.AddonSdk` is the versioned contract between the main application and an addon. The running host currently exposes API **1.4**. The SDK version is for developers; end users install addon packages, not SDK assemblies.
 
 Every addon manifest declares the API range it supports. The host may load it only when:
 
@@ -17,7 +17,7 @@ For example, this addon works with all 1.x hosts and refuses a future 2.0 host u
   "displayName": "Example addon",
   "description": "A short description shown in the Addons marketplace.",
   "version": "1.4.0",
-  "minimumHostApi": { "major": 1, "minor": 3 },
+  "minimumHostApi": { "major": 1, "minor": 4 },
   "maximumHostApiExclusive": { "major": 2, "minor": 0 },
   "assemblyFileName": "ExampleAddon.dll",
   "entryPoint": "ExampleAddon.EntryPoint",
@@ -39,6 +39,8 @@ Host API 1.2 adds four services:
 An API-1.2 addon obtains only the services it declares it needs from `IAddonHost.Services`; it must fail startup cleanly if a required service is unavailable. The Auto Clicker is the reference implementation. API 1.2 does not make host WPF windows, application services, or the core persistence model public.
 
 Host API 1.3 adds the optional `IInlineAddonSettingsSection` presentation contract. An addon that implements it returns its header and settings content as `AddonInlineSettingsContent`; the host places both inside that addon's installed-card surface, along with host-owned version and update controls. The addon still owns its controls and behavior, while the host owns card placement and installation actions. Addons that only implement `IAddonSettingsSection` remain supported as separate settings sections.
+
+Host API 1.4 adds the optional `AddonInlineSettingsContent.TitleAction` visual. The host places it on the right of the installed addon's title row. This is intended for one compact addon-owned control, such as an enabled toggle; it must not duplicate host lifecycle actions such as update or uninstall.
 
 The manifest format is independently versioned and currently uses `manifestVersion: 1`. A host must reject unknown manifest versions rather than guessing how to load them. `assemblyFileName` is a file name (not a path) at the package root; `entryPoint` names the type to instantiate from that assembly.
 

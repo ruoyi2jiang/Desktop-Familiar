@@ -2,10 +2,10 @@
   "manifestVersion": 1,
   "id": "desktopfamiliar.auto-clicker",
   "displayName": "Auto clicker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minimumHostApi": {
     "major": 1,
-    "minor": 3
+    "minor": 4
   },
   "maximumHostApiExclusive": {
     "major": 2,
