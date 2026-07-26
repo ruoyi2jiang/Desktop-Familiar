@@ -43,7 +43,11 @@ public interface IInlineAddonSettingsSection : IAddonSettingsSection
 }
 
 /// <summary>Addon-owned visual fragments composed by the host inside one installed-addon card.</summary>
-public sealed record AddonInlineSettingsContent(FrameworkElement Header, FrameworkElement Settings);
+public sealed record AddonInlineSettingsContent(FrameworkElement Header, FrameworkElement Settings)
+{
+    /// <summary>Optional host API 1.4 action placed at the right of the installed addon's title row.</summary>
+    public FrameworkElement? TitleAction { get; init; }
+}
 
 /// <summary>Host service for registering addon-owned settings visuals (host API 1.2 or later).</summary>
 public interface IAddonSettingsSectionRegistry

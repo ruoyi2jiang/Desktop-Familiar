@@ -25,6 +25,8 @@ public sealed class AddonInstallationStore
         _packagesDirectory = Path.Combine(_addonsDirectory, PackagesDirectoryName);
         _registryPath = Path.Combine(_addonsDirectory, RegistryFileName);
         Directory.CreateDirectory(_packagesDirectory);
+        CleanupPendingPackageRemovals();
+        CleanupPendingDataRemovals();
     }
 
     public string AddonsDirectory => _addonsDirectory;
@@ -73,42 +75,61 @@ public sealed class AddonInstallationStore
             ExtractPackageSafely(packagePath, stagingDirectory);
             var manifest = ReadPackageManifest(stagingDirectory);
             ValidatePackageManifest(manifest, release, hostApi);
+            if (!File.Exists(Path.Combine(stagingDirectory, manifest.AssemblyFileName)))
+                throw new InvalidDataException("The addon package does not contain its declared assembly at the package root.");
 
             var destinationDirectory = GetPackageDirectory(manifest.Id, manifest.Version);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationDirectory)!);
-            var replacedPackageDirectory = Directory.Exists(destinationDirectory)
-                ? Path.Combine(_packagesDirectory, $".backup-{Guid.NewGuid():N}")
-                : null;
-            if (replacedPackageDirectory is not null)
-                Directory.Move(destinationDirectory, replacedPackageDirectory);
-            Directory.Move(stagingDirectory, destinationDirectory);
-
-            var installed = new InstalledAddon
-            {
-                Id = manifest.Id,
-                InstalledVersion = manifest.Version,
-                Enabled = true,
-                PackageDirectory = Path.GetRelativePath(_addonsDirectory, destinationDirectory),
-                Manifest = manifest.Clone()
-            };
             var registry = ReadRegistry();
-            registry.Addons.RemoveAll(addon => string.Equals(addon.Id, installed.Id, StringComparison.OrdinalIgnoreCase));
-            registry.Addons.Add(installed);
+            var previous = registry.Addons.SingleOrDefault(addon =>
+                string.Equals(addon.Id, manifest.Id, StringComparison.OrdinalIgnoreCase));
+            var previousDirectory = previous is null ? null : GetSafePackageDirectory(previous.PackageDirectory);
+            var pendingPreviousDirectory = previousDirectory is not null
+                && !string.Equals(previousDirectory, destinationDirectory, StringComparison.OrdinalIgnoreCase)
+                && Directory.Exists(previousDirectory)
+                    ? Path.Combine(_packagesDirectory, $".remove-{Guid.NewGuid():N}")
+                    : null;
+            var replacedPackageDirectory = Directory.Exists(destinationDirectory)
+                ? Path.Combine(_packagesDirectory, $".remove-{Guid.NewGuid():N}")
+                : null;
+            var newDestinationCreated = false;
+            InstalledAddon installed;
             try
             {
+                if (pendingPreviousDirectory is not null)
+                    Directory.Move(previousDirectory!, pendingPreviousDirectory);
+                if (replacedPackageDirectory is not null)
+                    Directory.Move(destinationDirectory, replacedPackageDirectory);
+                Directory.Move(stagingDirectory, destinationDirectory);
+                newDestinationCreated = true;
+
+                installed = new InstalledAddon
+                {
+                    Id = manifest.Id,
+                    InstalledVersion = manifest.Version,
+                    Enabled = previous?.Enabled ?? true,
+                    PackageDirectory = Path.GetRelativePath(_addonsDirectory, destinationDirectory),
+                    Manifest = manifest.Clone()
+                };
+                registry.Addons.RemoveAll(addon => string.Equals(addon.Id, installed.Id, StringComparison.OrdinalIgnoreCase));
+                registry.Addons.Add(installed);
                 WriteRegistry(registry);
             }
             catch
             {
-                if (Directory.Exists(destinationDirectory))
+                if (newDestinationCreated && Directory.Exists(destinationDirectory))
                     Directory.Delete(destinationDirectory, recursive: true);
                 if (replacedPackageDirectory is not null && Directory.Exists(replacedPackageDirectory))
                     Directory.Move(replacedPackageDirectory, destinationDirectory);
+                if (pendingPreviousDirectory is not null && Directory.Exists(pendingPreviousDirectory))
+                    Directory.Move(pendingPreviousDirectory, previousDirectory!);
                 throw;
             }
 
             if (replacedPackageDirectory is not null && Directory.Exists(replacedPackageDirectory))
-                Directory.Delete(replacedPackageDirectory, recursive: true);
+                DeletePendingPackageDirectory(replacedPackageDirectory);
+            if (pendingPreviousDirectory is not null && Directory.Exists(pendingPreviousDirectory))
+                DeletePendingPackageDirectory(pendingPreviousDirectory);
             return installed.Clone();
         }
         finally
@@ -161,7 +182,7 @@ public sealed class AddonInstallationStore
         }
 
         if (pendingRemovalDirectory is not null && Directory.Exists(pendingRemovalDirectory))
-            Directory.Delete(pendingRemovalDirectory, recursive: true);
+            DeletePendingPackageDirectory(pendingRemovalDirectory);
 
         if (deleteSavedData)
         {
@@ -172,7 +193,7 @@ public sealed class AddonInstallationStore
                 try
                 {
                     Directory.Move(savedDataDirectory, pendingDataRemovalDirectory);
-                    Directory.Delete(pendingDataRemovalDirectory, recursive: true);
+                    DeletePendingDataDirectory(pendingDataRemovalDirectory);
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
@@ -219,6 +240,60 @@ public sealed class AddonInstallationStore
         {
             if (File.Exists(temporaryPath))
                 File.Delete(temporaryPath);
+        }
+    }
+
+    private void CleanupPendingPackageRemovals()
+    {
+        try
+        {
+            foreach (var directory in Directory.GetDirectories(_packagesDirectory, ".remove-*", SearchOption.TopDirectoryOnly))
+                DeletePendingPackageDirectory(directory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.Warning("Pending addon package cleanup could not be completed.", exception);
+        }
+    }
+
+    private void CleanupPendingDataRemovals()
+    {
+        var dataDirectory = Path.Combine(_addonsDirectory, "data");
+        if (!Directory.Exists(dataDirectory))
+            return;
+
+        try
+        {
+            foreach (var directory in Directory.GetDirectories(dataDirectory, ".remove-*", SearchOption.TopDirectoryOnly))
+                DeletePendingDataDirectory(directory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.Warning("Pending addon data cleanup could not be completed.", exception);
+        }
+    }
+
+    private static void DeletePendingPackageDirectory(string directory)
+    {
+        try
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.Warning($"Pending addon package directory '{directory}' could not be deleted.", exception);
+        }
+    }
+
+    private static void DeletePendingDataDirectory(string directory)
+    {
+        try
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.Warning($"Pending addon data directory '{directory}' could not be deleted.", exception);
         }
     }
 

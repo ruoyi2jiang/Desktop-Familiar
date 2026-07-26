@@ -17,4 +17,25 @@ public sealed class ApplicationRestartServiceTests
         Assert.False(startInfo.UseShellExecute);
         Assert.Equal(["--profile", "Test profile"], startInfo.ArgumentList);
     }
+
+    [Fact]
+    public void CreateRestartStartInfo_ReplacesAStaleWaitArgumentAndWaitsForTheCurrentProcess()
+    {
+        var startInfo = ApplicationRestartService.CreateRestartStartInfo(
+            "DesktopFamiliar.exe",
+            ["--profile", "Test profile", ApplicationRestartService.RestartWaitArgument, "42"],
+            "C:\\Desktop Familiar",
+            1234);
+
+        Assert.Equal(
+            ["--profile", "Test profile", ApplicationRestartService.RestartWaitArgument, "1234"],
+            startInfo.ArgumentList);
+    }
+
+    [Fact]
+    public void WaitForRestartParent_IgnoresAnExitedProcess()
+    {
+        Assert.True(ApplicationRestartService.WaitForRestartParent(
+            [ApplicationRestartService.RestartWaitArgument, int.MaxValue.ToString()]));
+    }
 }

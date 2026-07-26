@@ -30,6 +30,49 @@ public sealed class AddonInstallationStoreTests : IDisposable
     }
 
     [Fact]
+    public void Install_UpdateRemovesThePreviousPackageAndPreservesDisabledState()
+    {
+        var previousManifest = AutoClickerAddonDefinition.CreateManifest();
+        previousManifest.Version = "1.0.1";
+        var previousPackage = CreatePackage(previousManifest);
+        var store = new AddonInstallationStore(_temporaryDirectory);
+        var previous = store.Install(
+            previousPackage,
+            CreateRelease(previousPackage, previousManifest),
+            AddonSdkVersion.CurrentHostApi);
+        store.SetEnabled(previous.Id, enabled: false);
+        var previousDirectory = Path.Combine(store.AddonsDirectory, previous.PackageDirectory);
+
+        var nextManifest = AutoClickerAddonDefinition.CreateManifest();
+        var nextPackage = CreatePackage(nextManifest);
+        var updated = store.Install(
+            nextPackage,
+            CreateRelease(nextPackage, nextManifest),
+            AddonSdkVersion.CurrentHostApi);
+
+        Assert.False(updated.Enabled);
+        Assert.False(Directory.Exists(previousDirectory));
+        Assert.True(Directory.Exists(Path.Combine(store.AddonsDirectory, updated.PackageDirectory)));
+        Assert.Single(store.GetInstalled());
+    }
+
+    [Fact]
+    public void Constructor_RemovesPendingPackageAndDataDirectories()
+    {
+        var pendingPackage = Path.Combine(_temporaryDirectory, "Addons", "packages", ".remove-package");
+        var pendingData = Path.Combine(_temporaryDirectory, "Addons", "data", ".remove-data");
+        Directory.CreateDirectory(pendingPackage);
+        Directory.CreateDirectory(pendingData);
+        File.WriteAllText(Path.Combine(pendingPackage, "package.tmp"), "pending");
+        File.WriteAllText(Path.Combine(pendingData, "settings.tmp"), "pending");
+
+        _ = new AddonInstallationStore(_temporaryDirectory);
+
+        Assert.False(Directory.Exists(pendingPackage));
+        Assert.False(Directory.Exists(pendingData));
+    }
+
+    [Fact]
     public void Install_RejectsChecksumMismatchWithoutMutatingRegistry()
     {
         var packagePath = CreatePackage(AutoClickerAddonDefinition.CreateManifest());
@@ -56,6 +99,20 @@ public sealed class AddonInstallationStoreTests : IDisposable
             store.Install(packagePath, CreateRelease(packagePath), AddonSdkVersion.CurrentHostApi));
 
         Assert.Contains("does not match", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(store.GetInstalled());
+    }
+
+    [Fact]
+    public void Install_RejectsPackageWithoutItsDeclaredAssembly()
+    {
+        var manifest = AutoClickerAddonDefinition.CreateManifest();
+        var packagePath = CreatePackage(manifest, includeAssembly: false);
+        var store = new AddonInstallationStore(_temporaryDirectory);
+
+        var exception = Assert.Throws<InvalidDataException>(() =>
+            store.Install(packagePath, CreateRelease(packagePath), AddonSdkVersion.CurrentHostApi));
+
+        Assert.Contains("declared assembly", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(store.GetInstalled());
     }
 
@@ -218,7 +275,10 @@ public sealed class AddonInstallationStoreTests : IDisposable
             Directory.Delete(_temporaryDirectory, recursive: true);
     }
 
-    private string CreatePackage(AddonManifest manifest, string? assemblyPath = null)
+    private string CreatePackage(
+        AddonManifest manifest,
+        string? assemblyPath = null,
+        bool includeAssembly = true)
     {
         Directory.CreateDirectory(_temporaryDirectory);
         var packagePath = Path.Combine(_temporaryDirectory, $"{Guid.NewGuid():N}.zip");
@@ -228,23 +288,25 @@ public sealed class AddonInstallationStoreTests : IDisposable
             writer.Write(JsonSerializer.Serialize(manifest, AddonManifestJson.Options));
         if (assemblyPath is not null)
             archive.CreateEntryFromFile(assemblyPath, manifest.AssemblyFileName);
+        else if (includeAssembly)
+            archive.CreateEntry(manifest.AssemblyFileName);
         return packagePath;
     }
 
-    private static AddonPackageRelease CreateRelease(string packagePath)
+    private static AddonPackageRelease CreateRelease(string packagePath, AddonManifest? manifest = null)
     {
-        var manifest = AutoClickerAddonDefinition.CreateManifest();
+        manifest ??= AutoClickerAddonDefinition.CreateManifest();
         return new AddonPackageRelease
         {
-        Id = manifest.Id,
-        DisplayName = "Auto clicker",
-        Description = "Repeatedly click an area of the screen.",
-        Version = manifest.Version,
-        MinimumHostApi = manifest.MinimumHostApi,
-        MaximumHostApiExclusive = manifest.MaximumHostApiExclusive,
-        PackageUrl = $"https://github.com/ruoyi2jiang/Desktop-Familiar/releases/download/auto-clicker-v{manifest.Version}/auto-clicker.zip",
-        ReleaseNotesUrl = $"https://github.com/ruoyi2jiang/Desktop-Familiar/releases/tag/auto-clicker-v{manifest.Version}",
-        Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packagePath)))
+            Id = manifest.Id,
+            DisplayName = "Auto clicker",
+            Description = "Repeatedly click an area of the screen.",
+            Version = manifest.Version,
+            MinimumHostApi = manifest.MinimumHostApi,
+            MaximumHostApiExclusive = manifest.MaximumHostApiExclusive,
+            PackageUrl = $"https://github.com/ruoyi2jiang/Desktop-Familiar/releases/download/auto-clicker-v{manifest.Version}/auto-clicker.zip",
+            ReleaseNotesUrl = $"https://github.com/ruoyi2jiang/Desktop-Familiar/releases/tag/auto-clicker-v{manifest.Version}",
+            Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packagePath)))
         };
     }
 

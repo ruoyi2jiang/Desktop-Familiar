@@ -52,6 +52,8 @@ public partial class App : System.Windows.Application
         RegisterExceptionHandlers();
         try
         {
+            if (!ApplicationRestartService.WaitForRestartParent(e.Args))
+                AppLogger.Warning("The previous Desktop Familiar process did not exit before the restart timeout.");
             LocalizationService.Initialize();
             _singleInstanceMutex = new Mutex(initiallyOwned: true, "Local\\DesktopFamiliar-84D01F52-E8F4-4D45-9D86-D25CC33290BA", out var isFirst);
             if (!isFirst)

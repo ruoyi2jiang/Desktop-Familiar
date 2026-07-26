@@ -6,8 +6,27 @@ using DrawingRectangle = System.Drawing.Rectangle;
 
 namespace DesktopFamiliar.Addons.AutoClicker.Services;
 
+internal interface IAutoClickService : IDisposable
+{
+    bool IsClicking { get; }
+
+    event EventHandler? ClickingChanged;
+
+    bool TryStart(
+        DrawingRectangle targetArea,
+        int intervalMinimumMilliseconds,
+        int intervalMaximumMilliseconds,
+        bool useBackgroundClick);
+
+    void UpdateIntervals(int intervalMinimumMilliseconds, int intervalMaximumMilliseconds);
+
+    bool TryUpdateInputMode(bool useBackgroundClick);
+
+    void Stop();
+}
+
 /// <summary>Performs scheduled cursor input or targeted background window clicks.</summary>
-public sealed class AutoClickService : IDisposable
+public sealed class AutoClickService : IAutoClickService
 {
     private const uint WmMouseMove = 0x0200;
     private const uint WmLeftButtonDown = 0x0201;
@@ -88,6 +107,50 @@ public sealed class AutoClickService : IDisposable
         }
         if (changed)
             ClickingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void UpdateIntervals(int intervalMinimumMilliseconds, int intervalMaximumMilliseconds)
+    {
+        intervalMinimumMilliseconds = Math.Clamp(
+            intervalMinimumMilliseconds,
+            AutoClickerSettings.MinimumIntervalMilliseconds,
+            AutoClickerSettings.MaximumIntervalMilliseconds);
+        intervalMaximumMilliseconds = Math.Clamp(
+            intervalMaximumMilliseconds,
+            intervalMinimumMilliseconds,
+            AutoClickerSettings.MaximumIntervalMilliseconds);
+
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            _intervalMinimumMilliseconds = intervalMinimumMilliseconds;
+            _intervalMaximumMilliseconds = intervalMaximumMilliseconds;
+            if (_timer is not null)
+                ScheduleNextClick();
+        }
+    }
+
+    public bool TryUpdateInputMode(bool useBackgroundClick)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (_timer is null)
+                return true;
+
+            if (!useBackgroundClick)
+            {
+                _backgroundTarget = null;
+                return true;
+            }
+
+            var backgroundTarget = TryCreateBackgroundTarget(_targetArea);
+            if (backgroundTarget is null)
+                return false;
+
+            _backgroundTarget = backgroundTarget;
+            return true;
+        }
     }
 
     public void Dispose()

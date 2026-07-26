@@ -16,7 +16,7 @@ App (composition root)
   -> CalendarReminderService
       -> CalendarOccurrenceCalculator
       -> IClock
-  -> Addon host (API 1.2)
+  -> Addon host (API 1.4)
       -> Auto Clicker addon (installed package)
           -> GlobalHotkeyService
           -> AutoClickService
@@ -32,6 +32,7 @@ App (composition root)
 ## Folder responsibilities
 
 - `DesktopFamiliar.AddonSdk/`: versioned addon manifest, compatibility, capability, and lifecycle contracts.
+- `Addons/deploy-local.ps1` and `Addons/build-package.ps1`: shared first-party local deployment, package construction, and artifact validation.
 - `Addons/<addon-id>/`: addon-owned models, pure services, WPF views, manifest, and scoped contributor workflow.
 - `Models/`: serializable core data and deep cloning. Models do not perform I/O or show UI.
 - `Services/Animation/`: pure playback state plus frame-decoding contracts and implementation.
@@ -47,9 +48,9 @@ App (composition root)
 
 `CompanionManager` owns the loaded `DesktopCompanionData`, exposes the selected companion, and raises narrow events after a successful mutation. It depends only on `ICompanionRepository`. `ThemeSelectionPolicy` resolves a saved-theme card to its built-in or custom kind, so selecting a built-in palette cannot be persisted as a custom theme. Before a save the manager keeps a deep snapshot; if persistence fails, it restores that snapshot and throws `AppPersistenceException` so the application can report the failure without leaving false in-memory state.
 
-The addon host exposes API 1.2 through `DesktopFamiliar.AddonSdk`. An addon manifest declares a supported host API range and sensitive capabilities; `AddonCompatibilityPolicy` rejects unknown manifest formats, missing identities/entry points, assemblies, and incompatible hosts before activation. `AddonInstallationStore` owns the atomic local installation registry and safe ZIP extraction. `AddonSettingsStore` atomically persists addon-owned JSON under its data directory; startup transfers legacy Auto Clicker values before schema-8 core-data normalization removes them. `AddonRuntimeLoader` creates a collectible assembly-load context only for enabled packages that have passed those checks. `IAddonViewportActionRegistry` is a host service: every visible addon command is grouped below the overlay's single **Action** submenu and invoked through `DeferredMenuAction` after the menu closes. API 1.2 adds the settings-section registry, scoped settings store, localized-string provider, and transient companion-status presenter. The Auto Clicker uses these services for its runtime, settings UI, target picker, hotkeys, input engine, and short dialogue messages without a reference to the application assembly. `docs/addons/sdk-compatibility.md` is the normative versioning contract; the running app will only be wired to the pinned first-party catalogue, never arbitrary external packages.
+The addon host exposes API 1.4 through `DesktopFamiliar.AddonSdk`. An addon manifest declares a supported host API range and sensitive capabilities; `AddonCompatibilityPolicy` rejects unknown manifest formats, missing identities/entry points, assemblies, and incompatible hosts before activation. `AddonInstallationStore` owns the atomic local installation registry and safe ZIP extraction, preserves the installation's enabled state across an update, and retires superseded package directories. `AddonSettingsStore` atomically persists addon-owned JSON under its data directory; startup transfers legacy Auto Clicker values before schema-8 core-data normalization removes them. `AddonRuntimeLoader` creates a collectible assembly-load context only for enabled packages that have passed those checks. `IAddonViewportActionRegistry` is a host service: every visible addon command is grouped below the overlay's single **Action** submenu and invoked through `DeferredMenuAction` after the menu closes. API 1.2 adds the settings-section registry, scoped settings store, localized-string provider, and transient companion-status presenter; API 1.3 adds inline installed-card content; API 1.4 adds an optional addon-owned title-row action. The Auto Clicker uses these services for its runtime, settings UI, target picker, hotkeys, input engine, and short dialogue messages without a reference to the application assembly. `docs/addons/sdk-compatibility.md` is the normative versioning contract; the running app will only be wired to the pinned first-party catalogue, never arbitrary external packages.
 
-`ApplicationRestartService` is the process boundary used after an addon uninstall. It starts the same executable command line before the current WPF application closes, allowing the unloaded addon to finish runtime cleanup in the replacement process.
+`ApplicationRestartService` is the process boundary used after an addon lifecycle change. It starts the same executable command line with the old process ID; the replacement waits for that process to exit before acquiring the single-instance mutex, preventing the restart from being consumed by the still-running instance.
 
 `CompanionActivityState` is runtime-only and distinguishes Idle from Reminder. `FocusModeVisibilityPolicy` combines activity with the persisted focus toggle: normal mode displays the selected companion, while Focus displays it only for Reminder. Consumers use `CompanionManager.ShouldDisplayCompanion` instead of duplicating the rule.
 

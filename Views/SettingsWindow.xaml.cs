@@ -331,6 +331,25 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void EnableAddon_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: InstalledAddon installed })
+            return;
+
+        try
+        {
+            _addonManager.SetEnabled(installed.Id, enabled: true);
+            AddonsStatusText.Text = LocalizationService.Get("Settings.Addons.RestartRequired");
+            RefreshAddonManagerEntries();
+            PromptForRestart("Settings.Addons.Enable.RestartPrompt", installed.Manifest.DisplayName);
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error($"The addon '{installed.Id}' could not be enabled.", exception);
+            AddonsStatusText.Text = LocalizationService.Format("Settings.Addons.EnableFailed", exception.Message);
+        }
+    }
+
     private void PromptForRestart(string promptKey, string addonDisplayName)
     {
         var restartNow = MessageBox.Show(
@@ -461,6 +480,10 @@ public partial class SettingsWindow : Window
         card.SetResourceReference(Border.BackgroundProperty, ThemeTokens.PrimaryBackground);
         card.SetResourceReference(Border.BorderBrushProperty, ThemeTokens.PrimaryAccent);
         var panel = new StackPanel();
+        var inlineSettings = _addonSettingsSections.GetSections()
+            .OfType<IInlineAddonSettingsSection>()
+            .FirstOrDefault(section => string.Equals(section.Id, entry.Id, StringComparison.OrdinalIgnoreCase))
+            ?.CreateInlineContent();
         var title = new TextBlock
         {
             Text = entry.DisplayName,
@@ -468,18 +491,18 @@ public partial class SettingsWindow : Window
             FontWeight = FontWeights.SemiBold
         };
         title.SetResourceReference(TextBlock.ForegroundProperty, ThemeTokens.PrimaryTextOnBackground);
-        panel.Children.Add(title);
-
-        var inlineSettings = _addonSettingsSections.GetSections()
-            .OfType<IInlineAddonSettingsSection>()
-            .FirstOrDefault(section => string.Equals(section.Id, entry.Id, StringComparison.OrdinalIgnoreCase))
-            ?.CreateInlineContent();
+        var titleRow = new DockPanel();
+        if (inlineSettings?.TitleAction is { } titleAction)
+        {
+            DockPanel.SetDock(titleAction, Dock.Right);
+            titleRow.Children.Add(titleAction);
+        }
+        titleRow.Children.Add(title);
+        panel.Children.Add(titleRow);
         if (inlineSettings is not null)
         {
             panel.Children.Add(inlineSettings.Header);
             panel.Children.Add(CreateInstalledVersionDetails(entry));
-            inlineSettings.Settings.Margin = new Thickness(0, 20, 0, 0);
-            panel.Children.Add(inlineSettings.Settings);
         }
         else
         {
@@ -500,7 +523,7 @@ public partial class SettingsWindow : Window
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 20, 0, 0)
+            Margin = new Thickness(0, 8, 0, 0)
         };
 
         if (entry.AvailableRelease is { } release && entry.HasUpdate)
@@ -517,6 +540,21 @@ public partial class SettingsWindow : Window
             buttons.Children.Add(update);
         }
 
+        if (!installed.Enabled)
+        {
+            var enable = new Button
+            {
+                Content = LocalizationService.Get("Settings.Addons.Enable"),
+                Style = (Style)FindResource("PrimaryButton"),
+                Height = 34,
+                Padding = new Thickness(12, 0, 12, 0),
+                Margin = new Thickness(buttons.Children.Count == 0 ? 0 : 8, 0, 0, 0),
+                Tag = installed
+            };
+            enable.Click += EnableAddon_Click;
+            buttons.Children.Add(enable);
+        }
+
         var uninstall = new Button
         {
             Content = LocalizationService.Get("Settings.Addons.Uninstall"),
@@ -530,15 +568,35 @@ public partial class SettingsWindow : Window
         buttons.Children.Add(uninstall);
 
         panel.Children.Add(buttons);
+        if (inlineSettings is not null)
+        {
+            inlineSettings.Settings.Margin = new Thickness(0, 20, 0, 0);
+            panel.Children.Add(inlineSettings.Settings);
+        }
         card.Child = panel;
         return card;
     }
 
     private StackPanel CreateInstalledVersionDetails(AddonManagerEntry entry)
     {
-        var details = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
+        var details = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 10, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
         details.Children.Add(CreateInstalledDetailText(
             LocalizationService.Format("Settings.Addons.InstalledVersion", entry.Installed!.InstalledVersion)));
+        var divider = new Border
+        {
+            Width = 1,
+            Height = 18,
+            Margin = new Thickness(10, 0, 10, 0),
+            Opacity = 0.72,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        divider.SetResourceReference(Border.BackgroundProperty, ThemeTokens.PrimaryAccent);
+        details.Children.Add(divider);
         details.Children.Add(CreateInstalledDetailText(
             LocalizationService.Format(
                 "Settings.Addons.LatestCompatibleVersion",
