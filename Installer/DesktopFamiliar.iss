@@ -1,5 +1,5 @@
 #define MyAppName "Desktop Familiar"
-#define MyAppVersion "0.9.2"
+#define MyAppVersion "0.9.3"
 #define MyAppPublisher "Desktop Familiar"
 #define MyAppExeName "DesktopFamiliar.exe"
 #ifndef MyAppSourceRoot
@@ -12,7 +12,7 @@ AppId={{92AE6C24-0462-4D93-B029-5F9DF31B4B56}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-VersionInfoVersion=0.9.2.0
+VersionInfoVersion=0.9.3.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} installer
 VersionInfoProductName={#MyAppName}
