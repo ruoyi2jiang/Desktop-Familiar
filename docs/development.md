@@ -96,6 +96,15 @@ Do not force-add ignored character assets. The public application and installer 
 - Deleting one weekly occurrence removes only that date and reminder; deleting the series removes every occurrence.
 - A forced recoverable save failure preserves the prior state; a fatal test failure produces a copyable latest-session log.
 
+### Local chat verification
+
+- Start with chat disabled. Enable it with no installed model and check all three setup actions in **Local model**. Cancel the catalogue picker and verify the previous selection. Complete a model download and check the selector and viewport command.
+- Choose an existing GGUF and confirm **Use model**. With a previously installed engine, verify setup works offline. Scan a chosen folder with nested GGUFs, confirm only those candidates appear, and select one. Check an empty folder and an invalid file. Restart and send a message from the linked model. Move the file, verify chat becomes unavailable, then select the new path to reconnect it.
+- Open the prompt from the viewport and from the configured global shortcut. Drag the pet near the top, bottom, and sides. Check that the prompt follows, fits the monitor work area, and leaves visible dialogue or reminders readable. Close and reopen it with the same shortcut, Escape, and the top-right close button. Check that the single-line input and adjacent Send button align at their top and bottom edges and have visible padding inside the bubble. Verify the ↵ button is announced as **Send**, and Tab and Enter operate the focused button. Enter a message, check the thinking phrase and full reply, and send a second message while the first bubble is still readable. Trigger scene dialogue or a reminder and check that reading resumes afterwards.
+- Give two companions distinct notes and switch while one is still answering. Check both history menu entry points. Clear only the selected history, first retaining its notes and then removing them.
+- Close chat, enter Focus from the pet menu, leave Focus from the notification-area toggle, then reopen Chat from the pet menu. Type letters and use Backspace immediately. Repeat using the configured shortcut to reopen. Verify the text changes even on the first reopen after using the tray.
+- Turn chat off and check that the prompt closes, the shortcut and viewport command stop opening it, and saved history remains accessible.
+
 ## Documentation ownership
 
 - User-facing behavior: `docs/user-manual.md` and README capability summary.

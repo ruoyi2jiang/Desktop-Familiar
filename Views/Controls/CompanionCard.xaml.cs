@@ -63,7 +63,7 @@ public partial class CompanionCard : UserControl
 
     private static FrameworkElement CreatePreview(CompanionDefinition companion)
     {
-        var preview = LoadPreview(GetIdleDefaultPreviewPath(companion));
+        var preview = LoadIdlePreview(companion);
         if (preview is not null)
         {
             return new Image
@@ -82,6 +82,8 @@ public partial class CompanionCard : UserControl
             VerticalAlignment = VerticalAlignment.Center
         };
     }
+
+    internal static ImageSource? LoadIdlePreview(CompanionDefinition companion) => LoadPreview(GetIdleDefaultPreviewPath(companion));
 
     private static string? GetIdleDefaultPreviewPath(CompanionDefinition companion)
     {

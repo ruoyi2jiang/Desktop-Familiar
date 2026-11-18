@@ -12,6 +12,7 @@ public sealed class TrayService : IDisposable
     private readonly Action _showCompanionLibrary;
     private readonly Action _showCalendarEvents;
     private readonly Action _showSettings;
+    private readonly Action _showHistory;
     private readonly Action _exit;
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly ThemedTrayContextMenu _trayMenu;
@@ -22,6 +23,7 @@ public sealed class TrayService : IDisposable
         CompanionManager manager,
         Action showCompanionLibrary,
         Action showCalendarEvents,
+        Action showHistory,
         Action showSettings,
         Action exit)
     {
@@ -29,6 +31,7 @@ public sealed class TrayService : IDisposable
         _showCompanionLibrary = showCompanionLibrary;
         _showCalendarEvents = showCalendarEvents;
         _showSettings = showSettings;
+        _showHistory = showHistory;
         _exit = exit;
 
         // A native notification-area menu lets Windows own activation and
@@ -121,6 +124,10 @@ public sealed class TrayService : IDisposable
         var setEvent = CreateMenuItem(LocalizationService.Get("Calendar.Menu.SetEvent"));
         setEvent.Click += (_, _) => _showCalendarEvents();
         _trayMenu.Items.Add(setEvent);
+
+        var history = CreateMenuItem(LocalizationService.Get("Chat.History"));
+        history.Click += (_, _) => _showHistory();
+        _trayMenu.Items.Add(history);
 
         var settings = CreateMenuItem(LocalizationService.Get("Tray.Settings"));
         settings.Click += (_, _) => _showSettings();

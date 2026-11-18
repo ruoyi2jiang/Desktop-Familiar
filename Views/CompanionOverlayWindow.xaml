@@ -99,6 +99,10 @@
 
         <!-- The dialog row reserves space above the character and grows upward when a full line needs it. -->
         <Grid x:Name="DialogArea" Grid.Row="0" MinHeight="70" VerticalAlignment="Bottom">
+            <Border x:Name="ChatReplyBorder" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                    Background="{DynamicResource OverlaySurfaceBrush}" CornerRadius="16" Padding="16,12" Margin="0,14,0,0">
+                <TextBlock x:Name="ChatReplyText" TextWrapping="Wrap" TextTrimming="None" FontSize="15" TextAlignment="Center" />
+            </Border>
             <Grid x:Name="BubbleRoot" HorizontalAlignment="Center" VerticalAlignment="Bottom" Visibility="Collapsed">
                 <Border x:Name="BubbleBorder" Background="{DynamicResource OverlaySurfaceBrush}" CornerRadius="16" Padding="16,12" Margin="0,14,0,0">
                     <Grid>

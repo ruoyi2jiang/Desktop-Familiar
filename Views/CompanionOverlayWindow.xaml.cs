@@ -13,8 +13,7 @@ using DesktopFamiliar.Services.Dialogs;
 using DesktopFamiliar.Services.Focus;
 using DesktopFamiliar.Views.Controls;
 using Brush = System.Windows.Media.Brush;
-using Color = System.Windows.Media.Color;
-using FontFamily = System.Windows.Media.FontFamily;
+using static DesktopFamiliar.Views.Controls.CompanionBubbleAppearance;
 
 namespace DesktopFamiliar.Views;
 
@@ -94,6 +93,10 @@ public partial class CompanionOverlayWindow : Window
             if (!_closingForExit)
                 args.Cancel = true;
         };
+        LocationChanged += (_, _) => QueuePromptLayout();
+        DpiChanged += (_, _) => QueuePromptLayout();
+        _chatClock.Tick += (_, _) => RenderChat();
+        BubbleRoot.IsVisibleChanged += (_, _) => { if (_chatClock.IsEnabled) RenderChat(); };
         BuildContextMenu();
         ContextMenuOpening += OverlayContextMenuOpening;
     }
@@ -129,25 +132,24 @@ public partial class CompanionOverlayWindow : Window
         enterFocus.Click += (_, _) => _manager.SetFocusMode(true);
         menu.Items.Add(enterFocus);
 
+        if (App.CurrentApp.Chat is { Available: true } chat)
+            menu.Items.Add(ChatMenuItem("Chat.Title", chat.OpenPrompt));
+
         var addonActions = _addonViewportActions.GetVisibleActions();
-        if (addonActions.Count > 0)
+        var actions = new System.Windows.Controls.MenuItem
         {
-            var actions = new System.Windows.Controls.MenuItem
+            Header = LocalizationService.Get("Overlay.Actions"),
+            Style = (Style)FindResource("Windows11MenuItem")
+        };
+        foreach (var action in addonActions)
+        {
+            var actionItem = new System.Windows.Controls.MenuItem
             {
-                Header = LocalizationService.Get("Overlay.Actions"),
+                Header = action.Header,
                 Style = (Style)FindResource("Windows11MenuItem")
             };
-            foreach (var action in addonActions)
-            {
-                var actionItem = new System.Windows.Controls.MenuItem
-                {
-                    Header = action.Header,
-                    Style = (Style)FindResource("Windows11MenuItem")
-                };
-                actionItem.Click += (_, _) => _menuAction.Queue(action.Execute);
-                actions.Items.Add(actionItem);
-            }
-            menu.Items.Add(actions);
+            actionItem.Click += (_, _) => _menuAction.Queue(action.Execute);
+            actions.Items.Add(actionItem);
         }
 
         if (_manager.ActivityState == CompanionActivityState.Idle)
@@ -160,8 +162,9 @@ public partial class CompanionOverlayWindow : Window
                 Style = (Style)FindResource("Windows11MenuItem")
             };
             randomIdle.Click += (_, _) => PlayRandomIdleNow();
-            menu.Items.Add(randomIdle);
+            actions.Items.Add(randomIdle);
         }
+        if (actions.Items.Count > 0) menu.Items.Add(actions);
         var configure = new System.Windows.Controls.MenuItem
         {
             Header = LocalizationService.Get("Overlay.ConfigureCompanions"),
@@ -189,10 +192,18 @@ public partial class CompanionOverlayWindow : Window
         menu.Items.Add(new System.Windows.Controls.Separator { Style = (Style)FindResource("Windows11MenuSeparator") });
         menu.Items.Add(setEvent);
         menu.Items.Add(configure);
+        menu.Items.Add(ChatMenuItem("Chat.History", App.CurrentApp.ShowChatHistory));
         menu.Items.Add(settings);
         menu.Items.Add(new System.Windows.Controls.Separator { Style = (Style)FindResource("Windows11MenuSeparator") });
         menu.Items.Add(exit);
         ContextMenu = menu;
+    }
+
+    private MenuItem ChatMenuItem(string label, Action open)
+    {
+        var item = new MenuItem { Header = LocalizationService.Get(label), Style = (Style)FindResource("Windows11MenuItem") };
+        item.Click += (_, _) => _menuAction.Queue(open);
+        return item;
     }
 
     private void OverlayContextMenu_Closed(object? sender, RoutedEventArgs e) =>
@@ -328,10 +339,11 @@ public partial class CompanionOverlayWindow : Window
         CharacterRow.Height = new GridLength(_manager.Data.Settings.ViewportHeight);
         CompanionViewport.Width = characterWidth;
         var dialogWidth = OverlayLayoutPolicy.GetDialogWidth(characterWidth);
+        ChatReplyBorder.Width = dialogWidth;
         BubbleRoot.Width = dialogWidth;
         BubbleRoot.MaxWidth = AppSettings.MaximumDialogBubbleWidth;
         DialogControlRoot.Width = dialogWidth;
-        SetDialogAreaHeight(ReservedDialogHeight, preserveCharacterPosition: false);
+        SetDialogAreaHeight(0, preserveCharacterPosition: false);
         ApplyDialogTextPresentation();
     }
 
@@ -394,33 +406,41 @@ public partial class CompanionOverlayWindow : Window
 
     private void UpdateDialogAreaForContent()
     {
-        var desiredHeight = ReservedDialogHeight;
+        double desiredHeight = 0;
         if (BubbleRoot.Visibility == Visibility.Visible)
         {
             // Measure the bubble directly. Measuring DialogArea reuses the
             // current fixed row constraint and can clip newly added reminder
             // actions, particularly when a snoozed reminder is shown again.
             BubbleRoot.Measure(new Size(Math.Max(Width, 1), double.PositiveInfinity));
-            desiredHeight = Math.Max(ReservedDialogHeight, BubbleRoot.DesiredSize.Height);
+            desiredHeight = BubbleRoot.DesiredSize.Height;
+        }
+        if (ChatReplyBorder.Visibility == Visibility.Visible)
+        {
+            ChatReplyBorder.Measure(new Size(ChatReplyBorder.Width, double.PositiveInfinity));
+            desiredHeight = Math.Max(desiredHeight, ChatReplyBorder.DesiredSize.Height);
         }
         SetDialogAreaHeight(desiredHeight, preserveCharacterPosition: IsVisible);
     }
 
-    private void SetDialogAreaHeight(double height, bool preserveCharacterPosition)
+    private void SetDialogAreaHeight(double contentHeight, bool preserveCharacterPosition)
     {
-        height = Math.Max(ReservedDialogHeight, Math.Ceiling(height));
+        var dialogueHeight = Math.Max(ReservedDialogHeight, Math.Ceiling(contentHeight));
         var characterTop = Top + _dialogAreaHeight;
-        _dialogAreaHeight = height;
-        DialogRow.Height = new GridLength(_dialogAreaHeight);
-        Height = _dialogAreaHeight + _manager.Data.Settings.ViewportHeight;
-
+        var characterHeight = _manager.Data.Settings.ViewportHeight;
         if (preserveCharacterPosition)
         {
-            Top = Math.Clamp(
-                characterTop - _dialogAreaHeight,
-                SystemParameters.VirtualScreenTop,
-                SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - Height);
+            var screenTop = SystemParameters.VirtualScreenTop;
+            var lastTop = screenTop + SystemParameters.VirtualScreenHeight - characterHeight - dialogueHeight;
+            characterTop = Math.Clamp(characterTop - dialogueHeight, screenTop, Math.Max(screenTop, lastTop)) + dialogueHeight;
         }
+
+        var clearance = ArrangeChatPrompt(characterTop, dialogueHeight);
+        DialogArea.Margin = new Thickness(0, 0, 0, clearance);
+        _dialogAreaHeight = Math.Max(ReservedDialogHeight, Math.Ceiling(contentHeight + clearance));
+        DialogRow.Height = new GridLength(_dialogAreaHeight);
+        Height = _dialogAreaHeight + characterHeight;
+        if (preserveCharacterPosition) Top = characterTop - _dialogAreaHeight;
     }
 
     private void RefreshCompanion()
@@ -449,6 +469,7 @@ public partial class CompanionOverlayWindow : Window
         DialogText.Foreground = TryBrush(companion.FontColor, (Brush)FindResource(ThemeTokens.TextOnOverlay));
         DialogText.FontFamily = ResolveFont(companion);
         ApplyDialogTextPresentation();
+        CompanionBubbleAppearance.Apply(ChatReplyBorder, companion);
         MissingAssetText.Text = companion.Name;
 
         if (!string.IsNullOrWhiteSpace(companion.BubbleImagePath) && File.Exists(companion.BubbleImagePath))
@@ -480,23 +501,7 @@ public partial class CompanionOverlayWindow : Window
         BubbleBorder.Padding = new Thickness(16, 12, 16, 12);
     }
 
-    private static FontFamily ResolveFont(CompanionDefinition companion)
-    {
-        if (!string.IsNullOrWhiteSpace(companion.ImportedFontPath) && File.Exists(companion.ImportedFontPath))
-        {
-            try
-            {
-                var folder = new Uri(Path.GetDirectoryName(companion.ImportedFontPath)! + Path.DirectorySeparatorChar, UriKind.Absolute);
-                return new FontFamily(folder, $"./#{companion.FontFamilyName}");
-            }
-            catch (Exception exception)
-            {
-                AppLogger.Warning("The imported font could not be loaded; an installed font will be used.", exception);
-                // Fall through to an installed font.
-            }
-        }
-        return new FontFamily(companion.FontFamilyName);
-    }
+
 
     private void StartDefaultForCurrentState(CompanionDefinition companion, bool transition = false)
     {
@@ -965,7 +970,7 @@ public partial class CompanionOverlayWindow : Window
         if (_activeReminder is null)
         {
             BubbleRoot.Visibility = Visibility.Collapsed;
-            SetDialogAreaHeight(ReservedDialogHeight, preserveCharacterPosition: IsVisible);
+            SetDialogAreaHeight(0, preserveCharacterPosition: IsVisible);
         }
         if (_activeReminder is null)
         {
@@ -1117,29 +1122,9 @@ public partial class CompanionOverlayWindow : Window
         MissingAssetCard.Visibility = Visibility.Visible;
     }
 
-    private static BitmapImage LoadBitmap(string path)
-    {
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.UriSource = new Uri(path, UriKind.Absolute);
-        bitmap.EndInit();
-        bitmap.Freeze();
-        return bitmap;
-    }
 
-    private static Brush TryBrush(string value, Brush fallback)
-    {
-        try
-        {
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning($"The saved color '{value}' could not be parsed.", exception);
-            return fallback;
-        }
-    }
+
+
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {

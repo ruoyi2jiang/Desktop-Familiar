@@ -10,28 +10,47 @@ The notification-area menu provides:
 - **Select companion** to switch the active character.
 - **Configure** to open the companion library.
 - **Calendar** to open the local event calendar.
-- **Settings** to change general, user, companion, theme, and extra options.
+- **Chat history** to read conversations by companion.
+- **Settings** to change general, user, companion, chat, theme, and extra options.
 - **Exit** to close Desktop Familiar.
 
 Clicking anywhere outside the notification-area menu closes it. Windows opened from either the notification-area or companion menu receive normal keyboard input immediately after the menu closes.
 
-Right-clicking the companion provides the relevant quick actions. Addon-provided commands, including **Click the screen for me** when the Auto Clicker is enabled, appear in the **Action** submenu immediately below **Enter focus**. The submenu is omitted when no addon contributes a visible command. The lower section includes **Calendar**, **Configure**, and **Settings**. The overlay and notification-area menus share the same compact width, themed rounded treatment, and inner spacing. Submenu owners such as **Select companion** retain their ordinary hover colour while the child menu is open, without switching to a darker selected state. The child menu remains available while the pointer moves into it, then both the child and parent hover close after the pointer leaves it or enters another main-menu row. The viewport menu begins with **Enter focus**, directly above the first action without a divider. While Focus is active, the viewport menu is unavailable; use the notification-area Focus toggle to leave Focus mode. The overlay can be dragged to another screen position; its cursor changes to a hand while the companion is being dragged.
+Right-clicking the companion provides the relevant quick actions. **Chat** appears below **Enter focus** when a local model is configured and chat is enabled. **Action** contains **Play random idle** while idle and any visible addon commands. The lower section includes **Calendar**, **Configure**, **Chat history**, and **Settings**. The overlay and notification-area menus share the same compact width, themed rounded treatment, and inner spacing. Submenu owners such as **Select companion** retain their ordinary hover colour while the child menu is open, without switching to a darker selected state. The child menu remains available while the pointer moves into it, then both the child and parent hover close after the pointer leaves it or enters another main-menu row. The viewport menu begins with **Enter focus**, directly above the first action without a divider. While Focus is active, the viewport menu is unavailable; use the notification-area Focus toggle to leave Focus mode. The overlay can be dragged to another screen position; its cursor changes to a hand while the companion is being dragged.
+
+## Local chat
+
+1. Open **Settings → Chat**, turn on chat, and open the **Local model** dropdown. Windows x64 is required. Choose one of the following options.
+
+   - **Download a supported model…** lists the bundled catalogue. Select **Gemma 3 1B** and click **Download**. The first installation takes about 832 MB of downloads including the CPU engine.
+   - **Choose a GGUF file…** opens a file picker. Select your existing model and click **Use model**. Desktop Familiar uses the file in place. The first use downloads about 26 MB for the engine if the app has no engine yet.
+   - **Scan a folder…** lists GGUF files inside the selected folder and its subfolders. Select the file you want and click **Use model**. Only the selected file is checked and linked.
+
+   Gemma is recognized even if you renamed the file. For other GGUFs, the app tries a short local text-chat request before accepting them. Successful setup selects the model. If you later move the file, choose it again at its new location.
+
+2. Open **Chat** on the pet's menu, or press **Ctrl+Shift+F9**. The same shortcut closes the prompt. To change it, focus **Open or close chat** in Settings and press the new combination. After leaving Focus mode from the notification area, reopen Chat and start typing.
+3. The prompt follows the pet, centered above its head. It moves below when there is too little room above for both the prompt and a speech bubble. Type a message and press **Enter** or click **↵ Send** at the right end of the input row. Click the **×** at the top right or press **Escape** to close the prompt. A slow reply shows the companion's **Thinking phrase**, editable in **Configure → Profile**, after 0.2 seconds. Replies wrap and advance in short bubbles. Incoming reminders and scene dialogue take priority and pause the chat reading timer.
+4. Give a pet a lasting note by starting a message with **Remember**, for example, “Remember my favourite tea is jasmine.” After a successful reply the app saves that note for the pet. Each request includes that companion's description, personality, configured dialogue examples, recent turns and recent notes. Each companion has one continuous conversation.
+5. Choose **Chat history** in either menu to browse the conversation. Under **Settings → Chat → Clear chat history**, select one or more pets, optionally select **Also forget saved notes**, then confirm. Switching pets cancels an unfinished reply. Completed conversations stay on this computer and are excluded from companion exports.
 
 ## Companion library
 
 The library displays every companion using the first frame of its default idle scene. The selected card uses the theme's primary background. Select a card with **Select**, open it with **Configure**, save a portable copy with **Export**, or permanently remove it with **Delete**. The confirmation lets you either keep the companion's imported resources or delete them together with the companion. Use **Import companion** at the top of the library to open a `.companionpack` bundle.
 
-An exported bundle contains that companion's complete configuration plus every referenced animation, PNG frame, dialogue voice, imported font, and bubble image. It can be shared as one file and imported without separately copying assets. If an imported companion has the same name as an existing one, choose **Overwrite existing** to replace that companion while keeping its selected identity, or **Import as new** to keep both with a numbered name. Imported files are copied beneath Desktop Familiar's local asset directory; the original bundle can be moved or deleted afterward.
+An exported bundle contains that companion's complete configuration plus every referenced animation, PNG frame, dialogue voice, imported font, and bubble image. It can be shared as one file and imported without separately copying assets. If an imported companion has the same name as an existing one, choose **Overwrite existing** to replace that companion while keeping its selected identity, or **Import as new** to keep both with a numbered name. Imported files are copied beneath Desktop Familiar's local asset directory; the original bundle can be moved or deleted afterward. Each new import starts with its own empty chat history and notes, including when you reimport a previously deleted pet.
 
 Create or edit a companion to set:
 
 - name, birthday, and the nickname used to address you;
+- an optional description (who the companion is) and personality (how they behave and speak);
 - installed or imported `.ttf`/`.otf` font;
 - dialogue text colour and optional bubble artwork;
 - any number of animation registries;
 - required idle default plus optional start, reminder, exit, self-birthday 1/2, user-birthday 1/2, and random-idle assignments.
 
-The editor separates **Companion**, **Animations**, and **States** into three centered flat rhombus tabs that straddle the extended banner and page boundary while keeping the save controls fixed. The **States** tab puts the core **Idle default** and **Reminder** choices first, followed by grouped viewport interactions. You can optionally assign separate animations for dragging left, dragging right, and holding the companion still while dragging. Drag scenes loop until you release the companion and transition smoothly when the direction changes; the cursor changes while dragging. An unassigned drag state never starts interaction playback, so moving or releasing the companion leaves its current animation alone.
+The **Profile** tab shows up to six distinct speaking examples from your configured animation dialogue. Edit those lines under **Animations** and return to **Profile** to see the changes. Description and personality are saved and exported with the companion.
+
+The editor separates **Profile**, **Animations**, and **States** into three centered flat rhombus tabs that straddle the extended banner and page boundary while keeping the save controls fixed. The **States** tab puts the core **Idle default** and **Reminder** choices first, followed by grouped viewport interactions. You can optionally assign separate animations for dragging left, dragging right, and holding the companion still while dragging. Drag scenes loop until you release the companion and transition smoothly when the direction changes; the cursor changes while dragging. An unassigned drag state never starts interaction playback, so moving or releasing the companion leaves its current animation alone.
 
 At the bottom of States, use the left-aligned **Advanced interactions** link to reveal its inline **Click interactions** section. The live idle preview is a direct selection surface: drag a rectangle over the part of the viewport that should react, then name the area and choose its animation. Areas are percentage based so they continue to fit after a viewport resize, and they are evaluated in displayed order when they overlap. An assigned click scene plays once before the companion returns to its normal state. Click handling is inactive until at least one area has an assigned animation; clicks outside an assigned area, or on an area without an animation, leave the current idle animation alone.
 

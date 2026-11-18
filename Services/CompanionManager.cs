@@ -24,6 +24,7 @@ public sealed class CompanionManager
 
     public event EventHandler? CurrentCompanionChanged;
     public event EventHandler? CompanionCollectionChanged;
+    public event EventHandler? ChatSettingsChanged;
     public event EventHandler? FocusModeChanged;
     public event EventHandler? ActivityStateChanged;
     public event EventHandler? ViewportChanged;
@@ -87,6 +88,14 @@ public sealed class CompanionManager
         Data.Settings.CurrentCompanionId = companionId;
         Persist();
         CurrentCompanionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetChatPreferences(ChatPreferences preferences)
+    {
+        if (preferences == Data.Settings.Chat) return;
+        Data.Settings.Chat = preferences;
+        Persist();
+        ChatSettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetFocusMode(bool enabled)

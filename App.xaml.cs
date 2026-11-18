@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Net.Http;
 using System.Windows.Threading;
 using DesktopFamiliar.AddonSdk;
+using DesktopFamiliar.Services.Chat;
+using DesktopFamiliar.Services.Storage;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Calendar;
@@ -18,6 +20,8 @@ public partial class App : System.Windows.Application
     private CompanionOverlayWindow? _overlay;
     private CompanionLibraryWindow? _library;
     private SettingsWindow? _settings;
+    private ChatHistoryWindow? _historyWindow;
+    public ChatController Chat { get; private set; } = null!;
     private CalendarEventWindow? _calendarEvents;
     private CalendarReminderService? _calendarReminders;
     private CalendarReminderPresentationCoordinator? _reminderPresentation;
@@ -86,6 +90,7 @@ public partial class App : System.Windows.Application
             ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             Manager.ThemeChanged += (_, _) => ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             _overlay = new CompanionOverlayWindow(Manager, _addonViewportActions);
+            Chat = new ChatController(Manager, _overlay, new ChatModelStore(Storage.RootDirectory, _addonHttpClient), new ChatHistoryStore(Storage.RootDirectory));
             _addonRuntimeLoader = new AddonRuntimeLoader(AddonInstallations, AppLogger.Error);
             _addonRuntimeLoader.LoadEnabled(new DesktopFamiliarAddonHost(
                 _addonViewportActions,
@@ -96,7 +101,7 @@ public partial class App : System.Windows.Application
             Manager.FocusModeChanged += (_, _) => ApplyVisibility();
             Manager.ActivityStateChanged += (_, _) => ApplyVisibility();
             Manager.CurrentCompanionChanged += (_, _) => ApplyVisibility();
-            _trayService = new TrayService(Manager, ShowLibrary, ShowCalendarEvents, ShowSettings, ShutdownApplication);
+            _trayService = new TrayService(Manager, ShowLibrary, ShowCalendarEvents, ShowChatHistory, ShowSettings, ShutdownApplication);
             _reminderPresentation = new CalendarReminderPresentationCoordinator(
                 Manager,
                 ApplyVisibility,
@@ -275,6 +280,13 @@ public partial class App : System.Windows.Application
         editor.Activate();
     }
 
+    public void ShowChatHistory()
+    {
+        if (_historyWindow is { IsLoaded: true }) { _historyWindow.Activate(); return; }
+        _historyWindow = new ChatHistoryWindow(Manager, Chat);
+        _historyWindow.Show();
+    }
+
     public void ShowSettings()
     {
         if (_settings is { IsLoaded: true })
@@ -359,6 +371,7 @@ public partial class App : System.Windows.Application
         _addonRuntimeLoader?.Dispose();
         _trayService?.Dispose();
         _calendarReminders?.Dispose();
+        Chat?.Dispose();
         _addonHttpClient.Dispose();
         if (_overlay is not null)
         {
@@ -384,6 +397,7 @@ public partial class App : System.Windows.Application
         _trayService?.Dispose();
         _addonRuntimeLoader?.Dispose();
         _calendarReminders?.Dispose();
+        Chat?.Dispose();
         _addonHttpClient.Dispose();
         base.OnExit(e);
     }

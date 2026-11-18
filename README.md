@@ -4,7 +4,8 @@ Desktop Familiar is a Windows WPF desktop-companion application. It displays an 
 
 ## Current capabilities
 
-- Multiple locally configured companions with preview cards and quick switching.
+- Multiple locally configured companions with editable character profiles, preview cards, and quick switching.
+- Built-in offline text chat for Windows x64. Download Gemma 3 1B, choose an existing GGUF, or scan a folder for models. Toggle the chat prompt with a configurable keyboard shortcut. Each companion has private notes and history.
 - Portable companion bundles that include configuration, animations, dialogue audio, fonts, and bubble artwork for one-step export and import.
 - GIF, static image, or ordered PNG-frame animations with per-frame timing.
 - Start, looping idle, optional reminder, birthday, exit, and random-idle scenes.

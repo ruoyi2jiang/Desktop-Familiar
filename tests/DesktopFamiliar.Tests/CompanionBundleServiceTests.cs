@@ -26,6 +26,9 @@ public sealed class CompanionBundleServiceTests
         var companion = new CompanionDefinition
         {
             Name = "Bundle test",
+            Description = "A dragon small enough to sleep on a key.",
+            Personality = "Quiet, with a dry sense of humour.",
+            ThinkingPhrase = "One moment, Keeper.",
             ImportedFontPath = font,
             BubbleImagePath = bubble,
             Animations =
@@ -70,6 +73,10 @@ public sealed class CompanionBundleServiceTests
 
         Assert.Equal(importedId, imported.Id);
         Assert.Equal("Imported copy", imported.Name);
+        Assert.Equal(companion.Description, imported.Description);
+        Assert.Equal(companion.Personality, imported.Personality);
+        Assert.Equal(companion.ThinkingPhrase, imported.ThinkingPhrase);
+        Assert.Equal(["Working"], imported.GetDialogueExamples());
         Assert.All(EnumerateAssets(imported), path =>
         {
             Assert.True(File.Exists(path));
@@ -80,6 +87,35 @@ public sealed class CompanionBundleServiceTests
 
         service.DiscardImport(importResult);
         Assert.False(Directory.Exists(importResult.AssetDirectory));
+    }
+
+    [Fact]
+    public void ReimportAfterDeletionDoesNotInheritPrivateHistory()
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        var manager = new CompanionManager(storage);
+        var scene = new AnimationScene { Name = "Idle", AnimationPath = WriteAsset(directory.Path, "idle.png", [1]) };
+        var pet = new CompanionDefinition { Name = "Pip", Animations = [scene], IdleDefaultAnimationId = scene.Id };
+        manager.SaveCompanion(pet);
+        var history = new ChatHistoryStore(directory.Path);
+        history.Append(pet.Id, pet.Name, new("Remember amber", "Okay", DateTimeOffset.Now), "amber");
+        var pack = Path.Combine(directory.Path, "pip.companionpack");
+        storage.ExportCompanion(pet, pack);
+        manager.DeleteCompanion(pet.Id);
+
+        var fresh = storage.ImportCompanionBundle(pack).Companion;
+        manager.SaveCompanion(fresh);
+        Assert.NotEqual(pet.Id, fresh.Id);
+        Assert.Empty(history.ForPet(fresh.Id).Notes);
+        Assert.Empty(history.ForPet(fresh.Id).Turns);
+        Assert.Equal(["amber"], history.ForPet(pet.Id).Notes);
+
+        history.Append(fresh.Id, fresh.Name, new("Remember teal", "Okay", DateTimeOffset.Now), "teal");
+        var overwritten = storage.ImportCompanionBundle(pack, overwriteCompanionId: fresh.Id).Companion;
+        manager.SaveCompanion(overwritten);
+        Assert.Equal(fresh.Id, overwritten.Id);
+        Assert.Equal(["teal"], history.ForPet(overwritten.Id).Notes);
     }
 
     [Fact]

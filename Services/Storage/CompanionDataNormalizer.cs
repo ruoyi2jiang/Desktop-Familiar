@@ -27,6 +27,7 @@ public sealed class CompanionDataNormalizer
 
     private static void NormalizeSettings(AppSettings settings)
     {
+        settings.Chat ??= new();
         settings.IdleDelaySeconds = Math.Clamp(
             settings.IdleDelaySeconds,
             AppSettings.MinimumIdleDelaySeconds,
@@ -63,6 +64,23 @@ public sealed class CompanionDataNormalizer
         // legacy values to the addon-owned document before this normalizer rewrites the core data.
         if (data.SchemaVersion < 8)
             data.SchemaVersion = 8;
+
+        if (data.SchemaVersion == 8)
+        {
+            foreach (var companion in data.Companions ?? [])
+            {
+                companion.Description = string.Empty;
+                companion.Personality = string.Empty;
+            }
+            data.SchemaVersion = 9;
+        }
+        if (data.SchemaVersion == 9)
+        {
+            data.Settings ??= new();
+            data.Settings.Chat = new();
+            foreach (var pet in data.Companions ?? []) pet.ThinkingPhrase = string.Empty;
+            data.SchemaVersion = 10;
+        }
     }
 
     private static void EnsureSavedThemes(AppSettings settings)
@@ -204,6 +222,9 @@ public sealed class CompanionDataNormalizer
         companion.Name ??= string.Empty;
         companion.Birthday ??= string.Empty;
         companion.UserNickname ??= string.Empty;
+        companion.Description ??= string.Empty;
+        companion.Personality ??= string.Empty;
+        companion.ThinkingPhrase ??= string.Empty;
         companion.Animations ??= [];
         companion.IdleRandomAnimationIds ??= [];
         companion.InteractionStates ??= new CompanionInteractionStateAssignments();

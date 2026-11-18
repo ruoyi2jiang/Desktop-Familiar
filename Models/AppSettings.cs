@@ -12,6 +12,7 @@ public sealed class AppSettings
 
     public Guid? CurrentCompanionId { get; set; }
 
+    public ChatPreferences Chat { get; set; } = new();
     public bool FocusModeEnabled { get; set; }
     public bool RunAtStartup { get; set; }
     public DateTime? UserBirthday { get; set; }
@@ -32,6 +33,7 @@ public sealed class AppSettings
     public AppSettings Clone() => new()
     {
         CurrentCompanionId = CurrentCompanionId,
+        Chat = Chat,
         FocusModeEnabled = FocusModeEnabled,
         RunAtStartup = RunAtStartup,
         UserBirthday = UserBirthday,

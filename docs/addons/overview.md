@@ -54,7 +54,7 @@ After review, upload the ZIP to an addon-specific GitHub Release. In a separate 
 
 - In **Addons**, verify that the **Available** and **Installed** tabs show the correct lists, an available selection shows its details and install control, and **No available addons** appears when applicable.
 - Opening Addons refreshes an empty catalogue once; the button always refreshes on explicit user action.
-- Verify that the **Action** viewport submenu is absent when no addon action is visible and that every visible addon command is grouped beneath it.
+- Verify that the **Action** viewport submenu is absent when neither a core action nor an addon action is visible and that every visible addon command is grouped beneath it.
 - A disabled installation must show **Enable** even though its addon code is not loaded.
 - An older catalogue release must never be offered over a newer installed version. Updating must remove the superseded package directory while preserving the enabled state.
 - Installation, update, recovery enable, and uninstall status must state that a restart is required. Choosing restart must produce one replacement instance after the old process exits.

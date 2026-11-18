@@ -118,9 +118,9 @@ public sealed class CompanionStorage : ICompanionRepository
 
     public CompanionBundleImportResult ImportCompanionBundle(
         string bundlePath,
-        Guid destinationCompanionId,
+        Guid? overwriteCompanionId = null,
         string? importedName = null) =>
-        _bundleService.Import(bundlePath, destinationCompanionId, importedName);
+        _bundleService.Import(bundlePath, overwriteCompanionId ?? Guid.NewGuid(), importedName);
 
     public void DiscardCompanionBundleImport(CompanionBundleImportResult importResult) =>
         _bundleService.DiscardImport(importResult);

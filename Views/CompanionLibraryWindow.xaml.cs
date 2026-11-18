@@ -73,7 +73,7 @@ public partial class CompanionLibraryWindow : Window
             var preview = _storage.InspectCompanionBundle(dialog.FileName);
             var sameName = _manager.Data.Companions.FirstOrDefault(companion =>
                 string.Equals(companion.Name, preview.Name, StringComparison.CurrentCultureIgnoreCase));
-            var destinationId = Guid.NewGuid();
+            Guid? overwriteCompanionId = null;
             var importedName = preview.Name;
 
             if (sameName is not null)
@@ -83,20 +83,12 @@ public partial class CompanionLibraryWindow : Window
                 if (conflict.Choice == CompanionImportConflictChoice.Cancel)
                     return;
                 if (conflict.Choice == CompanionImportConflictChoice.Overwrite)
-                    destinationId = sameName.Id;
+                    overwriteCompanionId = sameName.Id;
                 else
                     importedName = CreateUniqueName(preview.Name);
             }
-            else if (_manager.Data.Companions.Any(companion => companion.Id == preview.CompanionId))
-            {
-                destinationId = Guid.NewGuid();
-            }
-            else
-            {
-                destinationId = preview.CompanionId;
-            }
 
-            var importResult = _storage.ImportCompanionBundle(dialog.FileName, destinationId, importedName);
+            var importResult = _storage.ImportCompanionBundle(dialog.FileName, overwriteCompanionId, importedName);
             try
             {
                 _manager.SaveCompanion(importResult.Companion);

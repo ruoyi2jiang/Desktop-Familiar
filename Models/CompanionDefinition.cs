@@ -9,6 +9,9 @@ public sealed class CompanionDefinition
     public string Name { get; set; } = LocalizationService.Get("Model.Companion.New");
     public string Birthday { get; set; } = string.Empty;
     public string UserNickname { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Personality { get; set; } = string.Empty;
+    public string ThinkingPhrase { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = "Segoe UI";
     public string? ImportedFontPath { get; set; }
     public string FontColor { get; set; } = "#FFFFFFFF";
@@ -52,12 +55,21 @@ public sealed class CompanionDefinition
     public AnimationScene? GetInteractionAnimation(CompanionInteractionState state) =>
         FindAnimation(InteractionStates?.GetAnimationId(state));
 
+    public IEnumerable<string> GetDialogueExamples() => Animations
+        .SelectMany(scene => scene.DialogLines)
+        .Where(line => !string.IsNullOrWhiteSpace(line.Text))
+        .Select(line => line.Text.Trim())
+        .Distinct(StringComparer.Ordinal);
+
     public CompanionDefinition Clone() => new()
     {
         Id = Id,
         Name = Name,
         Birthday = Birthday,
         UserNickname = UserNickname,
+        Description = Description ?? string.Empty,
+        Personality = Personality ?? string.Empty,
+        ThinkingPhrase = ThinkingPhrase ?? string.Empty,
         FontFamilyName = FontFamilyName,
         ImportedFontPath = ImportedFontPath,
         FontColor = FontColor,

@@ -72,7 +72,17 @@ The addon host exposes API 1.4 through `DesktopFamiliar.AddonSdk`. An addon mani
 
 Fresh installs start with an empty companion library. Private character sources, pack-builder scripts, and generated companion bundles are outside the public source tree and ignored by Git.
 
-The current clean persistence baseline is schema 8. When persisted fields change, update model defaults and `DesktopCompanionData.CurrentSchemaVersion`, implement an explicit migration before accepting older schemas, add migration and normalization tests, and update `docs/data-format.md`.
+CompanionDefinition owns the profile text alongside the companion name. Its GetDialogueExamples method reads authored lines in scene order and ignores blank and repeated text. The profile editor uses this projection so example dialogue has one editable source.
+
+## Built-in local chat
+
+`Services/Chat/ChatController` coordinates the global shortcut, prompt, presentation and active companion. `ChatSession` builds the request from a detached profile and the conversation for that GUID. Each turn has its own cancellation token. A switch, disabling chat, clearing the active history or shutting down invalidates pending work before it can commit. A successful turn appends the question, reply and any explicit note in one atomic write.
+
+`IChatEngine` separates inference from conversation rules. `LlamaChatEngine` starts a CPU-only llama.cpp helper per turn, uses the Windows TCP owner table to verify that each loopback connection belongs to that process before sending HTTP data, and authenticates chat requests with a per-launch key. The helper exits after the turn. `Resources/chat-models.json` is the embedded download catalogue. Each entry defines a stable ID, localization key, HTTPS file and terms URLs, SHA-256 and estimated first-install download size. Add a compatible text model there to reuse the existing picker and llama.cpp integration. `ChatModelStore` resolves managed and linked files, verifies downloads, and reuses the Windows CPU engine. `LocalChatModelIndex` stores external file references and scans user-selected folders. Linking hashes the file, recognizes catalogue releases by digest, and checks other candidates with a one-token request through the normal chat runtime before saving. Profiles and private conversation data have distinct lifetimes.
+
+`Views/CompanionOverlayWindow.Chat.cs` presents the reply queue with the reading durations from `ChatBubbleTiming`. The prompt is a separate owned window. The overlay uses `OverlayLayoutPolicy` to position it within the pet’s monitor work area and reserve space between the pet and spoken dialogue when it sits above the pet. Scene and reminder content can temporarily take the reply's place. `ChatHistoryWindow` serves both the per-pet reader and the selective clear dialog.
+
+The current clean persistence baseline is schema 10. When persisted fields change, update model defaults and `DesktopCompanionData.CurrentSchemaVersion`, implement an explicit migration before accepting older schemas, add migration and normalization tests, and update `docs/data-format.md`.
 
 ## Error boundaries
 
@@ -90,7 +100,7 @@ Windows compose controls in XAML. `CompanionCard`, `FieldHelpLabel`, and shared 
 
 All visual colours use semantic `DynamicResource` keys defined by `ThemeTokens` and populated by `ThemeService`. Page, primary, secondary, and input surfaces use their matching background, text, accent, hover, and active roles. Do not add literal UI colours for themed elements.
 
-`TrayService` keeps its native `ThemedTrayContextMenu` populated before Windows opens it, then refreshes it after closure when companion, focus, or theme state changes; the overlay uses WPF context menus. Both derive presentation from the same theme palette. `TrayToggleMenuItem` owns the notification-menu Focus toggle. Tray commands execute directly through the native menu's item callbacks; WPF overlay window-opening commands pass through `DeferredMenuAction` after its menu's closed boundary, preventing WPF menu input mode from leaking into the activated window.
+`TrayService` keeps its native `ThemedTrayContextMenu` populated before Windows opens it, then refreshes it after closure when companion, focus, or theme state changes; the overlay uses WPF context menus. Both derive presentation from the same theme palette. `TrayToggleMenuItem` owns the notification-menu Focus toggle. The tray Focus switch closes its native dropdown before the state change shows or hides the pet, releasing menu keyboard handling for the next window. Tray commands execute directly through the native menu's item callbacks; WPF overlay window-opening commands pass through `DeferredMenuAction` after its menu's closed boundary, preventing WPF menu input mode from leaking into the activated window.
 
 ## Localization
 

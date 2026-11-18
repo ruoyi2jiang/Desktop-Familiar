@@ -88,8 +88,9 @@ public sealed class TrayToggleMenuItem : Forms.ToolStripControlHost
 
     private void ToggleRequested(object? sender, EventArgs e)
     {
+        // Close releases the native menu's keyboard filter before Focus changes the active window.
+        if (Owner is Forms.ToolStripDropDown menu) menu.Close();
         Toggled?.Invoke(this, EventArgs.Empty);
-        Owner?.Hide();
     }
 
     private sealed class ToggleControl : Forms.Control

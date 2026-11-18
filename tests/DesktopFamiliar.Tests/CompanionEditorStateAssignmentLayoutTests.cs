@@ -27,7 +27,7 @@ public sealed class CompanionEditorStateAssignmentLayoutTests
         Assert.Contains("<ToggleButton.Template>", source, StringComparison.Ordinal);
         Assert.Contains("<Border Background=\"Transparent\" BorderBrush=\"Transparent\" BorderThickness=\"0\" Padding=\"{TemplateBinding Padding}\">", source, StringComparison.Ordinal);
         Assert.Equal(3, source.Split("Background=\"{DynamicResource PrimaryAccentBrush}\" Opacity=\"0.45\"").Length - 1);
-        Assert.Contains("Editor.Tab.Companion", source, StringComparison.Ordinal);
+        Assert.Contains("Editor.Tab.Profile", source, StringComparison.Ordinal);
         Assert.Contains("Editor.Tab.Animations", source, StringComparison.Ordinal);
         Assert.Contains("Editor.Tab.States", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Editor.Tab.Advanced", source, StringComparison.Ordinal);

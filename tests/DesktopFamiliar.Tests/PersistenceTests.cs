@@ -16,6 +16,7 @@ public sealed class PersistenceTests
         var store = new JsonAppDataStore(directory.Path, CreateOptions());
         var data = new DesktopCompanionData();
         data.Settings.ViewportWidth = 321;
+        data.Settings.Chat = new ChatPreferences(true, "gemma-3-1b-it-q4", "Alt+Shift+M");
         data.Settings.FocusModeEnabled = true;
         data.Settings.UserBirthday = new DateTime(1995, 4, 12);
         var reminderId = Guid.NewGuid();
@@ -24,6 +25,8 @@ public sealed class PersistenceTests
         data.Companions.Add(new CompanionDefinition
         {
             Name = "Test companion",
+            Description = "A pocket dragon.",
+            Personality = "Sleepy.\nProtective of keyboards.",
             Animations =
             [
                 new AnimationScene { Id = reminderId },
@@ -50,9 +53,12 @@ public sealed class PersistenceTests
         var loaded = store.Read();
 
         Assert.Equal(321, loaded.Settings.ViewportWidth);
+        Assert.Equal(data.Settings.Chat, loaded.Settings.Chat);
         Assert.True(loaded.Settings.FocusModeEnabled);
         Assert.Equal(new DateTime(1995, 4, 12), loaded.Settings.UserBirthday);
         var loadedCompanion = Assert.Single(loaded.Companions);
+        Assert.Equal("A pocket dragon.", loadedCompanion.Description);
+        Assert.Equal("Sleepy.\nProtective of keyboards.", loadedCompanion.Personality);
         Assert.Equal(reminderId, loadedCompanion.ReminderAnimationId);
         Assert.Equal(selfBirthdayId, loadedCompanion.SelfBirthdayAnimation1Id);
         Assert.Equal(dragLeftId, loadedCompanion.InteractionStates.DragLeftAnimationId);
@@ -336,6 +342,29 @@ public sealed class PersistenceTests
         Assert.NotNull(interactionStates);
         Assert.Null(interactionStates.DragLeftAnimationId);
         Assert.Empty(interactionStates.ClickAreas);
+    }
+
+    [Fact]
+    public void Schema8ProfileMigration_PreservesDialogueAndWritesEmptyProfileFields()
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        File.WriteAllText(storage.DataFilePath, """
+            {"SchemaVersion":8,"Companions":[{"Name":"Pip","Animations":[
+                {"DialogLines":[{"Text":"  Hello, {{user}}!  "},{"Text":" "}]},
+                {"DialogLines":[{"Text":"Hello, {{user}}!"},{"Text":"Desk secure.","VoicePath":"clip.wav"}]}]}]}
+            """);
+
+        var data = storage.Load();
+        var companion = Assert.Single(data.Companions);
+        Assert.Equal("Pip", companion.Name);
+        Assert.Equal(["Hello, {{user}}!", "Desk secure."], companion.GetDialogueExamples());
+        Assert.Equal("  Hello, {{user}}!  ", companion.Animations[0].DialogLines[0].Text);
+        using var saved = JsonDocument.Parse(File.ReadAllText(storage.DataFilePath));
+        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, saved.RootElement.GetProperty("SchemaVersion").GetInt32());
+        var profile = saved.RootElement.GetProperty("Companions")[0];
+        Assert.Equal("", profile.GetProperty("Description").GetString());
+        Assert.Equal("", profile.GetProperty("Personality").GetString());
     }
 
     [Fact]

@@ -2,7 +2,7 @@
 
 ## User data
 
-The root JSON document is `DesktopCompanionData`, stored at `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json`, and currently uses schema version 8. It contains:
+The root JSON document is `DesktopCompanionData`, stored at `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json`, and currently uses schema version 10. It contains:
 
 - `Settings`: selected companion, viewport, overlay position, dialogue behavior, random-idle interval, startup mirror, focus mode, user birthday, and saved themes.
 - `Companions`: locally configured `CompanionDefinition` objects.
@@ -12,11 +12,21 @@ The root JSON document is `DesktopCompanionData`, stored at `%LOCALAPPDATA%\Desk
 
 Theme selection stores both `SelectedThemeId` and its `Theme` kind; the saved-theme ID is authoritative, and normalization repairs the kind from a selected built-in or custom theme before writing the repair back.
 
+## Local chat
+
+Schema 10 adds `Settings.Chat` with `Enabled`, nullable `ModelId` (catalogue ID or linked file ID), and `Shortcut`. Schema 9 migrates with chat disabled, no selected model, and Ctrl+Shift+F9. The companion's optional `ThinkingPhrase` defaults to empty, which uses the localized thinking text. The phrase travels in companion bundles.
+
+Downloaded model weights live in `Chat/Models/<catalogue-id>/model.gguf` under the application data root. New setups share the CPU engine in `Chat/Engines/b12496/`. Existing installations with `Chat/Models/<catalogue-id>/engine/` still work and can run linked files. The optional `Chat/local-models.json` document has `Version: 1` and a `Files` object mapping each `local:<lowercase SHA-256>` ID to its absolute GGUF path. Linking saves the reference atomically and leaves the model file at the chosen location. Re-selecting the same content at a new path updates that entry. An absent index means there are no linked files.
+
+Private notes and conversations are stored separately in `Chat/history.json` (version 1). Its `Pets` dictionary is keyed by companion GUID. Each entry stores the last known name, ordered question/reply turns with timestamps, and explicit notes. Clearing multiple selected histories updates the file atomically. Keeping notes leaves a notes-only entry available for later removal. Every new import receives a fresh local GUID, including after deleting and reimporting the same bundle. Overwriting an existing companion preserves its local conversation.
+
 ## Addon data and manifests
 
 Addon installation state and addon-owned settings are separate from `DesktopCompanionData`. The host registry is `%LOCALAPPDATA%\DesktopFamiliar\Addons\installed-addons.json` (`schemaVersion: 1`), packages are installed at `Addons\packages\<addon-id>\<version>`, and addon-owned settings are stored at `Addons\data\<addon-id>\settings.json`. A successful package update preserves the installation's enabled flag and removes the superseded version directory; locked package or saved-data deletion is moved to an internal pending-removal directory and retried before addons load on the next startup. The Auto Clicker settings document currently has `schemaVersion: 1` and stores its enable flag, interval range, distinct global hotkeys, and background-mode preference. The selected target area, target window handle, active state, and transient dialogue are runtime-only. The first-party catalogue lists an addon ID, display name, short description, version, compatibility range, package URL, SHA-256 checksum, and release-notes URL for the Available-tab detail pane. The core addon manifest uses `manifestVersion: 1` and is parsed with the canonical `AddonManifestJson` options, including string capability names. A package has `addon.json` plus its named root assembly; extraction rejects traversal paths, a bad checksum, or a manifest that differs from its trusted catalogue record. The full compatibility range and manifest example are documented in `docs/addons/sdk-compatibility.md`.
 
 ## Companion and scenes
+
+Schema 9 adds two optional text fields, `Description` and `Personality`, directly to each companion. A schema-8 library migrates with both fields empty. Version-1 companion bundles carry the fields in their companion object. Earlier bundles that omit the fields import with blank text. Speaking examples come from existing scene dialogue and have no separate serialized field.
 
 Each companion has a stable GUID, appearance settings, animation registries, and scene assignments for required idle plus optional start, reminder, exit, companion-birthday 1/2, user-birthday 1/2, and random-idle scenes. `InteractionStates` groups optional drag-left, drag-right, and drag-hold scene IDs plus ordered `ClickAreas`. Each click area stores a name, an optional scene ID, and percentage-based left, top, width, and height bounds. Scene sources are either `AnimationPath` for a GIF/static image or ordered `PngFrames` with per-frame `DurationSeconds`.
 

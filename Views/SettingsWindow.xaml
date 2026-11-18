@@ -162,6 +162,7 @@
                              GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="UserMenu_Click" />
                 <RadioButton x:Name="CompanionMenuButton" Content="{loc:Loc Settings.Companion.Menu}"
                              GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="CompanionMenu_Click" />
+                <RadioButton Content="{loc:Loc Chat.Title}" GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="ChatMenu_Click" />
                 <RadioButton x:Name="ThemeMenuButton" Content="{loc:Loc Settings.Theme.Menu}"
                              GroupName="SettingsPages" Style="{StaticResource SettingsSidebarItem}" Click="ThemeMenu_Click" />
                 <RadioButton x:Name="AddonsMenuButton" Content="{loc:Loc Settings.Addons.Menu}"
@@ -182,6 +183,21 @@
                     </CheckBox>
                 </StackPanel>
 
+                <StackPanel x:Name="ChatPanel" Visibility="Collapsed">
+                    <DockPanel Margin="0,0,0,20">
+                        <ToggleButton x:Name="EnableChat" AutomationProperties.Name="{loc:Loc Chat.Enable}" Style="{StaticResource SettingsToggle}" DockPanel.Dock="Right" Click="EnableChat_Click" />
+                        <TextBlock Text="{loc:Loc Chat.Title}" FontSize="27" FontWeight="SemiBold" />
+                    </DockPanel>
+                    <StackPanel x:Name="ChatOptions">
+                        <TextBlock Text="{loc:Loc Chat.Model}" FontWeight="SemiBold" />
+                        <ComboBox x:Name="ChatModelChoice" SelectionChanged="ChatModel_Changed" DropDownClosed="ChatModel_Closed" AutomationProperties.Name="{loc:Loc Chat.Model}" />
+                        <TextBlock x:Name="ChatAvailability" TextWrapping="Wrap" Margin="0,6,0,20"/>
+                        <TextBlock Text="{loc:Loc Chat.Shortcut}" FontWeight="SemiBold"/>
+                        <TextBox x:Name="ChatShortcut" IsReadOnly="True" PreviewKeyDown="ChatShortcut_KeyDown" AutomationProperties.Name="{loc:Loc Chat.Shortcut}" />
+                        <TextBlock x:Name="ShortcutHint" TextWrapping="Wrap" Margin="0,4,0,20"/>
+                        <Button Content="{loc:Loc Chat.ClearHistory}" HorizontalAlignment="Left" Click="ClearChatHistory_Click"/>
+                    </StackPanel>
+                </StackPanel>
                 <StackPanel x:Name="UserPanel" Visibility="Collapsed">
                     <TextBlock Text="{loc:Loc Settings.User.Title}" FontSize="27" FontWeight="SemiBold" />
                     <TextBlock Text="{loc:Loc Settings.User.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,6,0,26" TextWrapping="Wrap" />

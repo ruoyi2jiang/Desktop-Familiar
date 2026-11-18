@@ -1,4 +1,6 @@
+using System.Runtime.InteropServices;
 using DesktopFamiliar.Views.Controls;
+using Forms = System.Windows.Forms;
 
 namespace DesktopFamiliar.Tests;
 
@@ -21,6 +23,32 @@ public sealed class TrayMenuLayoutTests
         Assert.Equal(ThemedTrayContextMenu.ContentWidth - 36, toggle.Bounds.Width);
         Assert.Equal(ThemedTrayContextMenu.ContentWidth, command.Bounds.Width);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FocusToggleClosesNativeMenuBeforeChangingWindowFocus(bool initiallyEnabled)
+    {
+        using var menu = new ThemedTrayContextMenu();
+        var toggle = new TrayToggleMenuItem("Focus", initiallyEnabled, CreateToggleColors());
+        menu.Items.Add(toggle);
+        Forms.ToolStripDropDownCloseReason? closed = null;
+        menu.Closed += (_, e) => closed = e.CloseReason;
+        var changes = new List<(bool Enabled, bool MenuVisible, Forms.ToolStripDropDownCloseReason? Reason)>();
+        toggle.Toggled += (_, _) => changes.Add((toggle.IsChecked, menu.Visible, closed));
+
+        menu.Show(System.Drawing.Point.Empty);
+        // Deliver Space to the hosted switch without sending input to any other window.
+        SendMessage(toggle.Control.Handle, 0x0100, (nint)Forms.Keys.Space, 1);
+
+        var change = Assert.Single(changes);
+        Assert.Equal(!initiallyEnabled, change.Enabled);
+        Assert.False(change.MenuVisible);
+        Assert.Equal(Forms.ToolStripDropDownCloseReason.CloseCalled, change.Reason);
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
 
     [Theory]
     [InlineData(true, true, 500, 500, true)]

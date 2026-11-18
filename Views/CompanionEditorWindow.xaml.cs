@@ -74,6 +74,9 @@ public partial class CompanionEditorWindow : Window
             || DateTime.TryParse(_companion.Birthday, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out birthday))
             BirthdayPicker.SelectedDate = birthday;
         UserNicknameBox.Text = _companion.UserNickname;
+        DescriptionBox.Text = _companion.Description;
+        PersonalityBox.Text = _companion.Personality;
+        ThinkingPhraseBox.Text = _companion.ThinkingPhrase;
         FontCombo.Text = _companion.FontFamilyName;
         ImportedFontLabel.Text = string.IsNullOrWhiteSpace(_companion.ImportedFontPath)
             ? string.Empty
@@ -90,6 +93,14 @@ public partial class CompanionEditorWindow : Window
             _companionPreviewPlayer.Dispose();
             _clickAreaPreviewPlayer.Dispose();
         };
+    }
+
+    private void DialogueExamples_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true)
+            return;
+        var examples = string.Join(Environment.NewLine, _companion.GetDialogueExamples().Take(6));
+        DialogueExamplesText.Text = examples.Length > 0 ? examples : LocalizationService.Get("Editor.Profile.NoExamples");
     }
 
     private void BirthdayPicker_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1128,6 +1139,9 @@ public partial class CompanionEditorWindow : Window
         _companion.Name = NameBox.Text.Trim();
         _companion.Birthday = BirthdayPicker.SelectedDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
         _companion.UserNickname = UserNicknameBox.Text.Trim();
+        _companion.Description = DescriptionBox.Text.Trim();
+        _companion.Personality = PersonalityBox.Text.Trim();
+        _companion.ThinkingPhrase = ThinkingPhraseBox.Text.Trim();
         _companion.FontFamilyName = string.IsNullOrWhiteSpace(FontCombo.Text) ? "Segoe UI" : FontCombo.Text.Trim();
         if (!string.Equals(_companion.FontFamilyName, FontCombo.Text, StringComparison.Ordinal))
             FontCombo.Text = _companion.FontFamilyName;

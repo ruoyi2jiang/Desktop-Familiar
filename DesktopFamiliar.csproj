@@ -23,6 +23,8 @@
     <Compile Remove="tests\**\*.cs" />
     <Resource Include="Assets\AppIcon.ico" />
     <EmbeddedResource Include="Resources\Strings\en.json" LogicalName="DesktopFamiliar.Localization.Strings.en.json" />
+    <InternalsVisibleTo Include="DesktopFamiliar.Tests" />
+    <EmbeddedResource Include="Resources\chat-models.json" LogicalName="DesktopFamiliar.Resources.chat-models.json" />
     <Content Include="Resources\Strings\en.json" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
   </ItemGroup>
 </Project>

@@ -98,6 +98,7 @@ public partial class SettingsWindow : Window
         General,
         User,
         Companion,
+        Chat,
         Theme,
         Addons
     }
@@ -1050,6 +1051,8 @@ public partial class SettingsWindow : Window
         GeneralPanel.Visibility = page == SettingsPage.General ? Visibility.Visible : Visibility.Collapsed;
         UserPanel.Visibility = page == SettingsPage.User ? Visibility.Visible : Visibility.Collapsed;
         CompanionPanel.Visibility = page == SettingsPage.Companion ? Visibility.Visible : Visibility.Collapsed;
+        ChatPanel.Visibility = page == SettingsPage.Chat ? Visibility.Visible : Visibility.Collapsed;
+        if (page == SettingsPage.Chat) RefreshChatSettings();
         ThemePanel.Visibility = page == SettingsPage.Theme ? Visibility.Visible : Visibility.Collapsed;
         AddonsPanel.Visibility = page == SettingsPage.Addons ? Visibility.Visible : Visibility.Collapsed;
         SettingsPageScrollViewer.ScrollToTop();
