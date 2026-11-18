@@ -30,6 +30,8 @@ public sealed class PngAnimationFrame
 
 public sealed class AnimationScene
 {
+    public string? GetPreviewPath() => PngFrames.FirstOrDefault()?.FilePath ?? AnimationPath;
+
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = LocalizationService.Get("Model.Animation.New");
     public string AnimationPath { get; set; } = string.Empty;

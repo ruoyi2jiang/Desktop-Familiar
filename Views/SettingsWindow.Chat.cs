@@ -20,6 +20,7 @@ public partial class SettingsWindow
         try
         {
             var chat = App.CurrentApp.Chat;
+            RefreshHistorySize();
             var prefs = _manager.Data.Settings.Chat;
             var installed = chat.Models.AvailableModels();
             EnableChat.IsChecked = prefs.Enabled;
@@ -113,6 +114,44 @@ public partial class SettingsWindow
         ApplyChat(_manager.Data.Settings.Chat with { Shortcut = text });
     }
 
-    private void ClearChatHistory_Click(object sender, RoutedEventArgs e) =>
-        new ChatHistoryWindow(_manager, App.CurrentApp.Chat, clear: true) { Owner = this }.ShowDialog();
+    private void ManageHistory_Click(object sender, RoutedEventArgs e) =>
+        new ChatHistoryWindow(_manager, App.CurrentApp.Chat, manage: true) { Owner = this }.ShowDialog();
+
+    private void HistorySizeChanged(object? sender, EventArgs e)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.InvokeAsync(RefreshHistorySize);
+            return;
+        }
+        RefreshHistorySize();
+    }
+
+    private void RefreshHistorySize()
+    {
+        if (ChatPanel.Visibility != Visibility.Visible) return;
+        try
+        {
+            var size = App.CurrentApp.Chat.History.GetTotalSizeBytes();
+            TotalHistorySize.Text = LocalizationService.Format("Chat.TotalHistorySize", FileSizeFormatter.Format(size));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.Warning("Could not read the size of the chat history file.", ex);
+            TotalHistorySize.Text = LocalizationService.Get("Chat.HistorySizeUnavailable");
+        }
+    }
+
+    private void ClearAllHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var title = LocalizationService.Get("Chat.ClearAll");
+        var dialog = new DeleteConfirmationWindow(title, LocalizationService.Get("Chat.ClearAllConfirm"), title) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        try { App.CurrentApp.Chat.ClearAll(); }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Could not clear all companion chat history.", ex);
+            MessageBox.Show(this, LocalizationService.Get("Chat.ClearFailed"), title);
+        }
+    }
 }

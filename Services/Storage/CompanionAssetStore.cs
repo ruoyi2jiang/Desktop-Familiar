@@ -44,7 +44,7 @@ public sealed class CompanionAssetStore
         .OrderBy(Path.GetFileName)
         .ToList();
 
-    public void DeleteCompanionResources(Guid companionId)
+    public bool DeleteCompanionResources(Guid companionId, IEnumerable<string?>? retainedPaths = null)
     {
         var assetsRoot = Path.GetFullPath(Path.Combine(RootDirectory, "Assets"));
         var companionDirectory = Path.GetFullPath(Path.Combine(assetsRoot, companionId.ToString("N")));
@@ -53,8 +53,32 @@ public sealed class CompanionAssetStore
         if (!companionDirectory.StartsWith(requiredPrefix, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The companion asset directory is outside the asset store.");
 
-        if (Directory.Exists(companionDirectory))
-            Directory.Delete(companionDirectory, recursive: true);
+        if (!Directory.Exists(companionDirectory)) return true;
+        var prefix = companionDirectory + Path.DirectorySeparatorChar;
+        var shared = (retainedPaths ?? []).OfType<string>().Where(Path.IsPathFullyQualified)
+            .Select(Path.GetFullPath).Where(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return RemoveUnused(new DirectoryInfo(companionDirectory), shared);
+    }
+
+    private static bool RemoveUnused(DirectoryInfo directory, HashSet<string> shared)
+    {
+        var prefix = directory.FullName + Path.DirectorySeparatorChar;
+        if (!shared.Any(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            directory.Delete(recursive: true);
+            return true;
+        }
+
+        if (directory.Attributes.HasFlag(FileAttributes.ReparsePoint)) return false;
+        foreach (var entry in directory.EnumerateFileSystemInfos())
+        {
+            if (entry is DirectoryInfo child) RemoveUnused(child, shared);
+            else if (!shared.Contains(entry.FullName)) entry.Delete();
+        }
+        if (directory.EnumerateFileSystemInfos().Any()) return false;
+        directory.Delete();
+        return true;
     }
 
     private static bool PathsEqual(string first, string second) => string.Equals(

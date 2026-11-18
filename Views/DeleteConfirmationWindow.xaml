@@ -1,0 +1,23 @@
+<Window x:Class="DesktopFamiliar.Views.DeleteConfirmationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:DesktopFamiliar.Localization"
+        Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+    <Border Background="{DynamicResource PrimaryBackgroundBrush}" BorderBrush="{DynamicResource PrimaryAccentBrush}"
+            BorderThickness="1" CornerRadius="14" Padding="24"
+            TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
+        <StackPanel>
+            <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}" FontSize="21" FontWeight="SemiBold" />
+            <TextBlock x:Name="MessageText" Margin="0,12,0,8" TextWrapping="Wrap" FontSize="14" />
+            <CheckBox x:Name="Option" Margin="0,4,0,0">
+                <TextBlock x:Name="OptionLabel" TextWrapping="Wrap" />
+            </CheckBox>
+            <UniformGrid Style="{StaticResource DialogActionRow}">
+                <Button Content="{loc:Loc Common.Cancel}" IsCancel="True" IsDefault="True" Style="{StaticResource OutlineButton}" />
+                <Button x:Name="ConfirmButton" Style="{StaticResource DangerButton}" Click="Confirm_Click" />
+            </UniformGrid>
+        </StackPanel>
+    </Border>
+</Window>

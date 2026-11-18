@@ -15,6 +15,7 @@ public sealed class CompanionDefinition
     public string FontFamilyName { get; set; } = "Segoe UI";
     public string? ImportedFontPath { get; set; }
     public string FontColor { get; set; } = "#FFFFFFFF";
+    public string? ProfilePicturePath { get; set; }
     public string? BubbleImagePath { get; set; }
     public List<AnimationScene> Animations { get; set; } = [];
     public Guid? StartAnimationId { get; set; }
@@ -61,6 +62,21 @@ public sealed class CompanionDefinition
         .Select(line => line.Text.Trim())
         .Distinct(StringComparer.Ordinal);
 
+    public IEnumerable<string?> GetAssetPaths()
+    {
+        yield return ImportedFontPath;
+        yield return ProfilePicturePath;
+        yield return BubbleImagePath;
+        foreach (var scene in Animations)
+        {
+            yield return scene.AnimationPath;
+            foreach (var frame in scene.PngFrames)
+                yield return frame.FilePath;
+            foreach (var line in scene.DialogLines)
+                yield return line.VoicePath;
+        }
+    }
+
     public CompanionDefinition Clone() => new()
     {
         Id = Id,
@@ -73,6 +89,7 @@ public sealed class CompanionDefinition
         FontFamilyName = FontFamilyName,
         ImportedFontPath = ImportedFontPath,
         FontColor = FontColor,
+        ProfilePicturePath = ProfilePicturePath,
         BubbleImagePath = BubbleImagePath,
         Animations = Animations.Select(scene => scene.Clone()).ToList(),
         StartAnimationId = StartAnimationId,

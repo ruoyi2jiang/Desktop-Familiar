@@ -1,7 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
@@ -35,11 +33,12 @@ public partial class CompanionCard : UserControl
         ConfigureButton.Content = LocalizationService.Get("Common.Configure");
         ExportButton.Content = LocalizationService.Get("CompanionBundle.Export");
         DeleteButton.Content = LocalizationService.Get("Common.Delete");
-        PreviewBorder.ToolTip = LocalizationService.Get("Library.PreviewIdleDefault");
+
         SelectedIndicatorHost.ToolTip = LocalizationService.Get("Common.Selected");
         SelectButton.Visibility = isCurrent ? Visibility.Collapsed : Visibility.Visible;
         SelectedIndicatorHost.Visibility = isCurrent ? Visibility.Visible : Visibility.Collapsed;
-        PreviewContent.Content = CreatePreview(companion);
+        PreviewImage.Source = CompanionPictureLoader.Load(companion.ProfilePicturePath, companion.IdleDefaultAnimation?.GetPreviewPath());
+        PreviewPlaceholder.Visibility = PreviewImage.Source == null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public CompanionDefinition Companion { get; }
@@ -60,59 +59,4 @@ public partial class CompanionCard : UserControl
 
     private void Delete_Click(object sender, RoutedEventArgs e) =>
         DeleteRequested?.Invoke(this, EventArgs.Empty);
-
-    private static FrameworkElement CreatePreview(CompanionDefinition companion)
-    {
-        var preview = LoadIdlePreview(companion);
-        if (preview is not null)
-        {
-            return new Image
-            {
-                Source = preview,
-                Stretch = Stretch.Uniform,
-                RenderTransformOrigin = new Point(0.5, 0.5)
-            };
-        }
-
-        return new TextBlock
-        {
-            Text = LocalizationService.Get("Library.PreviewMissing"),
-            TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-    }
-
-    internal static ImageSource? LoadIdlePreview(CompanionDefinition companion) => LoadPreview(GetIdleDefaultPreviewPath(companion));
-
-    private static string? GetIdleDefaultPreviewPath(CompanionDefinition companion)
-    {
-        var scene = companion.IdleDefaultAnimation;
-        return scene?.PngFrames.FirstOrDefault()?.FilePath ?? scene?.AnimationPath;
-    }
-
-    private static ImageSource? LoadPreview(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            return null;
-
-        try
-        {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            var decoder = BitmapDecoder.Create(
-                stream,
-                BitmapCreateOptions.PreservePixelFormat,
-                BitmapCacheOption.OnLoad);
-            if (decoder.Frames.Count == 0)
-                return null;
-            var firstFrame = BitmapFrame.Create(decoder.Frames[0]);
-            firstFrame.Freeze();
-            return firstFrame;
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Warning($"The idle-default preview '{path}' could not be loaded.", exception);
-            return null;
-        }
-    }
 }

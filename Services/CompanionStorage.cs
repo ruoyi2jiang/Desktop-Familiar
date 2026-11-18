@@ -107,8 +107,8 @@ public sealed class CompanionStorage : ICompanionRepository
     public IReadOnlyList<string> GetImportedBubbleImages(DesktopCompanionData data) =>
         _assetStore.GetImportedBubbleImages(data);
 
-    public void DeleteCompanionResources(Guid companionId) =>
-        _assetStore.DeleteCompanionResources(companionId);
+    public bool DeleteCompanionResources(Guid companionId, IEnumerable<string?> retainedPaths) =>
+        _assetStore.DeleteCompanionResources(companionId, retainedPaths);
 
     public void ExportCompanion(CompanionDefinition companion, string destinationPath) =>
         _bundleService.Export(companion, destinationPath);

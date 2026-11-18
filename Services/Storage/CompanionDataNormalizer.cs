@@ -15,6 +15,8 @@ public sealed class CompanionDataNormalizer
         Migrate(data);
         data.SchemaVersion = DesktopCompanionData.CurrentSchemaVersion;
         data.Companions ??= [];
+        data.PendingCompanionCleanup = (data.PendingCompanionCleanup ?? [])
+            .Where(id => id != Guid.Empty && data.Companions.All(pet => pet.Id != id)).Distinct().ToList();
         data.CalendarEvents ??= [];
         data.Settings ??= new AppSettings();
 
@@ -80,6 +82,12 @@ public sealed class CompanionDataNormalizer
             data.Settings.Chat = new();
             foreach (var pet in data.Companions ?? []) pet.ThinkingPhrase = string.Empty;
             data.SchemaVersion = 10;
+        }
+        if (data.SchemaVersion == 10)
+        {
+            foreach (var pet in data.Companions ?? []) pet.ProfilePicturePath = null;
+            data.PendingCompanionCleanup = [];
+            data.SchemaVersion = 11;
         }
     }
 

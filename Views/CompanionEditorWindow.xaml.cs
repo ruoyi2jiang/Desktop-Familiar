@@ -14,6 +14,7 @@ using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Animation;
 using DesktopFamiliar.Services.Validation;
+using DesktopFamiliar.Views.Controls;
 
 namespace DesktopFamiliar.Views;
 
@@ -31,6 +32,7 @@ public partial class CompanionEditorWindow : Window
     private readonly CompanionStorage _storage;
     private readonly CompanionDefinition _companion;
     private readonly bool _isNew;
+    private string? _pendingPicture;
     private readonly FrameAnimationPlayer _previewPlayer;
     private readonly FrameAnimationPlayer _companionPreviewPlayer;
     private readonly FrameAnimationPlayer _clickAreaPreviewPlayer;
@@ -322,6 +324,8 @@ public partial class CompanionEditorWindow : Window
         var scene = _companion.FindAnimation(GetAssignmentId(IdleDefaultCombo, _companion.IdleDefaultAnimationId))
             ?? _companion.FindAnimation(GetAssignmentId(StartCombo, _companion.StartAnimationId))
             ?? _companion.Animations.FirstOrDefault();
+        ProfileAvatar.SetPicture(_companion.ProfilePicturePath, scene?.GetPreviewPath());
+        ResetPicture.Visibility = _companion.ProfilePicturePath == null ? Visibility.Collapsed : Visibility.Visible;
         if (scene is null)
             return;
 
@@ -1103,6 +1107,30 @@ public partial class CompanionEditorWindow : Window
         }
     }
 
+    private void ImportProfilePicture_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new OpenFileDialog
+        {
+            Title = LocalizationService.Get("Editor.Picture.Import"),
+            Filter = LocalizationService.Get("FileDialog.Bubble.Filter")
+        };
+        if (picker.ShowDialog(this) != true) return;
+        if (CompanionPictureLoader.Load(picker.FileName) == null)
+        {
+            MessageBox.Show(this, LocalizationService.Get("Editor.Picture.Invalid"),
+                picker.Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        _companion.ProfilePicturePath = _pendingPicture = picker.FileName;
+        RefreshCompanionPreview();
+    }
+
+    private void ResetProfilePicture_Click(object sender, RoutedEventArgs e)
+    {
+        _companion.ProfilePicturePath = _pendingPicture = null;
+        RefreshCompanionPreview();
+    }
+
     private void ImportBubble_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
@@ -1177,6 +1205,11 @@ public partial class CompanionEditorWindow : Window
 
         try
         {
+            if (_pendingPicture != null)
+            {
+                _companion.ProfilePicturePath = _storage.ImportAsset(_companion.Id, _pendingPicture, "Portraits");
+                _pendingPicture = null;
+            }
             _manager.SaveCompanion(_companion);
             if (_isNew)
                 _manager.SelectCompanion(_companion.Id);

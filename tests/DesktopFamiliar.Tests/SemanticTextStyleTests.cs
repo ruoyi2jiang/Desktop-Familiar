@@ -73,6 +73,93 @@ public sealed class SemanticTextStyleTests
     }
 
     [Fact]
+    public void DeleteConfirmationUsesTheSharedEqualSizeRowAndButtonMargins()
+    {
+        var app = XDocument.Load(FindRepositoryFile("App.xaml"));
+        var rowStyle = app.Descendants(Presentation + "Style")
+            .Single(style => (string?)style.Attribute(Xaml + "Key") == "DialogActionRow");
+        Assert.Equal("UniformGrid", (string?)rowStyle.Attribute("TargetType"));
+        Assert.Contains(rowStyle.Elements(Presentation + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Rows" && (string?)setter.Attribute("Value") == "1");
+
+        var dialog = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "DeleteConfirmationWindow.xaml")));
+        var row = dialog.Descendants(Presentation + "UniformGrid").Single();
+        Assert.Equal("{StaticResource DialogActionRow}", (string?)row.Attribute("Style"));
+        var buttons = row.Elements(Presentation + "Button").ToArray();
+        Assert.Equal(2, buttons.Length);
+        Assert.All(buttons, button => Assert.Null(button.Attribute("Margin")));
+    }
+
+    [Fact]
+    public void ChatHistoryPetRowsPaintHoverAndSelectionWithPageThemeBrushes()
+    {
+        var history = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "ChatHistoryWindow.xaml")));
+        var petList = history.Descendants(Presentation + "ListBox")
+            .Single(list => (string?)list.Attribute(Xaml + "Name") == "Pets");
+        Assert.Equal("{StaticResource ChatHistoryPetItem}", (string?)petList.Attribute("ItemContainerStyle"));
+
+        var app = XDocument.Load(FindRepositoryFile("App.xaml"));
+        var style = app.Descendants(Presentation + "Style")
+            .Single(element => (string?)element.Attribute(Xaml + "Key") == "ChatHistoryPetItem");
+        var template = style.Descendants(Presentation + "ControlTemplate").Single();
+        var surface = Assert.Single(template.Descendants(Presentation + "Border"));
+        Assert.Null(surface.Attribute("BorderBrush"));
+        Assert.Null(surface.Attribute("BorderThickness"));
+        var fills = from trigger in template.Descendants(Presentation + "Trigger")
+                    where (string?)trigger.Attribute("Value") == "True"
+                    from setter in trigger.Elements(Presentation + "Setter")
+                    where (string?)setter.Attribute("TargetName") == "RowSurface"
+                        && (string?)setter.Attribute("Property") == "Background"
+                    select ((string?)trigger.Attribute("Property"), (string?)setter.Attribute("Value"));
+
+        // WPF applies the last matching trigger when the selected pet is also hovered.
+        Assert.Equal([("IsMouseOver", "{DynamicResource PageBackgroundHoverBrush}"),
+                      ("IsSelected", "{DynamicResource PageBackgroundActiveBrush}")], fills.ToArray());
+    }
+
+    [Fact]
+    public void ChatHistoryUsesTheSharedOverlayScrollViewerForItsListsAndConversation()
+    {
+        var window = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "ChatHistoryWindow.xaml"))).Root!;
+        var style = window.Element(Presentation + "Window.Resources")!.Elements(Presentation + "Style")
+            .Single(element => (string?)element.Attribute("TargetType") == "ScrollViewer" && element.Attribute(Xaml + "Key") == null);
+        Assert.Equal("{StaticResource OverlayScrollViewer}", (string?)style.Attribute("BasedOn"));
+        foreach (var scroll in window.Descendants(Presentation + "ScrollViewer"))
+            Assert.Null(scroll.Attribute("Style"));
+    }
+
+    [Fact]
+    public void HistoryPetListRemovesTheSharedScrollbarInsetAtThePaneDivider()
+    {
+        var window = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "ChatHistoryWindow.xaml")));
+        var pets = window.Descendants(Presentation + "ListBox").Single();
+        var inset = pets.Element(Presentation + "ListBox.Resources")!.Elements(Presentation + "Thickness")
+            .Single(resource => (string?)resource.Attribute(Xaml + "Key") == "OverlayScrollBarMargin");
+        Assert.Equal("0,4,0,4", inset.Value);
+
+        var app = XDocument.Load(FindRepositoryFile("App.xaml"));
+        var scrollbar = app.Descendants(Presentation + "Style")
+            .Single(style => (string?)style.Attribute(Xaml + "Key") == "OverlayVerticalScrollBar");
+        Assert.Contains(scrollbar.Elements(Presentation + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Margin" && (string?)setter.Attribute("Value") == "{DynamicResource OverlayScrollBarMargin}");
+    }
+
+    [Fact]
+    public void ManageHistoryRowsUseANonSelectableListWithAnAccessibleClearButton()
+    {
+        var history = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "ChatHistoryWindow.xaml")));
+        var list = history.Descendants().Single(element => (string?)element.Attribute(Xaml + "Name") == "ManagedPets");
+        Assert.Equal(Presentation + "ItemsControl", list.Name);
+        Assert.Equal("False", (string?)list.Attribute("Focusable"));
+        Assert.Null(list.Attribute("ItemContainerStyle"));
+
+        var row = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "Controls", "ChatHistoryPetRow.xaml")));
+        Assert.Equal("False", (string?)row.Root!.Attribute("Focusable"));
+        var button = Assert.Single(row.Descendants(Presentation + "Button"));
+        Assert.Equal("ClearButton", (string?)button.Attribute(Xaml + "Name"));
+    }
+
+    [Fact]
     public void PageMenuHighlightUsesPageTextOnAccentToken()
     {
         var document = XDocument.Load(FindRepositoryFile("App.xaml"));

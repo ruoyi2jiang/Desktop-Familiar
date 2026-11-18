@@ -140,6 +140,9 @@ public partial class SettingsWindow : Window
         RefreshAddonManagerEntries();
         RefreshThemeCards();
         Loaded += (_, _) => _loaded = true;
+        var history = App.CurrentApp.Chat.History;
+        history.Changed += HistorySizeChanged;
+        Closed += (_, _) => history.Changed -= HistorySizeChanged;
     }
 
     private void RunAtStartup_Changed(object sender, RoutedEventArgs e)

@@ -21,6 +21,7 @@ public sealed class CompanionBundleServiceTests
         var voice = WriteAsset(sourceRoot, "voice.wav", [6, 7]);
         var font = WriteAsset(sourceRoot, "font.ttf", [8]);
         var bubble = WriteAsset(sourceRoot, "bubble.png", [9]);
+        var portrait = WriteAsset(sourceRoot, "portrait.png", [10, 11]);
         var idleId = Guid.NewGuid();
         var busyId = Guid.NewGuid();
         var companion = new CompanionDefinition
@@ -31,6 +32,7 @@ public sealed class CompanionBundleServiceTests
             ThinkingPhrase = "One moment, Keeper.",
             ImportedFontPath = font,
             BubbleImagePath = bubble,
+            ProfilePicturePath = portrait,
             Animations =
             [
                 new AnimationScene
@@ -82,6 +84,8 @@ public sealed class CompanionBundleServiceTests
             Assert.True(File.Exists(path));
             Assert.StartsWith(Path.GetFullPath(dataRoot), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
         });
+        Assert.Equal([10, 11], File.ReadAllBytes(imported.ProfilePicturePath!));
+        Assert.StartsWith(importResult.AssetDirectory, imported.ProfilePicturePath, StringComparison.OrdinalIgnoreCase);
         Assert.Equal([1, 2, 3], File.ReadAllBytes(imported.Animations[0].PngFrames[0].FilePath));
         Assert.Equal([6, 7], File.ReadAllBytes(imported.Animations[1].DialogLines[0].VoicePath!));
 
@@ -102,7 +106,7 @@ public sealed class CompanionBundleServiceTests
         history.Append(pet.Id, pet.Name, new("Remember amber", "Okay", DateTimeOffset.Now), "amber");
         var pack = Path.Combine(directory.Path, "pip.companionpack");
         storage.ExportCompanion(pet, pack);
-        manager.DeleteCompanion(pet.Id);
+        Assert.True(new CompanionDeletionService(manager, storage, history).Delete(pet.Id, deleteLocalData: false));
 
         var fresh = storage.ImportCompanionBundle(pack).Companion;
         manager.SaveCompanion(fresh);

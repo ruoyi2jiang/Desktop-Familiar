@@ -49,11 +49,11 @@ public sealed class ChatTests : IDisposable
         var reopened = new ChatHistoryStore(_root);
         Assert.Equal(2, reopened.ForPet(a.Id).Turns.Count);
         Assert.Equal(["cobalt-6294"], reopened.ForPet(b.Id).Notes);
-        history.Clear([a.Id], includeNotes: false);
+        history.Clear([a.Id], ChatHistoryClearScope.Messages);
         Assert.Empty(reopened.ForPet(a.Id).Turns);
         Assert.Equal(["amber-1873"], reopened.ForPet(a.Id).Notes);
-        history.Clear([a.Id], includeNotes: true);
-        Assert.False(history.Names().ContainsKey(a.Id));
+        history.Clear([a.Id], ChatHistoryClearScope.MessagesAndNotes);
+        Assert.False(history.ListPets().ContainsKey(a.Id));
         Assert.Single(history.ForPet(b.Id).Turns);
     }
 
@@ -88,7 +88,7 @@ public sealed class ChatTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_root, "Chat", "history.json.tmp"));
         var notified = false;
         store.Changed += (_, _) => notified = true;
-        Assert.ThrowsAny<Exception>(() => store.Clear([id], true));
+        Assert.ThrowsAny<Exception>(() => store.Clear([id], ChatHistoryClearScope.MessagesAndNotes));
         Assert.Single(store.ForPet(id).Turns);
         Assert.False(notified);
     }
@@ -100,7 +100,7 @@ public sealed class ChatTests : IDisposable
             {"SchemaVersion":9,"Companions":[{"Personality":"Sleepy","Description":"Small"}]}
             """)!;
         new CompanionDataNormalizer().Normalize(data);
-        Assert.Equal(10, data.SchemaVersion);
+        Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, data.SchemaVersion);
         Assert.False(data.Settings.Chat.Enabled);
         Assert.Null(data.Settings.Chat.ModelId);
         Assert.Equal("Ctrl+Shift+F9", data.Settings.Chat.Shortcut);
@@ -118,6 +118,119 @@ public sealed class ChatTests : IDisposable
         Assert.Equal(reply.Replace(" ", "").Replace("\n", ""), string.Concat(pages).Replace(" ", "").Replace("\n", ""));
         Assert.All(pages, page => Assert.InRange(new System.Globalization.StringInfo(page).LengthInTextElements, 1, 110));
         Assert.True(ChatBubbleTiming.ReadingTime("Hello there!") > ChatBubbleTiming.ReadingTime("Hi"));
+    }
+
+    [Fact]
+    public void VersionOneHistoryKeepsTurnsAndNotesWhenArchivedPortraitIsAdded()
+    {
+        var id = Guid.NewGuid();
+        var directory = Directory.CreateDirectory(Path.Combine(_root, "Chat"));
+        var path = Path.Combine(directory.FullName, "history.json");
+        var expected = new ChatTurn("Hello", "Hi", DateTimeOffset.UtcNow);
+        File.WriteAllText(path, JsonSerializer.Serialize(new { Version = 1, Pets = new Dictionary<Guid, object>
+        {
+            [id] = new { Name = "Old name", Turns = new[] { expected }, Notes = new[] { "remember this" } }
+        }}));
+        var store = new ChatHistoryStore(_root);
+        Assert.Null(store.ListPets()[id].Portrait);
+        store.RememberArchivedAppearance(new CompanionDefinition { Id = id, Name = "New name", ProfilePicturePath = "portrait.png" });
+        var saved = new ChatHistoryStore(_root).ForPet(id);
+        Assert.Equal("New name", saved.Name);
+        Assert.Equal("portrait.png", saved.ArchivedPortrait?.PicturePath);
+        Assert.Equal(expected, Assert.Single(saved.Turns));
+        Assert.Equal("remember this", Assert.Single(saved.Notes));
+        using var json = JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal(2, json.RootElement.GetProperty("Version").GetInt32());
+    }
+
+    [Fact]
+    public void ClearAppliesOnlyTheCategoriesShownWhenConfirmationOpened()
+    {
+        var store = new ChatHistoryStore(_root);
+        var pet = Guid.NewGuid();
+        var turn = new ChatTurn("Hi", "Hello", DateTimeOffset.Now);
+        store.Append(pet, "Pip", turn, null);
+        var messagesOnlyDialog = store.ForPet(pet);
+        store.Append(pet, "Pip", turn, "new note");
+        store.Clear([pet], messagesOnlyDialog.GetClearScope(alsoDeleteNotes: true));
+        var notesOnlyDialog = store.ForPet(pet);
+        Assert.Empty(notesOnlyDialog.Turns);
+        Assert.Equal(["new note"], notesOnlyDialog.Notes);
+
+        store.Append(pet, "Pip", turn, null);
+        store.Clear([pet], notesOnlyDialog.GetClearScope(alsoDeleteNotes: false));
+        var remaining = store.ForPet(pet);
+        Assert.Equal(turn, Assert.Single(remaining.Turns));
+        Assert.Empty(remaining.Notes);
+    }
+
+    [Fact]
+    public void ClearingPetsWithoutHistoryKeepsTheStoreUntouched()
+    {
+        var store = new ChatHistoryStore(_root);
+        int changes = 0;
+        store.Changed += (_, _) => changes++;
+        var unusedId = Guid.NewGuid();
+        store.Clear([unusedId], ChatHistoryClearScope.MessagesAndNotes);
+        Assert.Equal(0, changes);
+        Assert.Equal(0, store.GetTotalSizeBytes());
+
+        var savedId = Guid.NewGuid();
+        store.Append(savedId, "Pip", new("Hi", "Hello", DateTimeOffset.Now), null);
+        store.Clear([unusedId], ChatHistoryClearScope.MessagesAndNotes);
+        Assert.Equal(1, changes);
+        Assert.Single(store.ForPet(savedId).Turns);
+    }
+
+    [Fact]
+    public void StorageSizesReflectSavedUtf8RecordsAndTheActualFile()
+    {
+        var store = new ChatHistoryStore(_root);
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var directory = Directory.CreateDirectory(Path.Combine(_root, "Chat"));
+        var path = Path.Combine(directory.FullName, "history.json");
+        const string first = """{ "Name": "Twin", "Turns": [], "Notes": ["茶"] }""";
+        var second = """{"Name":"Twin","Turns":[],"Notes":["LONG"]}""".Replace("LONG", new string('x', 50_000));
+        File.WriteAllText(path, $$"""
+            {"Version":1,"Pets":{
+                "{{a}}":{{first}},
+                "{{b}}":{{second}}
+            }
+            }
+            """);
+
+        var summaries = store.ListPets();
+        Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(first), summaries[a].SizeBytes);
+        Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(second), summaries[b].SizeBytes);
+        Assert.Equal(new FileInfo(path).Length, store.GetTotalSizeBytes());
+
+        store.Append(a, "Twin", new("Hello", "Hi", DateTimeOffset.UtcNow), null);
+        var withTurn = store.ListPets()[a].SizeBytes;
+        store.Clear([a], ChatHistoryClearScope.Messages);
+        Assert.InRange(store.ListPets()[a].SizeBytes, 1, withTurn - 1);
+        Assert.Equal(new FileInfo(path).Length, store.GetTotalSizeBytes());
+        store.ClearAll();
+        Assert.Empty(store.ListPets());
+        Assert.Equal(0, store.GetTotalSizeBytes());
+    }
+
+    [Fact]
+    public void ClearAllRemovesArchivedAndNotesOnlyEntriesAndIsRepeatable()
+    {
+        var store = new ChatHistoryStore(_root);
+        var first = Guid.NewGuid();
+        var archived = Guid.NewGuid();
+        store.Append(first, "Twin", new("hello", "hi", DateTimeOffset.UtcNow), "note");
+        store.Clear([first], ChatHistoryClearScope.Messages);
+        store.Append(archived, "Twin", new("hello", "hi", DateTimeOffset.UtcNow), "private");
+        var staging = Path.Combine(_root, "Chat", "history.json.tmp");
+        File.Copy(Path.Combine(_root, "Chat", "history.json"), staging);
+        store.ClearAll();
+        store.ClearAll();
+        Assert.False(File.Exists(staging));
+        Assert.Empty(new ChatHistoryStore(_root).ListPets());
+        Assert.False(File.Exists(Path.Combine(_root, "Chat", "history.json")));
     }
 
     [Fact]

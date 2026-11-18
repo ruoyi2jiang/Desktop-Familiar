@@ -52,6 +52,10 @@
         <Style x:Key="PageTextBlock" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextOnPageBackgroundBrush}" />
         </Style>
+        <Style x:Key="MutedPageTextBlock" TargetType="TextBlock" BasedOn="{StaticResource PageTextBlock}">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.72" />
+        </Style>
         <Style x:Key="PrimaryTextBlock" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource TextOnPrimaryBackgroundBrush}" />
         </Style>
@@ -150,10 +154,11 @@
             </Setter>
         </Style>
 
+        <Thickness x:Key="OverlayScrollBarMargin">0,4,2,4</Thickness>
         <Style x:Key="OverlayVerticalScrollBar" TargetType="ScrollBar">
             <Setter Property="Width" Value="8" />
             <Setter Property="MinWidth" Value="8" />
-            <Setter Property="Margin" Value="0,4,2,4" />
+            <Setter Property="Margin" Value="{DynamicResource OverlayScrollBarMargin}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -383,6 +388,11 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        <Style x:Key="DialogActionRow" TargetType="UniformGrid">
+            <Setter Property="Rows" Value="1" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="0,16,0,0" />
         </Style>
         <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="{DynamicResource PrimaryAccentBrush}" />
@@ -839,6 +849,28 @@
                     <Setter Property="Foreground" Value="{DynamicResource TextOnInputBackgroundBrush}" />
                 </Trigger>
             </Style.Triggers>
+        </Style>
+        <Style x:Key="ChatHistoryPetItem" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Foreground" Value="{DynamicResource TextOnPageBackgroundBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="RowSurface" Background="Transparent" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RowSurface" Property="Background" Value="{DynamicResource PageBackgroundHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="RowSurface" Property="Background" Value="{DynamicResource PageBackgroundActiveBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="DataGridRow">
             <Style.Triggers>

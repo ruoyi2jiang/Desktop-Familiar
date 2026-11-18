@@ -19,6 +19,7 @@ public partial class App : System.Windows.Application
     private TrayService? _trayService;
     private CompanionOverlayWindow? _overlay;
     private CompanionLibraryWindow? _library;
+    private CompanionDeletionService _deletions = null!;
     private SettingsWindow? _settings;
     private ChatHistoryWindow? _historyWindow;
     public ChatController Chat { get; private set; } = null!;
@@ -91,6 +92,8 @@ public partial class App : System.Windows.Application
             Manager.ThemeChanged += (_, _) => ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             _overlay = new CompanionOverlayWindow(Manager, _addonViewportActions);
             Chat = new ChatController(Manager, _overlay, new ChatModelStore(Storage.RootDirectory, _addonHttpClient), new ChatHistoryStore(Storage.RootDirectory));
+            _deletions = new CompanionDeletionService(Manager, Storage, Chat.History);
+            _deletions.RetryPending();
             _addonRuntimeLoader = new AddonRuntimeLoader(AddonInstallations, AppLogger.Error);
             _addonRuntimeLoader.LoadEnabled(new DesktopFamiliarAddonHost(
                 _addonViewportActions,
@@ -263,7 +266,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _library = new CompanionLibraryWindow(Manager, Storage);
+        _library = new CompanionLibraryWindow(Manager, Storage, _deletions);
         _library.Show();
         _library.Activate();
     }

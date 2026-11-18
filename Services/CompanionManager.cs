@@ -65,12 +65,13 @@ public sealed class CompanionManager
             CurrentCompanionChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void DeleteCompanion(Guid companionId)
+    public void DeleteCompanion(Guid companionId, bool deleteLocalData = false)
     {
         var removed = Data.Companions.RemoveAll(companion => companion.Id == companionId) > 0;
         if (!removed)
             return;
 
+        if (deleteLocalData) Data.PendingCompanionCleanup.Add(companionId);
         var currentChanged = Data.Settings.CurrentCompanionId == companionId;
         if (currentChanged)
             Data.Settings.CurrentCompanionId = Data.Companions.FirstOrDefault()?.Id;
@@ -79,6 +80,11 @@ public sealed class CompanionManager
         CompanionCollectionChanged?.Invoke(this, EventArgs.Empty);
         if (currentChanged)
             CurrentCompanionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void CompleteCompanionCleanup(Guid id)
+    {
+        if (Data.PendingCompanionCleanup.Remove(id)) Persist();
     }
 
     public void SelectCompanion(Guid companionId)

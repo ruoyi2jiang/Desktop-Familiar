@@ -11,12 +11,14 @@ public partial class CompanionLibraryWindow : Window
 {
     private readonly CompanionManager _manager;
     private readonly CompanionStorage _storage;
+    private readonly CompanionDeletionService _deletions;
 
-    public CompanionLibraryWindow(CompanionManager manager, CompanionStorage storage)
+    public CompanionLibraryWindow(CompanionManager manager, CompanionStorage storage, CompanionDeletionService deletions)
     {
         InitializeComponent();
         _manager = manager;
         _storage = storage;
+        _deletions = deletions;
         _manager.CompanionCollectionChanged += ManagerChanged;
         _manager.CurrentCompanionChanged += ManagerChanged;
         _manager.ThemeChanged += ManagerChanged;
@@ -193,26 +195,11 @@ public partial class CompanionLibraryWindow : Window
         var companion = _manager.Data.Companions.FirstOrDefault(item => item.Id == id);
         if (companion is null)
             return;
-        var dialog = new CompanionDeleteDialog(companion.Name) { Owner = this };
-        if (dialog.ShowDialog() != true || dialog.Choice == CompanionDeleteChoice.Cancel)
-            return;
-
-        _manager.DeleteCompanion(id);
-        if (dialog.Choice != CompanionDeleteChoice.DeleteResources)
-            return;
-
-        try
-        {
-            _storage.DeleteCompanionResources(id);
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Error("The deleted companion's imported resources could not be removed.", exception);
-            MessageBox.Show(
-                LocalizationService.Format("Library.Delete.ResourcesFailed", exception.Message),
-                LocalizationService.Get("Library.Delete.Title"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
+        var dialog = new DeleteConfirmationWindow(
+            LocalizationService.Get("Library.Delete.Title"), LocalizationService.Format("Library.Delete.Message", companion.Name),
+            LocalizationService.Get("Common.Delete"), LocalizationService.Get("Library.Delete.LocalData")) { Owner = this };
+        if (dialog.ShowDialog() == true && !_deletions.Delete(id, dialog.OptionSelected))
+            MessageBox.Show(this, LocalizationService.Get("Library.Delete.CleanupPending"), dialog.Title,
+                MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 }

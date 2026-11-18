@@ -61,10 +61,16 @@ public sealed class ChatController : IDisposable
         ShortcutAvailable = _hotkey.Set(ActiveShortcut(prefs));
     }
 
-    public void Clear(IReadOnlyCollection<Guid> ids, bool includeNotes)
+    public void Clear(IReadOnlyCollection<Guid> ids, ChatHistoryClearScope scope)
     {
         if (_manager.CurrentCompanion is { } pet && ids.Contains(pet.Id)) Reset(this, EventArgs.Empty);
-        History.Clear(ids, includeNotes);
+        History.Clear(ids, scope);
+    }
+
+    public void ClearAll()
+    {
+        Reset(this, EventArgs.Empty);
+        History.ClearAll();
     }
 
     public void OpenPrompt()

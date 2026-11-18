@@ -184,6 +184,7 @@ public sealed class CompanionBundleService
         }
 
         companion.ImportedFontPath = Register(companion.ImportedFontPath, "fonts");
+        companion.ProfilePicturePath = Register(companion.ProfilePicturePath, "portraits");
         companion.BubbleImagePath = Register(companion.BubbleImagePath, "bubbles");
         foreach (var scene in companion.Animations)
         {
@@ -202,7 +203,7 @@ public sealed class CompanionBundleService
         string stagingRoot,
         string finalRoot)
     {
-        var referencedPaths = EnumerateAssetPaths(companion)
+        var referencedPaths = companion.GetAssetPaths()
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => NormalizeAssetEntryName(path!))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -247,6 +248,7 @@ public sealed class CompanionBundleService
         }
 
         companion.ImportedFontPath = Resolve(companion.ImportedFontPath);
+        companion.ProfilePicturePath = Resolve(companion.ProfilePicturePath);
         companion.BubbleImagePath = Resolve(companion.BubbleImagePath);
         foreach (var scene in companion.Animations)
         {
@@ -288,7 +290,7 @@ public sealed class CompanionBundleService
             throw new InvalidDataException(LocalizationService.Get("CompanionBundle.Unsupported"));
         }
 
-        foreach (var assetPath in EnumerateAssetPaths(companion).Where(path => !string.IsNullOrWhiteSpace(path)))
+        foreach (var assetPath in companion.GetAssetPaths().Where(path => !string.IsNullOrWhiteSpace(path)))
         {
             var normalized = NormalizeAssetEntryName(assetPath!);
             if (!entries.ContainsKey(normalized))
@@ -318,20 +320,6 @@ public sealed class CompanionBundleService
                 throw new InvalidDataException(LocalizationService.Get("CompanionBundle.DuplicateEntry"));
         }
         return entries;
-    }
-
-    private static IEnumerable<string?> EnumerateAssetPaths(CompanionDefinition companion)
-    {
-        yield return companion.ImportedFontPath;
-        yield return companion.BubbleImagePath;
-        foreach (var scene in companion.Animations)
-        {
-            yield return scene.AnimationPath;
-            foreach (var frame in scene.PngFrames)
-                yield return frame.FilePath;
-            foreach (var line in scene.DialogLines)
-                yield return line.VoicePath;
-        }
     }
 
     private void WriteManifest(ZipArchive archive, CompanionBundleManifest manifest)

@@ -534,7 +534,7 @@
                             </StackPanel>
                             <Grid Grid.Column="4">
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="150" />
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="12" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
@@ -543,14 +543,22 @@
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <TextBlock Text="{loc:Loc Editor.CompanionPreview.Title}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                        <Grid Grid.Row="1" Margin="0,8,0,0">
+                                        <Grid Grid.Row="1" Height="108" Margin="0,8,0,0">
                                             <Image x:Name="CompanionPreviewImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
                                             <TextBlock x:Name="CompanionPreviewHint" Text="{loc:Loc Editor.CompanionPreview.Empty}" Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}"
                                                        TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Grid>
+                                        <StackPanel Grid.Row="2" Margin="0,8,0,0">
+                                            <controls:CompanionAvatar x:Name="ProfileAvatar" Width="48" Height="48" />
+                                            <Button Content="{loc:Loc Editor.Picture.Import}" Click="ImportProfilePicture_Click"
+                                                    Style="{StaticResource EditorImportButton}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                                            <Button x:Name="ResetPicture" Content="{loc:Loc Editor.Picture.Reset}" Click="ResetProfilePicture_Click"
+                                                    Style="{StaticResource OutlineButton}" HorizontalAlignment="Center" Margin="0,4,0,0" />
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                                 <Border Grid.Row="2" Background="{DynamicResource PrimaryBackgroundHoverBrush}" CornerRadius="12" Padding="10"
