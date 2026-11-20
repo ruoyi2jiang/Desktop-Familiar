@@ -5,10 +5,10 @@ using DesktopFamiliar.Services.Calendar;
 namespace DesktopFamiliar.Services.Storage;
 
 /// <summary>Records observed expirations without committing user configuration or migrations.</summary>
-internal sealed class CalendarExpirationStore(string libraryDirectory)
+internal sealed class CalendarExpirationStore(string libraryDirectory, int schema = DesktopCompanionData.CurrentSchemaVersion)
 {
     private readonly string _path = Path.Combine(libraryDirectory,
-        $"calendar-expirations.v{DesktopCompanionData.CurrentSchemaVersion}.json");
+        $"calendar-expirations.v{schema}.json");
 
     private readonly record struct Entry(Guid EventId, DateTime Occurrence);
     private sealed record Document(string SourceFingerprint, List<Entry> Entries);

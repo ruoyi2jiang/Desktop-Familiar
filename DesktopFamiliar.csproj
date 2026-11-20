@@ -24,13 +24,18 @@
     <Resource Include="Assets\AppIcon.ico" />
     <Content Include="Resources\Licenses\SharpGLTF.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Resources\Licenses\SharpGLTF.txt" LogicalName="DesktopFamiliar.Licenses.SharpGLTF.txt" />
+    <Content Include="Resources\Licenses\NAudio.txt;Resources\Licenses\System.Speech.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Resources\Licenses\NAudio.txt;Resources\Licenses\System.Speech.txt" LogicalName="DesktopFamiliar.Licenses.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Resources\Strings\en.json" LogicalName="DesktopFamiliar.Localization.Strings.en.json" />
     <InternalsVisibleTo Include="DesktopFamiliar.Tests" />
     <EmbeddedResource Include="Resources\chat-models.json" LogicalName="DesktopFamiliar.Resources.chat-models.json" />
+    <EmbeddedResource Include="Resources\voice-banks.json" LogicalName="DesktopFamiliar.Resources.voice-banks.json" />
     <EmbeddedResource Include="Services\Updates\ApplyAppUpdate.ps1" LogicalName="DesktopFamiliar.Updates.ApplyAppUpdate.ps1" />
     <Content Include="Resources\Strings\en.json" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="SharpGLTF.Runtime" Version="1.0.6" />
+    <PackageReference Include="System.Speech" Version="8.0.0" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
   </ItemGroup>
 </Project>

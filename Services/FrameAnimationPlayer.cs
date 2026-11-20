@@ -42,10 +42,12 @@ public sealed class FrameAnimationPlayer : IDisposable
         Start(loaded.Frames, loaded.Delays, loop);
     }
 
-    public void Play(AnimationScene scene, bool loop)
+    public void Play(AnimationScene scene, bool loop) => Play(scene, loop, null);
+
+    internal void Play(AnimationScene scene, bool loop, LoadedAnimationFrames? prepared)
     {
         Stop(clearFrame: false);
-        var loaded = _frameLoader.Load(scene);
+        var loaded = prepared ?? _frameLoader.Load(scene);
         if (loop && AnimationFrameSettingsPolicy.TryGetRuntimeLoopRange(
                 scene,
                 loaded.Frames.Count,

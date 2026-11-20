@@ -42,6 +42,7 @@ public partial class SettingsWindow
             ChatAvailability.Text = LocalizationService.Get(installed.Count == 0 ? "Chat.Unavailable"
                 : selected.Tag == null ? "Chat.SelectModel" : "Chat.Local");
             ChatShortcut.Text = prefs.Shortcut;
+            RefreshVoiceSettings(prefs);
             ShortcutHint.Text = LocalizationService.Get(chat.ShortcutAvailable ? "Chat.ShortcutHint" : "Chat.ShortcutUnavailable");
         }
         finally { _refreshingChat = false; }
@@ -106,12 +107,18 @@ public partial class SettingsWindow
         if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return;
         if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == 0)
         {
-            ShortcutHint.Text = LocalizationService.Get("Chat.ShortcutHint");
+            (sender == TalkShortcut ? TalkShortcutHint : ShortcutHint).Text = LocalizationService.Get("Chat.ShortcutHint");
             return;
         }
         var gesture = new KeyGesture(key, Keyboard.Modifiers);
         var text = new KeyGestureConverter().ConvertToInvariantString(gesture)!;
-        ApplyChat(_manager.Data.Settings.Chat with { Shortcut = text });
+        if (sender == TalkShortcut)
+        {
+            var ok = App.CurrentApp.Chat.SetPreferences(_manager.Data.Settings.Chat with { TalkShortcut = text });
+            RefreshChatSettings();
+            if (!ok) TalkShortcutHint.Text = LocalizationService.Get("Chat.ShortcutUnavailable");
+        }
+        else ApplyChat(_manager.Data.Settings.Chat with { Shortcut = text });
     }
 
     private void ManageHistory_Click(object sender, RoutedEventArgs e) =>

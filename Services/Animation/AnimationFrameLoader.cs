@@ -20,11 +20,15 @@ public interface IAnimationFrameLoader
 /// </summary>
 public sealed class WpfAnimationFrameLoader : IAnimationFrameLoader
 {
-    public LoadedAnimationFrames Load(AnimationScene scene) => scene.PngFrames.Count > 0
-        ? LoadPngSequence(scene.PngFrames)
-        : Load(scene.AnimationPath);
+    public LoadedAnimationFrames Load(AnimationScene scene) => Load(scene, default);
 
-    public LoadedAnimationFrames Load(string path)
+    internal LoadedAnimationFrames Load(AnimationScene scene, CancellationToken cancellation) => scene.PngFrames.Count > 0
+        ? LoadPngSequence(scene.PngFrames, cancellation)
+        : Load(scene.AnimationPath, cancellation);
+
+    public LoadedAnimationFrames Load(string path) => Load(path, default);
+
+    private static LoadedAnimationFrames Load(string path, CancellationToken cancellation)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException(LocalizationService.Get("Animation.FileMissing"), path);
@@ -38,6 +42,7 @@ public sealed class WpfAnimationFrameLoader : IAnimationFrameLoader
         var delays = new List<TimeSpan>();
         foreach (var sourceFrame in decoder.Frames)
         {
+            cancellation.ThrowIfCancellationRequested();
             var frame = BitmapFrame.Create(sourceFrame);
             frame.Freeze();
             frames.Add(frame);
@@ -49,12 +54,13 @@ public sealed class WpfAnimationFrameLoader : IAnimationFrameLoader
         return new LoadedAnimationFrames(frames, delays);
     }
 
-    private static LoadedAnimationFrames LoadPngSequence(IEnumerable<PngAnimationFrame> sequence)
+    private static LoadedAnimationFrames LoadPngSequence(IEnumerable<PngAnimationFrame> sequence, CancellationToken cancellation)
     {
         var frames = new List<BitmapSource>();
         var delays = new List<TimeSpan>();
         foreach (var item in sequence)
         {
+            cancellation.ThrowIfCancellationRequested();
             if (!Path.GetExtension(item.FilePath).Equals(".png", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException(LocalizationService.Format("Animation.NotPngFrame", item.FileName));
             if (!File.Exists(item.FilePath))

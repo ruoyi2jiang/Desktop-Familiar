@@ -10,6 +10,7 @@ public sealed class ChatController : IDisposable
     private readonly CompanionManager _manager;
     private readonly CompanionOverlayWindow _overlay;
     private readonly ChatHotkey _hotkey = new();
+    private readonly ChatHotkey _talkKey = new();
     private readonly ChatSession _session;
     private CancellationTokenSource? _turn;
     private ChatPromptWindow? _prompt;
@@ -28,6 +29,12 @@ public sealed class ChatController : IDisposable
             else OpenPrompt();
         };
         _manager.ChatSettingsChanged += Reset;
+        _talkKey.Pressed += (_, _) =>
+        {
+            if (!Available || !_manager.Data.Settings.Chat.VoiceEnabled) return;
+            OpenPrompt();
+            _prompt?.BeginTalk(() => _talkKey.IsHeld);
+        };
         _manager.CurrentCompanionChanged += Reset;
         _manager.FocusModeChanged += Reset;
         Reset(this, EventArgs.Empty);
@@ -37,6 +44,7 @@ public sealed class ChatController : IDisposable
     public ChatHistoryStore History { get; }
     public bool Available => AvailableFor(_manager.Data.Settings.Chat);
     public bool ShortcutAvailable { get; private set; }
+    public bool TalkShortcutAvailable { get; private set; }
 
     private bool AvailableFor(ChatPreferences prefs) => !_disposed && prefs.Enabled
         && _manager.CurrentCompanion != null && !_manager.Data.Settings.FocusModeEnabled && Models.Installed(prefs.ModelId);
@@ -45,7 +53,14 @@ public sealed class ChatController : IDisposable
 
     public bool SetPreferences(ChatPreferences prefs)
     {
+        if (string.Equals(prefs.TalkShortcut, prefs.Shortcut, StringComparison.OrdinalIgnoreCase)) return false;
         if (!_hotkey.Set(ActiveShortcut(prefs)) && prefs.Shortcut != _manager.Data.Settings.Chat.Shortcut) return false;
+        if (!_talkKey.Set(AvailableFor(prefs) && prefs.VoiceEnabled ? prefs.TalkShortcut : null)
+            && prefs.TalkShortcut != _manager.Data.Settings.Chat.TalkShortcut)
+        {
+            _hotkey.Set(ActiveShortcut(_manager.Data.Settings.Chat));
+            return false;
+        }
         try { _manager.SetChatPreferences(prefs); }
         catch { Reset(this, EventArgs.Empty); throw; }
         return true;
@@ -59,6 +74,7 @@ public sealed class ChatController : IDisposable
         _overlay.ResetChat();
         var prefs = _manager.Data.Settings.Chat;
         ShortcutAvailable = _hotkey.Set(ActiveShortcut(prefs));
+        TalkShortcutAvailable = _talkKey.Set(Available && prefs.VoiceEnabled ? prefs.TalkShortcut : null);
     }
 
     public void Clear(IReadOnlyCollection<Guid> ids, ChatHistoryClearScope scope)
@@ -78,7 +94,7 @@ public sealed class ChatController : IDisposable
         if (!Available) return;
         if (_prompt == null)
         {
-            _prompt = new(_overlay, _manager.CurrentCompanion!, SendAsync);
+            _prompt = new(_overlay, _manager.CurrentCompanion!, SendAsync, _manager.Data.Settings.Chat);
             _prompt.Closed += (_, _) => _prompt = null;
             _prompt.Show();
         }
@@ -126,5 +142,6 @@ public sealed class ChatController : IDisposable
         _manager.FocusModeChanged -= Reset;
         Reset(this, EventArgs.Empty);
         _hotkey.Dispose();
+        _talkKey.Dispose();
     }
 }

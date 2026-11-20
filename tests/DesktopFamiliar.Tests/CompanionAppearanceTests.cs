@@ -523,6 +523,30 @@ public class CompanionAppearanceTests
     }
 
     [Fact]
+    public void PreparedModelSuppliesClipListPreviewAndPortraitWithoutReopeningTheFile()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = CreateTriangle(directory.Path);
+        var model = ModelRoot.Load(path);
+        model.CreateAnimation("Idle").CreateTranslationChannel(model.LogicalNodes.Single(),
+            new Dictionary<float, Vector3> { [0] = Vector3.Zero, [1] = Vector3.UnitX });
+        model.SaveGLB(path);
+        var prepared = CompanionModelView.PreparedModel.Read(path);
+        Assert.Equal(1d, GlbModelFile.ClipDurations(prepared.Rig.Model)["Idle"]);
+        RunOnSta(() =>
+        {
+            using var exclusive = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None);
+            var view = new CompanionModelView();
+            view.Attach(prepared);
+            view.Play(path, "Idle", loop: true);
+            var snapshot = (BitmapSource)CompanionPictureLoader.Load(new(null, null, path, "Idle"), view.CaptureFrame)!;
+            Assert.True(snapshot.IsFrozen);
+            Assert.Same(snapshot, CompanionPictureLoader.Load(new(null, null, path, "Idle")));
+            view.Clear();
+        });
+    }
+
+    [Fact]
     public void ModelPortraitUsesIdleSnapshotAndAnImportedPictureTakesPriority()
     {
         using var directory = new TemporaryDirectory();

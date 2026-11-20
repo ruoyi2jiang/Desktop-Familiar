@@ -5,6 +5,18 @@ namespace DesktopFamiliar.Tests;
 
 public sealed class CompanionOverlayLayoutTests
 {
+    [Theory]
+    [InlineData("DialogText")]
+    [InlineData("ChatReplyText")]
+    public void DialogueBubblesWrapAndShowTheFullText(string name)
+    {
+        var document = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "CompanionOverlayWindow.xaml")));
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        var block = document.Descendants().Single(e => (string?)e.Attribute(x + "Name") == name);
+        Assert.Equal("Wrap", (string?)block.Attribute("TextWrapping"));
+        Assert.Equal("None", (string?)block.Attribute("TextTrimming"));
+    }
+
     [Fact]
     public void ModelDrawsOnItsOwnSurfaceBehindDialogueAndTheLogicalCharacterArea()
     {
@@ -34,7 +46,7 @@ public sealed class CompanionOverlayLayoutTests
     }
 
     [Fact]
-    public void ChatInputAndSendShareOnePaddedRow()
+    public void ChatPromptKeepsItsActionsSquareAndCentersCloseOnTheInputRow()
     {
         var document = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "ChatPromptWindow.xaml")));
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -44,20 +56,52 @@ public sealed class CompanionOverlayLayoutTests
 
         var surface = Named("Surface");
         var input = Named("Input");
+        var talk = Named("TalkButton");
         var send = Named("SendButton");
-        Assert.Same(input.Parent, send.Parent);
+        var close = Named("CloseButton");
         Assert.Same(surface, input.Parent!.Parent);
-        Assert.Equal(input.Attribute("Grid.Row")?.Value, send.Attribute("Grid.Row")?.Value);
-        Assert.Equal("1", send.Attribute("Grid.Column")?.Value);
-        Assert.All(new[] { input, send }, control =>
+        Assert.Null(input.Attribute("Height")); // Inherit the shared single-line field height.
+        Assert.Equal(new Thickness(0), Spacing(input, "Margin"));
+        Assert.Equal("Center", close.Attribute("VerticalAlignment")?.Value);
+        Assert.Equal("1", talk.Attribute("Grid.Column")?.Value);
+        Assert.Equal("2", send.Attribute("Grid.Column")?.Value);
+        Assert.Equal("3", close.Attribute("Grid.Column")?.Value);
+        Assert.All(new[] { talk, send, close }, control =>
         {
-            var margin = Spacing(control, "Margin");
-            Assert.Equal(0, margin.Top);
-            Assert.Equal(0, margin.Bottom);
-            Assert.Equal("Auto", (string?)control.Attribute("Height") ?? "Auto");
+            Assert.Same(input.Parent, control.Parent);
+            Assert.Equal(input.Attribute("Grid.Row")?.Value, control.Attribute("Grid.Row")?.Value);
+        });
+        var style = document.Descendants().Single(e => (string?)e.Attribute(x + "Key") == "PromptAction");
+        Assert.Contains(style.Elements(), setter => (string?)setter.Attribute("Property") == "Width"
+            && setter.Attribute("Value")!.Value.Contains("ActualHeight", StringComparison.Ordinal));
+        Assert.All(new[] { talk, send }, action =>
+        {
+            Assert.Equal("{StaticResource PromptAction}", action.Attribute("Style")?.Value);
+            Assert.Null(action.Attribute("Width"));
+            Assert.Null(action.Attribute("Height"));
+            Assert.Null(action.Attribute("Margin"));
         });
         var padding = Spacing(surface, "Padding");
+        Assert.Equal(padding.Left, padding.Right);
+        Assert.Equal(padding.Top, padding.Bottom);
         Assert.True(padding.Left >= 10 && padding.Top >= 8 && padding.Bottom >= 8);
+    }
+
+    [Fact]
+    public void VoiceStatusWrapsBelowTheFieldAndThePromptSizesToItsContent()
+    {
+        var window = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "ChatPromptWindow.xaml"))).Root!;
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        var status = window.Descendants().Single(e => (string?)e.Attribute(x + "Name") == "VoiceStatus");
+        var input = window.Descendants().Single(e => (string?)e.Attribute(x + "Name") == "Input");
+        Assert.Same(input.Parent, status.Parent);
+        Assert.Equal("1", status.Attribute("Grid.Row")?.Value);
+        Assert.Equal("4", status.Attribute("Grid.ColumnSpan")?.Value);
+        Assert.Equal("Wrap", status.Attribute("TextWrapping")?.Value);
+        Assert.Equal("Collapsed", status.Attribute("Visibility")?.Value);
+        Assert.Equal("Height", window.Attribute("SizeToContent")?.Value);
+        Assert.Null(window.Attribute("Width"));
+        Assert.Null(window.Attribute("Height"));
     }
 
     private static string FindRepositoryFile(string relativePath)

@@ -135,7 +135,6 @@ public partial class SettingsWindow : Window
         UserBirthdayPicker.SelectedDate = _manager.Data.Settings.UserBirthday;
         ViewportWidthBox.Text = _manager.Data.Settings.ViewportWidth.ToString();
         ViewportHeightBox.Text = _manager.Data.Settings.ViewportHeight.ToString();
-        TruncateDialogLinesCheck.IsChecked = _manager.Data.Settings.TruncateLongDialogLines;
         IdleIntervalBox.Text = _manager.Data.Settings.IdleDelaySeconds.ToString("0.##", CultureInfo.CurrentCulture);
         RefreshAddonManagerEntries();
         RefreshThemeCards();
@@ -143,6 +142,7 @@ public partial class SettingsWindow : Window
         InstalledAppVersion.Text = LocalizationService.Format("Settings.Updates.Installed", App.DisplayVersion);
         Loaded += CheckAppUpdates_Click;
         Closed += (_, _) => CloseAppUpdates();
+        Closed += (_, _) => CancelVoiceSettingsOperations();
         var history = App.CurrentApp.Chat.History;
         history.Changed += HistorySizeChanged;
         Closed += (_, _) => history.Changed -= HistorySizeChanged;
@@ -194,12 +194,6 @@ public partial class SettingsWindow : Window
         _manager.SetViewportSize(width, height);
         ViewportWidthBox.Text = _manager.Data.Settings.ViewportWidth.ToString();
         ViewportHeightBox.Text = _manager.Data.Settings.ViewportHeight.ToString();
-    }
-
-    private void TruncateDialogLines_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_loaded)
-            _manager.SetTruncateLongDialogLines(TruncateDialogLinesCheck.IsChecked == true);
     }
 
     private void ApplyIdleInterval_Click(object sender, RoutedEventArgs e)
@@ -1059,6 +1053,7 @@ public partial class SettingsWindow : Window
         CompanionPanel.Visibility = page == SettingsPage.Companion ? Visibility.Visible : Visibility.Collapsed;
         ChatPanel.Visibility = page == SettingsPage.Chat ? Visibility.Visible : Visibility.Collapsed;
         if (page == SettingsPage.Chat) RefreshChatSettings();
+        else CancelVoiceSettingsOperations();
         ThemePanel.Visibility = page == SettingsPage.Theme ? Visibility.Visible : Visibility.Collapsed;
         AddonsPanel.Visibility = page == SettingsPage.Addons ? Visibility.Visible : Visibility.Collapsed;
         SettingsPageScrollViewer.ScrollToTop();

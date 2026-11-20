@@ -12,6 +12,7 @@ public sealed class CompanionDefinition : CompanionScenes
     public string Description { get; set; } = string.Empty;
     public string Personality { get; set; } = string.Empty;
     public string ThinkingPhrase { get; set; } = string.Empty;
+    public CompanionVoice Voice { get; set; } = new();
     public string FontFamilyName { get; set; } = "Segoe UI";
     public string? ImportedFontPath { get; set; }
     public string FontColor { get; set; } = "#FFFFFFFF";
@@ -52,6 +53,7 @@ public sealed class CompanionDefinition : CompanionScenes
         Description = Description ?? string.Empty,
         Personality = Personality ?? string.Empty,
         ThinkingPhrase = ThinkingPhrase ?? string.Empty,
+        Voice = (Voice ?? new()).Normalize(),
         FontFamilyName = FontFamilyName,
         ImportedFontPath = ImportedFontPath,
         FontColor = FontColor,

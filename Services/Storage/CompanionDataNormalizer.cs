@@ -30,7 +30,7 @@ public sealed class CompanionDataNormalizer
 
     private static void NormalizeSettings(AppSettings settings)
     {
-        settings.Chat ??= new();
+        settings.Chat = (settings.Chat ?? new()).Normalize();
         settings.IdleDelaySeconds = Math.Clamp(
             settings.IdleDelaySeconds,
             AppSettings.MinimumIdleDelaySeconds,
@@ -103,6 +103,8 @@ public sealed class CompanionDataNormalizer
             // Missing expression overrides use automatic matching separately in each appearance.
             data.SchemaVersion = 15;
         }
+        if (data.SchemaVersion == 15)
+            data.SchemaVersion = 16; // Missing voice fields use the system defaults, in memory.
     }
 
     internal static void MigrateModelClips(ModelAppearance model)
@@ -254,6 +256,7 @@ public sealed class CompanionDataNormalizer
         companion.UserNickname ??= string.Empty;
         companion.Description ??= string.Empty;
         companion.Personality ??= string.Empty;
+        companion.Voice = (companion.Voice ?? new()).Normalize();
         companion.ThinkingPhrase ??= string.Empty;
         if (!Enum.IsDefined(companion.Appearance)) companion.Appearance = CompanionAppearance.Images2D;
         companion.Model3D ??= new();

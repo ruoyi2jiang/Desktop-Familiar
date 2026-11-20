@@ -24,6 +24,7 @@ public partial class App : System.Windows.Application
     private SettingsWindow? _settings;
     private ChatHistoryWindow? _historyWindow;
     public ChatController Chat { get; private set; } = null!;
+    internal Services.Voice.VoiceService Voice { get; private set; } = null!;
     private CalendarEventWindow? _calendarEvents;
     private CalendarReminderService? _calendarReminders;
     private CalendarReminderPresentationCoordinator? _reminderPresentation;
@@ -84,6 +85,7 @@ public partial class App : System.Windows.Application
             ShowStorageRecoveryNotice(Storage.LastRecoveryNotice);
             ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             Manager.ThemeChanged += (_, _) => ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
+            Voice = new(new VoiceBankStore(Storage.RootDirectory, _httpClient));
             _overlay = new CompanionOverlayWindow(Manager, _addonViewportActions);
             Chat = new ChatController(Manager, _overlay, new ChatModelStore(Storage.RootDirectory, _httpClient), new ChatHistoryStore(Storage.RootDirectory));
             _deletions = new CompanionDeletionService(Manager, Storage, Chat.History);

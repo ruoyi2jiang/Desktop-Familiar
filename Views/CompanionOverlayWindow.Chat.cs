@@ -15,6 +15,8 @@ public partial class CompanionOverlayWindow
     private readonly DispatcherTimer _chatClock = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly Stopwatch _readClock = new();
     private ChatPage? _reading;
+    private ChatPage? _voicedPage;
+    private bool _voiceInputActive;
     private string? _thinking;
 
     private ChatPromptWindow? _chatPrompt;
@@ -49,7 +51,7 @@ public partial class CompanionOverlayWindow
         var pixels = MonitorScreen.FromPoint(center).WorkingArea;
         var workArea = new RectangleF((float)(pixels.Left / dpi.DpiScaleX), (float)(pixels.Top / dpi.DpiScaleY),
             (float)(pixels.Width / dpi.DpiScaleX), (float)(pixels.Height / dpi.DpiScaleY));
-        var placement = OverlayLayoutPolicy.PlaceChatPrompt(character, workArea, _chatPrompt.Height, dialogueHeight);
+        var placement = OverlayLayoutPolicy.PlaceChatPrompt(character, workArea, _chatPrompt.ActualHeight, dialogueHeight);
         _chatPrompt.Width = placement.Width;
         _chatPrompt.Left = placement.Left;
         _chatPrompt.Top = placement.Top;
@@ -72,6 +74,8 @@ public partial class CompanionOverlayWindow
 
     public void ResetChat()
     {
+        _chatSpeech.Stop();
+        _voicedPage = null;
         _chatPages.Clear();
         _reading = null;
         _thinking = null;
@@ -81,14 +85,23 @@ public partial class CompanionOverlayWindow
 
     private void RenderChat(bool updateAnimation = true)
     {
-        if (_reading != null && _readClock.Elapsed >= ChatBubbleTiming.ReadingTime(_reading.Text))
+        if (_reading != null && !_chatSpeech.Playing && _readClock.Elapsed >= ChatBubbleTiming.ReadingTime(_reading.Text))
         {
             _reading = null;
             _readClock.Reset();
         }
         if (_reading == null && _chatPages.TryDequeue(out var page)) _reading = page;
         var text = _reading?.Text ?? _thinking;
-        var visible = text != null && IsVisible && BubbleRoot.Visibility != Visibility.Visible;
+        var visible = text != null && IsVisible && BubbleRoot.Visibility != Visibility.Visible
+            && !_sceneSpeech.Playing && _voicePlayer == null;
+        if (!visible || _manager.Data.Settings.FocusModeEnabled)
+            _chatSpeech.Stop();
+        else if (!_voiceInputActive && _reading is { Playback.SpeechInterrupted: false } spoken && !ReferenceEquals(_voicedPage, spoken)
+            && _manager.CurrentCompanion is { Voice.Id: not "off" } companion)
+        {
+            _voicedPage = spoken;
+            _ = _chatSpeech.PlayAsync(spoken.Text, companion.Voice);
+        }
         if (visible && _reading != null) _readClock.Start();
         else _readClock.Stop();
         ChatReplyBorder.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
@@ -97,6 +110,23 @@ public partial class CompanionOverlayWindow
         else _chatClock.Start();
         UpdateDialogAreaForContent();
         if (updateAnimation) UpdateChatReplyAnimation(visible ? _reading?.Playback : null);
+    }
+
+    internal void SetVoiceInputActive(bool active)
+    {
+        if (_voiceInputActive == active) return;
+        _voiceInputActive = active;
+        if (_voicePlayer != null) _voicePlayer.IsMuted = active;
+        if (!active) return;
+        if (_sceneSpeech.Playing)
+        {
+            _sceneSpeech.Stop();
+            StartLineReadingTimer();
+        }
+        if (_reading?.Playback != null) _reading.Playback.SpeechInterrupted = true;
+        foreach (var page in _chatPages)
+            if (page.Playback != null) page.Playback.SpeechInterrupted = true;
+        _chatSpeech.Stop();
     }
 
     private void UpdateChatReplyAnimation(ChatReplyPlayback? playback)

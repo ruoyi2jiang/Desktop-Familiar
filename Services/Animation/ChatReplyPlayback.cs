@@ -6,6 +6,7 @@ namespace DesktopFamiliar.Services.Animation;
 internal sealed class ChatReplyPlayback(Guid? expressionSceneId)
 {
     private readonly HashSet<Guid> _failed = [];
+    internal bool SpeechInterrupted { get; set; }
 
     public AnimationScene? Scene(CompanionScenes scenes) =>
         Usable(scenes, expressionSceneId) ?? Usable(scenes, scenes.ChatReplyAnimationId);
