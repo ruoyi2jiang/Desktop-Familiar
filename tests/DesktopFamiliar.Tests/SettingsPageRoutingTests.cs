@@ -1,7 +1,24 @@
+using System.Xml.Linq;
+
 namespace DesktopFamiliar.Tests;
 
 public sealed class SettingsPageRoutingTests
 {
+    [Fact]
+    public void ModelTestButtonUsesNormalButtonHeightAndAlignsWithModelField()
+    {
+        var markup = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "SettingsWindow.xaml")));
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        var field = markup.Descendants().Single(e => (string?)e.Attribute(x + "Name") == "ChatModelChoice");
+        var button = markup.Descendants().Single(e => (string?)e.Attribute(x + "Name") == "TestChatModel");
+        Assert.Same(field.Parent, button.Parent);
+        Assert.Equal("{x:Static controls:FormFieldMetrics.FieldMargin}", (string?)field.Parent!.Attribute("Margin"));
+        Assert.Equal("0", (string?)field.Attribute("Margin"));
+        Assert.Equal("Center", (string?)button.Attribute("VerticalAlignment"));
+        Assert.Null(button.Attribute("Height"));
+        Assert.Null(button.Attribute("Padding"));
+    }
+
     [Fact]
     public void AddonsPage_ContainsTheMarketplaceAndAddonOwnedSettingsSections()
     {

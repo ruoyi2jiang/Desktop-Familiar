@@ -11,6 +11,7 @@ namespace DesktopFamiliar.Services.Storage;
 public sealed record ChatModel(string Id, string NameKey, string FileUrl, string Sha256, int DownloadMb, string TermsUrl)
 {
     public string Name => LocalizationService.Get(NameKey);
+    public ChatModelRequirements? Requirements { get; init; }
 }
 
 public sealed class ChatModelStore(string root, HttpClient http,
@@ -34,12 +35,18 @@ public sealed class ChatModelStore(string root, HttpClient http,
         if (models == null || models.DistinctBy(m => m.Id).Count() != models.Length || models.Any(m =>
             string.IsNullOrEmpty(m.Id) || m.Id.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-') ||
             string.IsNullOrWhiteSpace(m.NameKey) || !Https(m.FileUrl) || !Https(m.TermsUrl) ||
-            m.Sha256?.Length != 64 || !m.Sha256.All(Uri.IsHexDigit) || m.DownloadMb <= 0))
+            m.Sha256?.Length != 64 || !m.Sha256.All(Uri.IsHexDigit) || m.DownloadMb <= 0 ||
+            m.Requirements is not { SuggestedFreeRamMb: > 0, SuggestedThreads: > 0, SetupSpaceMb: > 0 }))
             throw new InvalidDataException("Invalid bundled chat model catalogue.");
         return Array.AsReadOnly(models);
     }
 
     public static bool Supported => RuntimeInformation.OSArchitecture == Architecture.X64;
+    internal static ChatModel? CatalogueEntry(string id) => Catalogue.FirstOrDefault(model =>
+        model.Id == id || string.Equals("local:" + model.Sha256, id, StringComparison.OrdinalIgnoreCase));
+
+    internal string DescribeRequirements(ChatModel? model, bool forDownload) =>
+        ChatModelPc.Read(root, forDownload).Describe(model?.Requirements, forDownload);
     private static bool IsManaged(string id) => Catalogue.Any(model => model.Id == id);
     private string ManagedFile(string id) => Path.Combine(_directory, id, "model.gguf");
     private string LegacyEngine(string id) => Path.Combine(_directory, id, "engine", "llama-server.exe");
@@ -70,7 +77,7 @@ public sealed class ChatModelStore(string root, HttpClient http,
         var models = Catalogue.Where(m => Installed(m.Id)).Select(m => new AvailableChatModel(m.Id, m.Name, ManagedFile(m.Id))).ToList();
         foreach (var (id, path) in _local.Entries().Where(entry => Installed(entry.Key)))
         {
-            var match = Catalogue.FirstOrDefault(m => id[6..].Equals(m.Sha256, StringComparison.OrdinalIgnoreCase));
+            var match = CatalogueEntry(id);
             models.Add(new(id, match?.Name ?? Path.GetFileName(path), path));
         }
         return models;

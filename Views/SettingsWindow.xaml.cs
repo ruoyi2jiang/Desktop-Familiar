@@ -143,6 +143,7 @@ public partial class SettingsWindow : Window
         Loaded += CheckAppUpdates_Click;
         Closed += (_, _) => CloseAppUpdates();
         Closed += (_, _) => CancelVoiceSettingsOperations();
+        Closed += (_, _) => _testOperation?.Cancel();
         var history = App.CurrentApp.Chat.History;
         history.Changed += HistorySizeChanged;
         Closed += (_, _) => history.Changed -= HistorySizeChanged;
@@ -1053,7 +1054,11 @@ public partial class SettingsWindow : Window
         CompanionPanel.Visibility = page == SettingsPage.Companion ? Visibility.Visible : Visibility.Collapsed;
         ChatPanel.Visibility = page == SettingsPage.Chat ? Visibility.Visible : Visibility.Collapsed;
         if (page == SettingsPage.Chat) RefreshChatSettings();
-        else CancelVoiceSettingsOperations();
+        else
+        {
+            CancelVoiceSettingsOperations();
+            _testOperation?.Cancel();
+        }
         ThemePanel.Visibility = page == SettingsPage.Theme ? Visibility.Visible : Visibility.Collapsed;
         AddonsPanel.Visibility = page == SettingsPage.Addons ? Visibility.Visible : Visibility.Collapsed;
         SettingsPageScrollViewer.ScrollToTop();

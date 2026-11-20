@@ -1,11 +1,25 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using DesktopFamiliar.Services.Chat;
 
 namespace DesktopFamiliar.Tests;
 
 public sealed class LlamaChatEngineTests
 {
+    [Theory]
+    [InlineData("""{"predicted_per_second":25.5}""", 25.5)]
+    [InlineData("""{"predicted_per_second":0}""", null)]
+    [InlineData("""{"predicted_per_second":"unknown"}""", null)]
+    [InlineData("null", null)]
+    public void SampleUsesEngineReportedGenerationSpeedWhenAvailable(string timings, double? expected)
+    {
+        using var response = JsonDocument.Parse("""{"choices":[{"message":{"content":"Hello!"}}],"timings":""" + timings + "}");
+        var result = LlamaChatEngine.ReadCompletion(response.RootElement);
+        Assert.Equal("Hello!", result.Text);
+        Assert.Equal(expected, result.TokensPerSecond);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

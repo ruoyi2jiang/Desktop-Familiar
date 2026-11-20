@@ -12,6 +12,8 @@ public sealed class ChatController : IDisposable
     private readonly ChatHotkey _hotkey = new();
     private readonly ChatHotkey _talkKey = new();
     private readonly ChatSession _session;
+    private readonly LlamaChatEngine _engine;
+    private CancellationTokenSource? _modelTest;
     private CancellationTokenSource? _turn;
     private ChatPromptWindow? _prompt;
     private bool _disposed;
@@ -22,7 +24,8 @@ public sealed class ChatController : IDisposable
         _overlay = overlay;
         Models = models;
         History = history;
-        _session = new(history, new LlamaChatEngine(models));
+        _engine = new LlamaChatEngine(models);
+        _session = new(history, _engine);
         _hotkey.Pressed += (_, _) =>
         {
             if (_prompt != null) _prompt.Close();
@@ -68,6 +71,7 @@ public sealed class ChatController : IDisposable
 
     private void Reset(object? sender, EventArgs args)
     {
+        _modelTest?.Cancel();
         _turn?.Cancel();
         _session.Select(Available ? _manager.CurrentCompanion?.Id : null);
         _prompt?.Close();
@@ -75,6 +79,16 @@ public sealed class ChatController : IDisposable
         var prefs = _manager.Data.Settings.Chat;
         ShortcutAvailable = _hotkey.Set(ActiveShortcut(prefs));
         TalkShortcutAvailable = _talkKey.Set(Available && prefs.VoiceEnabled ? prefs.TalkShortcut : null);
+    }
+
+    // Live chat takes priority. A test never reads a pet profile or appends to its history.
+    internal async Task<ChatModelTestResult?> TestModelAsync(string id, CancellationToken token)
+    {
+        if (_turn != null || _modelTest != null) return null;
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        _modelTest = operation;
+        try { return await _engine.TestAsync(id, operation.Token); }
+        finally { _modelTest = null; }
     }
 
     public void Clear(IReadOnlyCollection<Guid> ids, ChatHistoryClearScope scope)
@@ -104,6 +118,7 @@ public sealed class ChatController : IDisposable
     private async Task<bool> SendAsync(string prompt)
     {
         if (!Available || _turn is { IsCancellationRequested: false } || _manager.CurrentCompanion is not { } pet) return false;
+        _modelTest?.Cancel();
         using var turn = new CancellationTokenSource();
         _turn = turn;
         try

@@ -20,6 +20,8 @@ Existing libraries can contain the retired `Settings.TruncateLongDialogLines` fl
 
 ## Local chat
 
+The embedded `Resources/chat-models.json` catalogue holds each supported GGUF’s identity, digest, and `requirements`. The latter gives `suggestedFreeRamMb`, `suggestedThreads`, and `setupSpaceMb`. Sizes use decimal megabytes. A matching linked model uses the same entry by digest. Hardware readings and test results are transient.
+
 Schema 16 adds voice preferences to `Settings.Chat`: `VoiceEnabled` defaults to true, `InputLanguage` to the system language, `MicrophoneId` to the default input, `TalkShortcut` to Ctrl+Shift+F10, and `SendOnRelease` and `PreferWhisper` to false. When the two shortcuts coincide, normalization preserves the text-chat shortcut and assigns a distinct default to push-to-talk. Disabling Chat takes precedence over the voice preference.
 
 Each companion has one `Voice` object containing `Id`, `ReplyLanguage`, `Speaker`, `Rate`, `Pitch`, and `Volume`. An empty ID selects the Windows default. The ID `off` silences synthesized chat replies and unrecorded scene dialogue. A scene line’s own `VoicePath` takes precedence over the pet voice setting. A Windows token, catalogue ID or content-derived imported bank ID selects a specific voice. Gain defaults to 90 percent and pitch and speed default to neutral. Schema 15 loads these defaults in memory. Its matching calendar observations and completed history-wipe receipts carry forward on migration. Opening a pet leaves the source configuration untouched.

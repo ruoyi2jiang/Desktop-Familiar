@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography;
+using DesktopFamiliar.Services.Chat;
 using DesktopFamiliar.Services.Storage;
 
 namespace DesktopFamiliar.Tests;
@@ -9,6 +10,44 @@ public sealed class ChatModelSetupTests : IDisposable
     private readonly string _root = Directory.CreateTempSubdirectory("df-models-").FullName;
     private static readonly IProgress<long> Progress = new Progress<long>();
     private static ChatModel Gemma => ChatModelStore.Catalogue.Single(m => m.Id == "gemma-3-1b-it-q4");
+
+    [Fact]
+    public void BusyOrFailedAttemptsPreserveTheLastCompletedTestForEachModel()
+    {
+        var results = new ChatModelTestResults();
+        results.Record("first", new("Sample answer", TimeSpan.FromSeconds(2), 24, 1024));
+        var first = results.Describe("first");
+        Assert.Contains("Sample answer", first);
+        Assert.Equal("Busy" + Environment.NewLine + first, results.Describe("first", "Busy"));
+        Assert.Equal("Failed", results.Describe("other", "Failed"));
+        Assert.Equal(first, results.Describe("first"));
+        Assert.Null(results.Describe("other"));
+    }
+
+    [Fact]
+    public void LinkedCatalogueWeightsGetTheSameRequirementsAsTheDownload()
+    {
+        Assert.Same(Gemma, ChatModelStore.CatalogueEntry(Gemma.Id));
+        Assert.Same(Gemma, ChatModelStore.CatalogueEntry("local:" + Gemma.Sha256.ToUpperInvariant()));
+        Assert.NotNull(Gemma.Requirements);
+        Assert.Null(ChatModelStore.CatalogueEntry("local:" + new string('a', 64)));
+    }
+
+    [Theory]
+    [InlineData(true, 4, 2000, 1000, true, "Recommended")]
+    [InlineData(true, 4, 1999, 1000, true, "Limited")]
+    [InlineData(true, 2, 8000, 1000, true, "Limited")]
+    [InlineData(true, 4, 8000, 999, true, "LowDisk")]
+    [InlineData(true, 4, 2000, 0, false, "Recommended")]
+    [InlineData(true, 4, null, 1000, true, "Unknown")]
+    [InlineData(true, 4, 2000, null, true, "Unknown")]
+    [InlineData(false, 16, 8000, 8000, false, "Unsupported")]
+    public void SuitabilityChecksAvailableResourcesAndOnlyChecksDiskForDownloads(
+        bool supported, int threads, int? ramMb, int? diskMb, bool downloading, string fit)
+    {
+        var pc = new ChatModelPc(supported, threads, ramMb * 1_000_000L, diskMb * 1_000_000L);
+        Assert.Equal(fit, pc.Assess(new ChatModelRequirements(2000, 4, 1000), downloading).ToString());
+    }
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 

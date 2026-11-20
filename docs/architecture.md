@@ -136,6 +136,10 @@ All visual colours use semantic `DynamicResource` keys defined by `ThemeTokens` 
 
 User-facing text is keyed in `Resources/Strings/en.json`. XAML uses `Loc`; C# uses `LocalizationService`. New visible text requires a mapping entry and must not be hard-coded in a view or service.
 
+## Local model checks
+
+The Chat settings benchmark shares the per-turn server lifecycle, loopback process checks, and generation settings with ordinary chat. It sends a fixed text prompt at zero temperature. The engine measures end-to-end elapsed time, reads its child process’s peak working set and takes generation speed from the completion response when available. `ChatController` gives live chat priority over an active test. `ChatModelPc` compares locally available resources against the selected catalogue entry.
+
 ## Application updates
 
 `Services/Updates/AppUpdateService` reads the official GitHub release pages, filters stable core version tags, and verifies each download’s size and SHA-256 digest as it streams to a staging file. `AppUpdateHandoff` checks the executable path against the per-user Inno Setup registration. An installed copy applies setup, a portable copy applies the standalone executable, and other package types can be saved separately. The General page owns the check and download lifetime. When the user applies a staged update, the embedded Windows PowerShell handoff waits for the old process, rechecks the digest, then launches setup or atomically replaces and relaunches the portable executable. If the replacement cannot launch, the helper restores the previous executable. Runtime builds with a separate app DLL can download a release to a user-selected path. The addon catalogue and installation store handle addon updates independently.
