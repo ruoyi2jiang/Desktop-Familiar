@@ -148,6 +148,36 @@ public sealed class ChatTests : IDisposable
     }
 
     [Fact]
+    public void Bubbles_KeepTheRecordedReplyClosingQuoteOnItsSpokenPage()
+    {
+        const string first = "Okay, here’s my reply:\n\n“Oh dear, I’m so sorry to hear you’re upset.";
+        const string last = "Let’s see if we can find something cheerful to brighten your day.”";
+        Assert.Equal([first, last], ChatBubbleTiming.Pages(first + " " + last));
+    }
+
+    [Theory]
+    [InlineData("\"This is a question for the little dragon?!\"", "\"Here is the answer.\"")]
+    [InlineData("She whispered, ‘He said “I will be back.”’", "Then she smiled.")]
+    [InlineData("The dragon gave the same answer again («oui !»).", "Then it left.")]
+    [InlineData("Le petit dragon a répondu « Je suis prêt ! »", "Il a souri.")]
+    [InlineData("小さな竜は振り返って、友達のみんなに大きな声でこう言いました。「またね！」", "みんなが手を振った。")]
+    public void Bubbles_KeepClosingPunctuationWithItsSentence(string first, string second)
+    {
+        Assert.Equal([first, second], ChatBubbleTiming.Pages(first + " " + second));
+    }
+
+    [Fact]
+    public void Bubbles_KeepTheLastGraphemeAndClosingQuoteTogetherAtTheLengthLimit()
+    {
+        var word = string.Concat(Enumerable.Repeat("🐉", 108));
+        var reply = "“" + word + "!”";
+        var pages = ChatBubbleTiming.Pages(reply).ToArray();
+        Assert.Equal(reply, string.Concat(pages));
+        Assert.Equal("🐉!”", pages[^1]);
+        Assert.All(pages, page => Assert.InRange(new System.Globalization.StringInfo(page).LengthInTextElements, 1, 110));
+    }
+
+    [Fact]
     public void VersionOneHistoryKeepsTurnsAndNotesWhenArchivedPortraitIsAdded()
     {
         var id = Guid.NewGuid();
