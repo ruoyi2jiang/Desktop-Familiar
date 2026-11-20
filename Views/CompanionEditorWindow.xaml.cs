@@ -32,6 +32,8 @@ public partial class CompanionEditorWindow : Window
     private readonly CompanionStorage _storage;
     private readonly CompanionDefinition _companion;
     private readonly bool _isNew;
+    private bool _opening = true;
+    private CancellationTokenSource? _openingLoad;
     private string? _pendingPicture;
     private readonly FrameAnimationPlayer _previewPlayer;
     private readonly FrameAnimationPlayer _companionPreviewPlayer;
@@ -72,6 +74,61 @@ public partial class CompanionEditorWindow : Window
             : LocalizationService.Format("Editor.Banner.Configure", source!.Name);
         SaveButton.Content = LocalizationService.Get(_isNew ? "Editor.Save.Create" : "Editor.Save.Update");
 
+        Closed += (_, _) =>
+        {
+            ContentRendered -= LoadOpeningPreview;
+            _openingLoad?.Cancel();
+            _voicePreview?.Cancel();
+            _bankInstall?.Cancel();
+            StopModelCaptions();
+            ModelPreview.Clear();
+            CompanionPreviewModel.Clear();
+            ClickAreaModel.Clear();
+            _previewPlayer.Dispose();
+            _companionPreviewPlayer.Dispose();
+            _clickAreaPreviewPlayer.Dispose();
+        };
+        if (IsModel ? _companion.Model3D.FilePath != null : EditingScenes.IdleDefaultAnimation != null)
+            ContentRendered += LoadOpeningPreview;
+        else
+            FinishOpening(null, null, null);
+    }
+
+    private async void LoadOpeningPreview(object? sender, EventArgs e)
+    {
+        ContentRendered -= LoadOpeningPreview;
+        using var operation = new CancellationTokenSource();
+        _openingLoad = operation;
+        CompanionModelView.PreparedModel? model = null;
+        LoadedAnimationFrames? frames = null;
+        Exception? failure = null;
+        var scene = EditingScenes.IdleDefaultAnimation;
+        try
+        {
+            if (IsModel)
+            {
+                var path = _companion.Model3D.FilePath;
+                model = await Task.Run(() =>
+                {
+                    var prepared = CompanionModelView.PreparedModel.Read(path, operation.Token);
+                    prepared.Rig.GetClip(scene?.FirstModelClip);
+                    return prepared;
+                }, operation.Token);
+            }
+            else if (scene != null)
+                frames = await Task.Run(() => new WpfAnimationFrameLoader().Load(scene, operation.Token), operation.Token);
+        }
+        catch (OperationCanceledException) when (operation.IsCancellationRequested) { return; }
+        catch (Exception error) when (GlbModelFile.IsLoadError(error) || error is System.Runtime.InteropServices.COMException)
+        {
+            failure = error;
+        }
+        finally { _openingLoad = null; }
+        if (!operation.IsCancellationRequested) FinishOpening(model, frames, failure);
+    }
+
+    private void FinishOpening(CompanionModelView.PreparedModel? model, LoadedAnimationFrames? frames, Exception? failure)
+    {
         FontCombo.ItemsSource = Fonts.SystemFontFamilies.Select(font => font.Source).OrderBy(name => name).ToList();
         FontCombo.AddHandler(TextBoxBase.TextChangedEvent, new TextChangedEventHandler(FontCombo_TextChanged));
         NameBox.Text = _companion.Name;
@@ -90,17 +147,25 @@ public partial class CompanionEditorWindow : Window
         LoadBubbleChoices();
         UpdateChatPreview();
         AppearanceCombo.SelectedIndex = (int)_companion.Appearance;
-
-        Closed += (_, _) =>
+        ApplyAppearance(model == null ? [] : GlbModelFile.ClipDurations(model.Rig.Model));
+        if (model != null)
         {
-            StopModelCaptions();
-            ModelPreview.Clear();
-            CompanionPreviewModel.Clear();
-            ClickAreaModel.Clear();
-            _previewPlayer.Dispose();
-            _companionPreviewPlayer.Dispose();
-            _clickAreaPreviewPlayer.Dispose();
-        };
+            try { CompanionPreviewModel.Attach(model); }
+            catch (Exception error) when (GlbModelFile.IsLoadError(error) || error is System.Runtime.InteropServices.COMException)
+            {
+                CompanionPreviewModel.Clear();
+                failure = error;
+            }
+        }
+        _opening = false;
+        if (failure != null)
+        {
+            if (IsModel) ReportModelError(failure);
+            else AppLogger.Warning("The in-editor companion preview could not be loaded.", failure);
+        }
+        RefreshCompanionPreview(frames, failure != null);
+        OpeningIndicator.Visibility = Visibility.Collapsed;
+        EditorTabs.Visibility = Visibility.Visible;
     }
 
     private void DialogueExamples_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -159,21 +224,47 @@ public partial class CompanionEditorWindow : Window
         RefreshAssignmentCombo(UserBirthday1Combo, Assignment(UserBirthday1Combo, EditingScenes.UserBirthdayAnimation1Id));
         RefreshAssignmentCombo(UserBirthday2Combo, Assignment(UserBirthday2Combo, EditingScenes.UserBirthdayAnimation2Id));
 
+        UpdateRandomIdleCount();
+        if (RandomIdleExpander.IsExpanded) PopulateRandomIdleChoices();
+        RefreshClickAreaEditor();
+        RefreshCompanionPreview();
+    }
+
+    private void UpdateRandomIdleCount() =>
+        RandomIdleCount.Text = LocalizationService.Format("Editor.IdleRandomAssignment.Count", EditingScenes.IdleRandomAnimationIds.Count);
+
+    private void RandomIdle_Expanded(object sender, RoutedEventArgs e) => PopulateRandomIdleChoices();
+
+    private void PopulateRandomIdleChoices()
+    {
         IdleRandomChecksPanel.Children.Clear();
-        foreach (var scene in EditingScenes.Animations.Where(scene => visible.Contains(scene) || EditingScenes.IdleRandomAnimationIds.Contains(scene.Id)))
+        var selected = EditingScenes.IdleRandomAnimationIds;
+        var visible = VisibleScenes().ToHashSet();
+        foreach (var scene in EditingScenes.Animations.Where(scene => visible.Contains(scene) || selected.Contains(scene.Id)))
         {
             var check = new CheckBox
             {
                 Content = scene.DisplayName,
                 Tag = scene.Id,
-                IsChecked = EditingScenes.IdleRandomAnimationIds.Contains(scene.Id),
+                IsChecked = selected.Contains(scene.Id),
                 Margin = new Thickness(0, 4, 18, 8),
                 VerticalAlignment = VerticalAlignment.Center
             };
+            check.Checked += RandomIdleSelectionChanged;
+            check.Unchecked += RandomIdleSelectionChanged;
             IdleRandomChecksPanel.Children.Add(check);
         }
-        RefreshClickAreaEditor();
-        RefreshCompanionPreview();
+        RandomIdleEmpty.Visibility = IdleRandomChecksPanel.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RandomIdleSelectionChanged(object sender, RoutedEventArgs e)
+    {
+        var check = (CheckBox)sender;
+        var id = (Guid)check.Tag;
+        var selected = EditingScenes.IdleRandomAnimationIds;
+        if (check.IsChecked == true) selected.Add(id);
+        else selected.Remove(id);
+        UpdateRandomIdleCount();
     }
 
     private void RefreshAssignmentCombo(ComboBox comboBox, Guid? selectedId)
@@ -330,25 +421,29 @@ public partial class CompanionEditorWindow : Window
         RefreshClickAreaPreview();
     }
 
-    private void RefreshCompanionPreview()
+    private void RefreshCompanionPreview(LoadedAnimationFrames? prepared = null, bool failed = false)
     {
+        if (_opening) return;
         _companionPreviewPlayer.Stop(clearFrame: true);
         var scene = EditingScenes.FindAnimation(GetAssignmentId(IdleDefaultCombo, EditingScenes.IdleDefaultAnimationId));
-        ProfileAvatar.SetPicture(CompanionPortrait.From(_companion, scene));
+        var portrait = CompanionPortrait.From(_companion, scene);
         ResetPicture.Visibility = _companion.ProfilePicturePath == null ? Visibility.Collapsed : Visibility.Visible;
         CompanionPreviewModel.Visibility = IsModel ? Visibility.Visible : Visibility.Collapsed;
         if (IsModel)
         {
-            CompanionPreviewHint.Visibility = PlayModelPreview(CompanionPreviewModel, scene)
-                ? Visibility.Collapsed : Visibility.Visible;
+            var playing = !failed && PlayModelPreview(CompanionPreviewModel, scene);
+            CompanionPreviewHint.Visibility = playing ? Visibility.Collapsed : Visibility.Visible;
+            if (playing) ProfileAvatar.SetPicture(portrait, CompanionPreviewModel.CaptureFrame);
+            else ProfileAvatar.SetPicture(portrait with { ModelPath = null });
             return;
         }
-        if (scene is null)
+        ProfileAvatar.SetPicture(portrait);
+        if (scene is null || failed)
             return;
 
         try
         {
-            _companionPreviewPlayer.Play(scene, loop: true);
+            _companionPreviewPlayer.Play(scene, loop: true, prepared);
         }
         catch (Exception exception)
         {
@@ -392,6 +487,7 @@ public partial class CompanionEditorWindow : Window
 
     private void RefreshClickAreaPreview()
     {
+        if (_opening) return;
         _clickAreaPreviewPlayer.Stop(clearFrame: true);
         var scene = EditingScenes.FindAnimation(GetAssignmentId(IdleDefaultCombo, EditingScenes.IdleDefaultAnimationId));
         if (IsModel)
@@ -400,7 +496,7 @@ public partial class CompanionEditorWindow : Window
             ClickAreaPreviewHint.Visibility = scene is null ? Visibility.Visible : Visibility.Collapsed;
             return;
         }
-        if (scene is null)
+        if (scene is null || !ClickAreaPreviewImage.IsVisible)
             return;
 
         try
@@ -1205,10 +1301,6 @@ public partial class CompanionEditorWindow : Window
         EditingScenes.SelfBirthdayAnimation2Id = GetAssignmentId(SelfBirthday2Combo, null);
         EditingScenes.UserBirthdayAnimation1Id = GetAssignmentId(UserBirthday1Combo, null);
         EditingScenes.UserBirthdayAnimation2Id = GetAssignmentId(UserBirthday2Combo, null);
-        EditingScenes.IdleRandomAnimationIds = IdleRandomChecksPanel.Children.OfType<CheckBox>()
-            .Where(check => check.IsChecked == true)
-            .Select(check => (Guid)check.Tag)
-            .ToList();
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

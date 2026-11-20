@@ -2,9 +2,9 @@
 
 ## User data
 
-The root JSON document is `DesktopCompanionData`. Schema 15 saves to `%LOCALAPPDATA%\DesktopFamiliar\Library\desktop-familiar.v15.json`. It contains:
+The root JSON document is `DesktopCompanionData`. Schema 16 saves to `%LOCALAPPDATA%\DesktopFamiliar\Library\desktop-familiar.v16.json`. It contains:
 
-- `Settings`: selected companion, viewport, overlay position, dialogue behavior, random-idle interval, startup mirror, focus mode, user birthday, and saved themes.
+- `Settings`: selected companion, viewport, overlay position, dialogue bubble visibility, random-idle interval, startup mirror, focus mode, user birthday, and saved themes.
 - `Companions`: locally configured `CompanionDefinition` objects.
 - `CalendarEvents`: local event definitions and reminder state.
 
@@ -14,7 +14,15 @@ Schema 3 adds empty grouped interaction-state assignments to every companion. Sc
 
 Theme selection stores both `SelectedThemeId` and its `Theme` kind. The saved-theme ID is authoritative. A correction to the theme kind is included in the next user save.
 
+Existing libraries can contain the retired `Settings.TruncateLongDialogLines` flag. The reader ignores it and a subsequent save omits it. Opening the library alone preserves the source file.
+
 ## Local chat
+
+Schema 16 adds voice preferences to `Settings.Chat`: `VoiceEnabled` defaults to true, `InputLanguage` to the system language, `MicrophoneId` to the default input, `TalkShortcut` to Ctrl+Shift+F10, and `SendOnRelease` and `PreferWhisper` to false. When the two shortcuts coincide, normalization preserves the text-chat shortcut and assigns a distinct default to push-to-talk. Disabling Chat takes precedence over the voice preference.
+
+Each companion has one `Voice` object containing `Id`, `ReplyLanguage`, `Speaker`, `Rate`, `Pitch`, and `Volume`. An empty ID selects the Windows default. The ID `off` silences synthesized chat replies and unrecorded scene dialogue. A scene line’s own `VoicePath` takes precedence over the pet voice setting. A Windows token, catalogue ID or content-derived imported bank ID selects a specific voice. Gain defaults to 90 percent and pitch and speed default to neutral. Schema 15 loads these defaults in memory. Its matching calendar observations and completed history-wipe receipts carry forward on migration. Opening a pet leaves the source configuration untouched.
+
+The embedded `Resources/voice-banks.json` lists Windows voice sources, input language choices, and optional speech downloads with their sizes and SHA-256 digests. Verified packages and imported banks live under `%LOCALAPPDATA%\DesktopFamiliar\Voice`. Format 6 companion bundles carry custom per-pet voice choices and tuning. Exports using defaults keep the applicable earlier bundle version. Shared engines, voice banks, microphone IDs and private recordings are excluded from exports.
 
 Schema 15 adds a `ChatExpressions` object independently to the companion’s sprite settings and its `Model3D` settings. The supported keys are `happy`, `sad`, `surprised`, `confused`, `angry`, and `thoughtful`. A scene GUID assigns a reaction within that appearance, a JSON null disables it, and an omitted key enables automatic name matching. Schema 14 and older packs default to automatic matching in memory. A user save writes the new library file. The per-pet history format stays at version 2.
 
@@ -34,7 +42,7 @@ Schema 11 adds nullable `CompanionDefinition.ProfilePicturePath` and a root `Pen
 
 Automatic idle portraits are rendered from the existing assets. The profile editor copies imported portraits to `Assets/<companion-guid>/Portraits/` on save. Version-1 bundles can include the optional `profilePicturePath` field and its referenced image under `assets/`. Older bundles use the idle preview.
 
-An empty `Library/history-wipe.v15.<pet-guid>` file records when the requested history wipe has completed. Asset retries preserve conversations started afterward in another version. The receipt is removed once the cleared queue is saved.
+An empty `Library/history-wipe.v16.<pet-guid>` file records when the requested history wipe has completed. Asset retries preserve conversations started afterward in another version. The receipt is removed once the cleared queue is saved.
 
 Schema 9 adds two optional text fields, `Description` and `Personality`, directly to each companion. A schema-8 library migrates with empty defaults for missing fields and preserves any existing text. Version-1 companion bundles carry the fields in their companion object. Earlier bundles that omit the fields import with blank text. Speaking examples are derived from the selected appearance’s scene dialogue at read time.
 
@@ -58,7 +66,7 @@ One-time events use `IsCompleted` and `IsExpired`. Weekly events store terminal 
 
 Terminal one-time events are removed when their end date is at least one year old. Active weekly series remain, while completed and expired occurrence history at least one year old is pruned.
 
-Observed expirations are written atomically to `Library/calendar-expirations.v15.json` between configuration saves. The document stores the source library’s SHA-256 and a list of event GUIDs and occurrence timestamps. On restart the app applies records that match the exact library it loaded. A user save commits those occurrences to the library and removes the temporary record. Opening an older or newer library leaves its configuration intact.
+Observed expirations are written atomically to `Library/calendar-expirations.v16.json` between configuration saves. The document stores the source library’s SHA-256 and a list of event GUIDs and occurrence timestamps. On restart the app applies records that match the exact library it loaded. A user save commits those occurrences to the library and removes the temporary record. Opening an older or newer library leaves its configuration intact.
 
 ## Imported assets
 

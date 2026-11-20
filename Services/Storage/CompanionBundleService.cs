@@ -21,7 +21,7 @@ public sealed class CompanionBundleService
 {
     public const string FileExtension = ".companionpack";
     public const string FormatIdentifier = "DesktopCompanion.Bundle";
-    public const int CurrentFormatVersion = 5;
+    public const int CurrentFormatVersion = 6;
 
     private const string ManifestEntryName = "manifest.json";
     private const int MaximumEntryCount = 5000;
@@ -54,8 +54,8 @@ public sealed class CompanionBundleService
         var assets = MakeAssetsPortable(portableCompanion);
         var manifest = new CompanionBundleManifest
         {
-            FormatVersion = companion.ChatExpressions.Count > 0 || companion.Model3D.ChatExpressions.Count > 0
-                ? CurrentFormatVersion
+            FormatVersion = portableCompanion.Voice != new CompanionVoice() ? CurrentFormatVersion
+                : companion.ChatExpressions.Count > 0 || companion.Model3D.ChatExpressions.Count > 0 ? 5
                 : companion.Appearance == CompanionAppearance.Images2D && companion.Model3D.FilePath is null
                     && companion.Model3D.Animations.Count == 0 ? 1 : 4,
             BundleId = $"companion.{companion.Id:N}",

@@ -7,11 +7,12 @@ Desktop Familiar is a Windows WPF desktop-companion application. It displays an 
 - Multiple locally configured companions with a shared profile across 2D and 3D, a live idle preview, and an optional portrait that defaults to a still of the active idle.
 - Built-in offline text chat for Windows x64. Download Gemma 3 1B, choose an existing GGUF, or scan a folder for models. Toggle the prompt with a configurable shortcut and let the pet choose a configured expression as it replies. Each companion has private notes and history.
 - Portable companion bundles that include configuration, animations, dialogue audio, fonts, and bubble artwork for one-step export and import.
+- Optional offline push-to-talk using installed Windows recognition or downloadable multilingual Whisper. Each pet can speak with a tuned Windows voice or a shared Kokoro voice bank.
 - GIF, static image, or ordered PNG-frame animations with per-frame timing. A companion can also carry a self-contained 3D GLB model. Play a full 3D activity with a marked loop range, timed repeats, or a loop that lasts through dialogue. Assign it to states or interactions. Switch appearances in Configure.
 - Start, looping idle, optional reminder, birthday, exit, and random-idle scenes.
 - Focus mode that suppresses the companion while idle, reveals it for reminders, and suppresses non-reminder scene dialogue and voice.
 - Whole-animation, selected-range, or single-frame loops for any looping scene.
-- Timed dialogue with a configurable PNG start frame or 3D start time, `{{user}}` nickname replacement, optional voice lines, and a hideable dialogue bubble.
+- Timed dialogue with a configurable PNG start frame or 3D start time, `{{user}}` nickname replacement, and a hideable bubble. Each line plays its attached recording or uses the pet’s profile voice to read its text aloud.
 - Independently sized character viewport (120–1200px) with a centered, capped dialogue bubble, Windows startup option, and editable semantic colour themes.
 - An optional installable Auto Clicker addon with separate global start/stop and input-mode hotkeys, fresh area selection, and randomized millisecond or second interval ranges.
 - A local month calendar with month/year navigation, one-time, continuous multi-day, and weekly events; occurrence/series deletion, categories, urgency, reminders, snooze, and stop actions.
@@ -46,7 +47,7 @@ Add `-SelfContained` for a larger build that includes the runtime. See [developm
 
 Desktop Familiar keeps program files separate from user data:
 
-- Configuration: `%LOCALAPPDATA%\DesktopFamiliar\Library\desktop-familiar.v15.json`. Opening an existing library reads its settings into memory. A saved change writes the copy for that schema.
+- Configuration: `%LOCALAPPDATA%\DesktopFamiliar\Library\desktop-familiar.v16.json`. Opening an existing library reads its settings into memory. A saved change writes the copy for that schema.
 - Imported assets: `%LOCALAPPDATA%\DesktopFamiliar\Assets\<companion-id>`
 - Latest session log: `%LOCALAPPDATA%\DesktopFamiliar\Logs\latest.log`
 - Wording overrides: `%LOCALAPPDATA%\DesktopFamiliar\Localization\custom.en.json`

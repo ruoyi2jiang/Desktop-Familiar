@@ -23,7 +23,6 @@ public sealed class AppSettings
     public Guid? SelectedThemeId { get; set; }
     public int ViewportWidth { get; set; } = 240;
     public int ViewportHeight { get; set; } = 240;
-    public bool TruncateLongDialogLines { get; set; }
     public bool DialogBubbleHidden { get; set; }
 
     public double? CompanionLeft { get; set; }
@@ -44,7 +43,6 @@ public sealed class AppSettings
         SelectedThemeId = SelectedThemeId,
         ViewportWidth = ViewportWidth,
         ViewportHeight = ViewportHeight,
-        TruncateLongDialogLines = TruncateLongDialogLines,
         DialogBubbleHidden = DialogBubbleHidden,
         CompanionLeft = CompanionLeft,
         CompanionTop = CompanionTop

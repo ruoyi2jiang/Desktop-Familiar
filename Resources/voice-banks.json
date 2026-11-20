@@ -1,0 +1,66 @@
+{
+  "windows": {
+    "nameKey": "Voice.WindowsDefault",
+    "categories": [
+      "HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Speech\\Voices",
+      "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices",
+      "HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Speech_OneCore\\Voices",
+      "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech_OneCore\\Voices"
+    ]
+  },
+  "languages": [
+    "en-GB",
+    "en-US",
+    "ja-JP",
+    "zh-CN",
+    "zh-TW",
+    "ko-KR",
+    "fr-FR",
+    "de-DE",
+    "es-ES",
+    "it-IT",
+    "pt-BR",
+    "ru-RU",
+    "vi-VN",
+    "ar-SA",
+    "hi-IN",
+    "nl-NL",
+    "pl-PL",
+    "sv-SE",
+    "uk-UA"
+  ],
+  "recognition": {
+    "id": "whisper-base",
+    "nameKey": "Voice.Whisper",
+    "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin",
+    "size": 147951465,
+    "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+    "entry": "ggml-base.bin"
+  },
+  "recognitionEngine": {
+    "id": "whisper-1.8.2",
+    "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.2/whisper-bin-x64.zip",
+    "size": 3832432,
+    "sha256": "b1514ebc099765e39fa37eb780b92a140a94c86bb0b3b3d98226b38825979732",
+    "entry": "Release/whisper-cli.exe"
+  },
+  "voiceEngine": {
+    "id": "sherpa-1.12.38",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.38/sherpa-onnx-v1.12.38-win-x64-shared-MT-Release.tar.bz2",
+    "size": 23274700,
+    "sha256": "44ce8c15c90927dde99d36949ee897675cf38e6a60e0ba1a2e8673e8a5e4dcb6",
+    "entry": "sherpa-onnx-v1.12.38-win-x64-shared-MT-Release/bin/sherpa-onnx-offline-tts.exe"
+  },
+  "banks": [
+    {
+      "id": "kokoro-en-v019",
+      "nameKey": "Voice.Kokoro",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-en-v0_19.tar.bz2",
+      "size": 103248205,
+      "sha256": "c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd",
+      "entry": "kokoro-int8-en-v0_19/model.int8.onnx",
+      "language": "en-US",
+      "terms": "https://huggingface.co/hexgrad/Kokoro-82M"
+    }
+  ]
+}

@@ -201,13 +201,46 @@
                         <TextBlock Text="{loc:Loc Chat.Title}" FontSize="27" FontWeight="SemiBold" />
                     </DockPanel>
                     <StackPanel x:Name="ChatOptions">
-                        <TextBlock Text="{loc:Loc Chat.Model}" FontWeight="SemiBold" />
-                        <ComboBox x:Name="ChatModelChoice" SelectionChanged="ChatModel_Changed" DropDownClosed="ChatModel_Closed" AutomationProperties.Name="{loc:Loc Chat.Model}" />
+                        <controls:FieldHelpLabel Text="{loc:Loc Chat.Model}" HelpText="{loc:Loc Chat.ModelHelp}" />
+                        <ComboBox x:Name="ChatModelChoice" SelectionChanged="ChatModel_Changed" DropDownClosed="ChatModel_Closed"
+                                  ToolTip="{loc:Loc Chat.ModelHelp}" AutomationProperties.HelpText="{loc:Loc Chat.ModelHelp}" AutomationProperties.Name="{loc:Loc Chat.Model}" />
                         <TextBlock x:Name="ChatAvailability" TextWrapping="Wrap" Margin="0,6,0,20"/>
                         <TextBlock Text="{loc:Loc Chat.Shortcut}" FontWeight="SemiBold"/>
                         <TextBox x:Name="ChatShortcut" IsReadOnly="True" PreviewKeyDown="ChatShortcut_KeyDown" AutomationProperties.Name="{loc:Loc Chat.Shortcut}" />
-                        <TextBlock x:Name="ShortcutHint" TextWrapping="Wrap" Margin="0,4,0,20"/>
+                        <TextBlock x:Name="ShortcutHint" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <Border Style="{StaticResource SettingsDivider}" />
+                        <DockPanel Margin="0,0,0,8">
+                            <ToggleButton x:Name="EnableVoice" DockPanel.Dock="Right" Style="{StaticResource SettingsToggle}"
+                                          AutomationProperties.Name="{loc:Loc Voice.Enable}" Click="EnableVoice_Click"/>
+                            <TextBlock Text="{loc:Loc Voice.Input}" FontSize="20" FontWeight="SemiBold"/>
+                        </DockPanel>
+                        <StackPanel x:Name="VoiceOptions">
+                            <Label Content="{loc:Loc Voice.InputLanguage}" Target="{Binding ElementName=VoiceLanguage}" Padding="0"/>
+                            <ComboBox x:Name="VoiceLanguage" SelectionChanged="VoiceChoice_Changed"/>
+                            <CheckBox x:Name="PreferWhisper" Click="PreferWhisper_Click" Margin="0,6,0,0"
+                                      ToolTip="{loc:Loc Voice.PreferWhisperHelp}" AutomationProperties.HelpText="{loc:Loc Voice.PreferWhisperHelp}"
+                                      AutomationProperties.Name="{loc:Loc Voice.PreferWhisper}" ToolTipService.InitialShowDelay="0">
+                                <Border Background="Transparent">
+                                    <controls:FieldHelpLabel Text="{loc:Loc Voice.PreferWhisper}" HelpText="{loc:Loc Voice.PreferWhisperHelp}" IsHitTestVisible="False"/>
+                                </Border>
+                            </CheckBox>
+                            <TextBlock x:Name="RecognitionStatus" TextWrapping="Wrap" Margin="0,4"/>
+                            <WrapPanel>
+                                <Button x:Name="GetRecognizer" Click="GetRecognizer_Click" Margin="0,2,8,6"/>
+                                <Button Content="{loc:Loc Voice.WindowsPacks}" Click="OpenSpeechPacks_Click" Margin="0,2,8,6"/>
+                                <Button Content="{loc:Loc Voice.Refresh}" Click="RefreshVoice_Click" Margin="0,2,0,6"/>
+                            </WrapPanel>
+                            <Label Content="{loc:Loc Voice.Microphone}" Target="{Binding ElementName=VoiceDevice}" Padding="0" Margin="0,16,0,0"/>
+                            <ComboBox x:Name="VoiceDevice" SelectionChanged="VoiceChoice_Changed"/>
+                            <Button x:Name="TestMic" Content="{loc:Loc Voice.TestMic}" Click="TestMic_Click" HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                            <TextBlock x:Name="MicStatus" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+                            <Label Content="{loc:Loc Voice.Shortcut}" Target="{Binding ElementName=TalkShortcut}" Padding="0" Margin="0,16,0,0"/>
+                            <TextBox x:Name="TalkShortcut" IsReadOnly="True" PreviewKeyDown="ChatShortcut_KeyDown"/>
+                            <TextBlock x:Name="TalkShortcutHint" TextWrapping="Wrap" Margin="0,4"/>
+                            <CheckBox x:Name="VoiceAutoSend" Content="{loc:Loc Voice.SendOnRelease}" Click="AutoSend_Click" Margin="0,4"/>
+                        </StackPanel>
                     </StackPanel>
+                    <Border Style="{StaticResource SettingsDivider}" />
                     <TextBlock Text="{loc:Loc Chat.History}" FontWeight="SemiBold" />
                     <TextBlock x:Name="TotalHistorySize" Style="{StaticResource MutedPageTextBlock}"
                                Margin="0,4,0,2" TextWrapping="Wrap" />
@@ -338,15 +371,6 @@
                             <Button Content="{loc:Loc Settings.RandomIdleInterval.Apply}" Style="{StaticResource PrimaryButton}" Height="38" Padding="16,0" Margin="0" Click="ApplyIdleInterval_Click" />
                         </StackPanel>
                     </StackPanel>
-                    <Border Style="{StaticResource SettingsDivider}" />
-                    <TextBlock Text="{loc:Loc Settings.Companion.Dialog.Title}" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,6" />
-                    <CheckBox x:Name="TruncateDialogLinesCheck" HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                              Checked="TruncateDialogLines_Changed" Unchecked="TruncateDialogLines_Changed">
-                        <StackPanel>
-                            <TextBlock Text="{loc:Loc Settings.Companion.Dialog.Truncate.Title}" FontSize="17" FontWeight="SemiBold" />
-                            <TextBlock Text="{loc:Loc Settings.Companion.Dialog.Truncate.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,5,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </CheckBox>
                 </StackPanel>
 
                 <StackPanel x:Name="ThemePanel" Visibility="Collapsed">

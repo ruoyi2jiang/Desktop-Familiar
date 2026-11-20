@@ -16,6 +16,7 @@ public sealed class CompanionStorage : ICompanionRepository
     private readonly CompanionBundleService _bundleService;
     private readonly CompanionDataNormalizer _normalizer;
     private readonly CalendarExpirationStore _expirations;
+    private bool _readingSchema15;
     private readonly HashSet<Guid> _finishedCleanups = [];
 
     public CompanionStorage()
@@ -69,6 +70,7 @@ public sealed class CompanionStorage : ICompanionRepository
             }
         }
 
+        _readingSchema15 = data.SchemaVersion == 15 && LastRecoveryNotice == null && source != DataFilePath;
         RequiresExplicitSave = source != DataFilePath || data.SchemaVersion != DesktopCompanionData.CurrentSchemaVersion
             || LastRecoveryNotice != null;
         // The typed projection of a newer file is edited only in this build's own format.
@@ -76,7 +78,10 @@ public sealed class CompanionStorage : ICompanionRepository
             data.SchemaVersion = DesktopCompanionData.CurrentSchemaVersion;
         _normalizer.Normalize(data);
         if (LastRecoveryNotice == null && File.Exists(source) && _dataStore.SourceFingerprint is { } fingerprint)
+        {
+            if (_readingSchema15) new CalendarExpirationStore(Path.GetDirectoryName(DataFilePath)!, 15).Apply(fingerprint, data);
             _expirations.Apply(fingerprint, data);
+        }
         return data;
     }
 
@@ -90,7 +95,14 @@ public sealed class CompanionStorage : ICompanionRepository
 
     public void Save(DesktopCompanionData data)
     {
+        if (_readingSchema15)
+            foreach (var id in data.PendingCompanionCleanup)
+            {
+                var previous = Path.Combine(Path.GetDirectoryName(DataFilePath)!, $"history-wipe.v15.{id:N}");
+                if (File.Exists(previous) && !File.Exists(HistoryWipeReceipt(id))) File.Copy(previous, HistoryWipeReceipt(id));
+            }
         _dataStore.Write(data);
+        _readingSchema15 = false;
         RequiresExplicitSave = false;
         _expirations.ClearAfterSave();
         foreach (var id in _finishedCleanups.ToArray())

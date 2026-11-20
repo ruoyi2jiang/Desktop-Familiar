@@ -10,6 +10,14 @@ public sealed class ChatHotkey : IDisposable
         { ParentWindow = new IntPtr(-3), WindowStyle = 0, Width = 0, Height = 0 });
     private string? _current;
     private int _id = 1;
+    private int _key;
+    private ModifierKeys _modifiers;
+    internal bool IsHeld => _current != null && IsDown(_key)
+        && (!_modifiers.HasFlag(ModifierKeys.Control) || IsDown(0x11))
+        && (!_modifiers.HasFlag(ModifierKeys.Shift) || IsDown(0x10))
+        && (!_modifiers.HasFlag(ModifierKeys.Alt) || IsDown(0x12))
+        && (!_modifiers.HasFlag(ModifierKeys.Windows) || IsDown(0x5B) || IsDown(0x5C));
+    private static bool IsDown(int key) => (GetAsyncKeyState(key) & 0x8000) != 0;
     public event EventHandler? Pressed;
     public ChatHotkey() => _window.AddHook(Receive);
 
@@ -26,6 +34,8 @@ public sealed class ChatHotkey : IDisposable
             if (gesture == null || gesture.Modifiers == ModifierKeys.None ||
                 !RegisterHotKey(_window.Handle, next, 0x4000u | (uint)gesture.Modifiers, (uint)KeyInterop.VirtualKeyFromKey(gesture.Key)))
                 return false;
+            _key = KeyInterop.VirtualKeyFromKey(gesture.Key);
+            _modifiers = gesture.Modifiers;
         }
         if (_current != null) UnregisterHotKey(_window.Handle, _id);
         _id = next;
@@ -45,6 +55,8 @@ public sealed class ChatHotkey : IDisposable
 
     public void Dispose() { Set(null); _window.Dispose(); }
 
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")]
     private static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
     [DllImport("user32.dll")]

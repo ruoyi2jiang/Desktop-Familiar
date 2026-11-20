@@ -170,16 +170,6 @@ public sealed class CompanionManager
         ViewportChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetTruncateLongDialogLines(bool enabled)
-    {
-        if (Data.Settings.TruncateLongDialogLines == enabled)
-            return;
-
-        Data.Settings.TruncateLongDialogLines = enabled;
-        Persist();
-        DialogPresentationChanged?.Invoke(this, EventArgs.Empty);
-    }
-
     public void SetDialogBubbleHidden(bool hidden, bool automatic = false)
     {
         if (Data.Settings.DialogBubbleHidden == hidden)

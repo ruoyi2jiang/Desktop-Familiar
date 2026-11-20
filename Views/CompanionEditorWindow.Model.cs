@@ -17,6 +17,7 @@ public partial class CompanionEditorWindow
     private PreviewPhase _previewPhase;
     private bool _updatingPlayhead;
     private bool _releasePreviewAtCaptionEnd;
+    private bool _scenePreviewPending;
     private readonly DispatcherTimer _captionTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
     private readonly Stopwatch _captionClock = new();
     private List<ModelDialogueTiming.Caption> _captions = [];
@@ -48,7 +49,7 @@ public partial class CompanionEditorWindow
 
     private void Appearance_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (_companion is null || AppearanceCombo.SelectedIndex < 0 || _loadingModel) return;
+        if (_opening || _companion is null || AppearanceCombo.SelectedIndex < 0 || _loadingModel) return;
         if (_appearanceLoaded)
         {
             if (!CommitSceneEdits())
@@ -60,7 +61,13 @@ public partial class CompanionEditorWindow
             }
             StoreAssignments();
         }
+        ApplyAppearance();
+    }
+
+    private void ApplyAppearance(Dictionary<string, double>? preparedClips = null)
+    {
         _appearanceLoaded = true;
+        _scenePreviewPending = false;
         _companion.Appearance = (CompanionAppearance)AppearanceCombo.SelectedIndex;
         StopPreview();
         ModelPreview.Clear();
@@ -71,7 +78,11 @@ public partial class CompanionEditorWindow
             IsModel ? Visibility.Visible : Visibility.Collapsed;
         ScenesTitle.Text = LocalizationService.Get(IsModel ? "Model3D.Scenes" : "Editor.Animations.Title");
         SceneNameLabel.Text = LocalizationService.Get(IsModel ? "Model3D.SceneName" : "Editor.RegistryName");
-        if (IsModel) LoadModelOptions();
+        if (IsModel)
+        {
+            if (preparedClips != null) PopulateModelOptions(preparedClips);
+            else LoadModelOptions();
+        }
         RefreshSceneSelectors(EditingScenes.Animations.FirstOrDefault()?.Id, switched: true);
     }
 
@@ -167,7 +178,15 @@ public partial class CompanionEditorWindow
             UpdatePlayhead(0);
         }
         finally { _loadingModel = false; }
-        PlayModelPreview(ModelPreview, scene, loop: false);
+        _scenePreviewPending = !ModelPreview.IsVisible;
+        if (!_scenePreviewPending) PlayModelPreview(ModelPreview, scene, loop: false);
+    }
+
+    private void ModelPreview_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true || !_scenePreviewPending || !IsModel) return;
+        _scenePreviewPending = false;
+        PlayModelPreview(ModelPreview, SceneList.SelectedItem as AnimationScene, loop: false);
     }
 
     private static string FormatTime(double value) => value.ToString("0.######", System.Globalization.CultureInfo.CurrentCulture);
@@ -312,6 +331,13 @@ public partial class CompanionEditorWindow
     private void ClickAreaModel_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (e.NewValue is true && _appearanceLoaded) RefreshClickAreaPreview();
+    }
+
+    private void ClickAreaImage_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (!_appearanceLoaded || IsModel) return;
+        if (e.NewValue is true) RefreshClickAreaPreview();
+        else _clickAreaPreviewPlayer.Stop(clearFrame: true);
     }
 
     private bool PlayModelPreview(CompanionModelView view, AnimationScene? scene, bool loop = true, float blendSeconds = 0)

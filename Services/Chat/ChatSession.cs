@@ -88,6 +88,8 @@ public sealed class ChatSession(ChatHistoryStore history, IChatEngine engine)
             $"Description: {Limit(pet.Description, 600)}\nPersonality: {Limit(pet.Personality, 600)}\n" +
             $"Address the user as: {Limit(pet.UserNickname, 100)}\n" + styleGuide +
             $"Your saved notes about this user:\n{string.Join("\n", notes)}";
+        if (CompanionVoice.LanguageTag(pet.Voice?.ReplyLanguage) is { Length: > 0 } language)
+            instruction += $"\nWrite your reply in {System.Globalization.CultureInfo.GetCultureInfo(language).EnglishName}.";
         var messages = new List<ChatMessage> { new("system", instruction) };
         foreach (var turn in saved.Turns.TakeLast(4))
         {

@@ -44,22 +44,29 @@ public sealed class CompanionModelView : Viewport3D
 
     internal static BitmapSource CaptureFirstFrame(string path, string? clip)
     {
-        const int size = 192;
         var view = new CompanionModelView();
         try
         {
             view.Play(path, clip, loop: true);
-            view.Measure(new Size(size, size));
-            view.Arrange(new Rect(0, 0, size, size));
-            view.UpdateLayout();
-            view._restBounds = view._content.Bounds;
-            view.FitCamera();
-            var frame = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
-            frame.Render(view);
-            frame.Freeze();
-            return frame;
+            return view.CaptureFrame();
         }
         finally { view.Clear(); }
+    }
+
+    internal BitmapSource CaptureFrame()
+    {
+        const int size = 192;
+        // Frame a second camera around the posed geometry without moving the live preview.
+        var portrait = new CompanionModelView { _restBounds = _content.Bounds };
+        portrait._content.Children.Add(_content);
+        portrait.Measure(new Size(size, size));
+        portrait.Arrange(new Rect(0, 0, size, size));
+        portrait.UpdateLayout();
+        portrait.FitCamera();
+        var frame = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        frame.Render(portrait);
+        frame.Freeze();
+        return frame;
     }
 
     public CompanionModelView()
@@ -86,25 +93,43 @@ public sealed class CompanionModelView : Viewport3D
     public void PlayScene(string? path, AnimationScene scene, bool loop, bool blendFromCurrent = false) =>
         PlayScene(path, scene, loop, blendFromCurrent ? ModelPoseTransition.DefaultDuration : 0);
 
+    internal sealed record PreparedModel(string Path, (long, DateTime) Version, ModelPlaybackRig Rig, IMeshDecoder<GltfMaterial>[] Meshes)
+    {
+        internal static PreparedModel Read(string? path, CancellationToken cancellation = default)
+        {
+            var version = FileVersion(path);
+            var rig = GlbModelFile.ReadForPlayback(path, cancellation);
+            cancellation.ThrowIfCancellationRequested();
+            var meshes = rig.Model.LogicalMeshes.Decode();
+            if (!meshes.Any(mesh => mesh.Primitives.Any(primitive => primitive.TriangleIndices.Any())))
+                throw new InvalidDataException("The model contains no triangles.");
+            return new(path!, version, rig, meshes);
+        }
+    }
+
+    private static (long, DateTime) FileVersion(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && new FileInfo(path) is { Exists: true } file
+            ? (file.Length, file.LastWriteTimeUtc) : default;
+
+    internal void Attach(PreparedModel model)
+    {
+        _scene = model.Rig.Scene;
+        _meshes = model.Meshes;
+        _content.Children.Add(new AmbientLight(Color.FromRgb(190, 190, 190)));
+        _content.Children.Add(new DirectionalLight(Colors.White, new Vector3D(0.4, -0.65, -1)));
+        Pose();
+        _path = model.Path;
+        _version = model.Version;
+        _rig = model.Rig;
+    }
+
     internal void PlayScene(string? path, AnimationScene scene, bool loop, float blendSeconds)
     {
-        var file = string.IsNullOrWhiteSpace(path) ? null : new FileInfo(path);
-        var version = file is { Exists: true } ? (file.Length, file.LastWriteTimeUtc) : default;
-        var reuse = _rig != null && _path == path && _version == version;
+        var reuse = _rig != null && _path == path && _version == FileVersion(path);
         if (!reuse)
         {
             Clear();
-            var rig = GlbModelFile.ReadForPlayback(path);
-            _scene = rig.Scene;
-            _meshes = rig.Model.LogicalMeshes.Decode();
-            if (!_meshes.Any(mesh => mesh.Primitives.Any(primitive => primitive.TriangleIndices.Any())))
-                throw new InvalidDataException("The model contains no triangles.");
-            _content.Children.Add(new AmbientLight(Color.FromRgb(190, 190, 190)));
-            _content.Children.Add(new DirectionalLight(Colors.White, new Vector3D(0.4, -0.65, -1)));
-            Pose();
-            _path = path;
-            _version = version;
-            _rig = rig;
+            Attach(PreparedModel.Read(path));
         }
 
         _timeline = new ModelClipTimeline(scene, name => _rig!.Model.LogicalAnimations

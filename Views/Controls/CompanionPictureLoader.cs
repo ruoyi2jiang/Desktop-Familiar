@@ -10,7 +10,7 @@ internal static class CompanionPictureLoader
     private sealed record SnapshotKey(string Path, string? Clip, DateTime LastWrite, long Length);
     private static readonly Dictionary<SnapshotKey, BitmapSource> Snapshots = new();
 
-    public static ImageSource? Load(CompanionPortrait? portrait)
+    public static ImageSource? Load(CompanionPortrait? portrait, Func<BitmapSource>? captureIdle = null)
     {
         if (portrait == null) return null;
         if (LoadImage(portrait.PicturePath) is { } imported) return imported;
@@ -24,7 +24,7 @@ internal static class CompanionPictureLoader
             lock (Snapshots)
             {
                 if (Snapshots.TryGetValue(key, out var cached)) return cached;
-                var frame = CompanionModelView.CaptureFirstFrame(path, key.Clip);
+                var frame = captureIdle?.Invoke() ?? CompanionModelView.CaptureFirstFrame(path, key.Clip);
                 if (Snapshots.Count >= 32) Snapshots.Remove(Snapshots.Keys.First());
                 Snapshots.Add(key, frame);
                 return frame;

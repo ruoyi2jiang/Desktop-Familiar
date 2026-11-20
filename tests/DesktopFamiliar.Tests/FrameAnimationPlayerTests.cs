@@ -31,6 +31,16 @@ public sealed class FrameAnimationPlayerTests
     private static LoadedAnimationFrames CreateAnimation(BitmapSource frame) =>
         new([frame], [TimeSpan.FromSeconds(1)]);
 
+    [Fact]
+    public void PreparedOpeningFramesPlayWithoutReadingTheSourceAgain()
+    {
+        var frame = CreateFrame(120);
+        using var player = new FrameAnimationPlayer(shown => { if (shown != null) Assert.Same(frame, shown); },
+            new QueueFrameLoader());
+        player.Play(new AnimationScene(), loop: true, CreateAnimation(frame));
+        Assert.Equal(1, player.FrameCount);
+    }
+
     private static BitmapSource CreateFrame(byte value)
     {
         var frame = BitmapSource.Create(

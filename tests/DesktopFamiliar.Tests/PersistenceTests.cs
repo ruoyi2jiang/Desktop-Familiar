@@ -112,6 +112,34 @@ public sealed class PersistenceTests
         Assert.False(pet.ChatExpressions.ContainsKey("angry"));
     }
 
+    [Theory]
+    [InlineData(15)]
+    [InlineData(16)]
+    public void RetiredDialogueTruncationIsIgnoredOnReadAndOmittedOnSave(int version)
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        var source = Path.Combine(Path.GetDirectoryName(storage.DataFilePath)!, $"desktop-familiar.v{version}.json");
+        var original = JsonSerializer.Serialize(new
+        {
+            SchemaVersion = version,
+            Settings = new { TruncateLongDialogLines = true, DialogBubbleHidden = true, ViewportWidth = 360 }
+        });
+        File.WriteAllText(source, original);
+        var manager = new CompanionManager(storage);
+        Assert.Equal(original, File.ReadAllText(source));
+        Assert.Null(storage.LastRecoveryNotice);
+        Assert.True(manager.Data.Settings.DialogBubbleHidden);
+        manager.SetViewportSize(361, 240);
+
+        using var saved = JsonDocument.Parse(File.ReadAllBytes(storage.DataFilePath));
+        var settings = saved.RootElement.GetProperty("Settings");
+        Assert.False(settings.TryGetProperty("TruncateLongDialogLines", out _));
+        Assert.True(settings.GetProperty("DialogBubbleHidden").GetBoolean());
+        Assert.Equal(361, settings.GetProperty("ViewportWidth").GetInt32());
+        if (source != storage.DataFilePath) Assert.Equal(original, File.ReadAllText(source));
+    }
+
     [Fact]
     public void MigrationKeepsRecognizedFieldsAlreadyPresentInAnOlderDocument()
     {

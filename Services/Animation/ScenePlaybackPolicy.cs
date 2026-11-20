@@ -51,6 +51,10 @@ public static class ScenePlaybackPolicy
             AnimationSceneRole.Start or AnimationSceneRole.Click or AnimationSceneRole.IdleRandom or
             AnimationSceneRole.SelfBirthday or AnimationSceneRole.UserBirthday or AnimationSceneRole.Exit;
 
+    internal static bool ShouldUseProfileVoice(DialogLine line, CompanionVoice voice, bool microphoneActive) =>
+        !microphoneActive && voice.Id != "off" && !string.IsNullOrWhiteSpace(line.Text)
+        && string.IsNullOrWhiteSpace(line.VoicePath);
+
     public static bool ShouldPresentSceneDialog(
         bool focusModeEnabled,
         AnimationSceneRole role,

@@ -47,7 +47,10 @@ public static class OverlayLayoutPolicy
         RectangleF character, RectangleF workArea, double promptHeight, double dialogueHeight)
     {
         const double gap = 6;
-        var width = Math.Min(GetDialogWidth((int)character.Width), workArea.Width);
+        const float minimumPromptWidth = 520;
+        const float maximumPromptWidth = 640;
+        var preferredWidth = Math.Clamp(character.Width, minimumPromptWidth, maximumPromptWidth);
+        var width = Math.Min(preferredWidth, workArea.Width);
         var left = Math.Clamp(character.Left + (character.Width - width) / 2, workArea.Left, workArea.Right - width);
         var spaceAbove = character.Top - workArea.Top - dialogueHeight;
         var spaceBelow = workArea.Bottom - character.Bottom;

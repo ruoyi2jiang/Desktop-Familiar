@@ -1,7 +1,24 @@
+using System.Xml.Linq;
+
 namespace DesktopFamiliar.Tests;
 
 public sealed class CompanionEditorStateAssignmentLayoutTests
 {
+    [Fact]
+    public void RandomIdleChoicesStartCollapsedWithTheirCountInTheHeader()
+    {
+        var layout = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "CompanionEditorWindow.xaml")));
+        var ui = layout.Root!.Name.Namespace;
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        var section = layout.Descendants(ui + "Expander").Single(e => (string?)e.Attribute(x + "Name") == "RandomIdleExpander");
+        Assert.Equal("False", (string?)section.Attribute("IsExpanded"));
+        var header = section.Element(ui + "Expander.Header")!;
+        Assert.Contains(header.Descendants(), e => (string?)e.Attribute(x + "Name") == "RandomIdleCount");
+        var choices = section.Descendants(ui + "WrapPanel").Single();
+        Assert.Equal("IdleRandomChecksPanel", (string?)choices.Attribute(x + "Name"));
+        Assert.DoesNotContain(choices, header.Descendants());
+    }
+
     [Fact]
     public void CoreStates_AppearBeforeGroupedInteractionAssignments()
     {

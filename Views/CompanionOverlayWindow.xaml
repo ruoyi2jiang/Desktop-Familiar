@@ -111,7 +111,7 @@
                         <Grid>
                             <Image x:Name="BubbleImage" Stretch="Fill" Visibility="Collapsed" />
                             <StackPanel>
-                                <TextBlock x:Name="DialogText" TextWrapping="Wrap" FontSize="15" Foreground="{DynamicResource TextOnOverlayBrush}"
+                                <TextBlock x:Name="DialogText" TextWrapping="Wrap" TextTrimming="None" FontSize="15" Foreground="{DynamicResource TextOnOverlayBrush}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" />
                                 <StackPanel x:Name="ReminderActions" Orientation="Vertical" HorizontalAlignment="Stretch" Margin="0,10,0,0" Visibility="Collapsed">
                                     <Button x:Name="RemindLaterButton" MinHeight="34" Padding="10,6" Margin="0,0,0,6"

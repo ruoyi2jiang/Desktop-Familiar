@@ -27,17 +27,21 @@ internal static class GlbModelFile
     public static Dictionary<string, double> ReadClips(string? path)
     {
         using var input = Open(path);
-        return Read(input).LogicalAnimations.Where(animation => !string.IsNullOrWhiteSpace(animation.Name))
-            .GroupBy(animation => animation.Name!, StringComparer.Ordinal).Where(group => group.Count() == 1)
-            .ToDictionary(group => group.Key, group => (double)group.First().Duration, StringComparer.Ordinal);
+        return ClipDurations(Read(input));
     }
 
-    public static ModelPlaybackRig ReadForPlayback(string? path)
+    internal static Dictionary<string, double> ClipDurations(ModelRoot model) =>
+        model.LogicalAnimations.Where(animation => !string.IsNullOrWhiteSpace(animation.Name))
+            .GroupBy(animation => animation.Name!, StringComparer.Ordinal).Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => (double)group.First().Duration, StringComparer.Ordinal);
+
+    public static ModelPlaybackRig ReadForPlayback(string? path, CancellationToken cancellation = default)
     {
         // Keep a read handle across both passes. The schema reader closes each input it consumes.
         using var input = Open(path);
         using var source = Open(input.Name);
         var model = Read(source);
+        cancellation.ThrowIfCancellationRequested();
         if (model.LogicalAnimations.Count == 0) return new ModelPlaybackRig(model, model);
 
         // SharpGLTF builds samplers for every track when creating a SceneTemplate.

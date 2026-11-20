@@ -30,7 +30,7 @@ public sealed class OverlayLayoutPolicyTests
         var pet = new RectangleF(400, 480, 120, 240);
         var work = new RectangleF(0, 0, 1024, 740);
         var prompt = OverlayLayoutPolicy.PlaceChatPrompt(pet, work, 46, 120);
-        Assert.Equal(240, prompt.Width);
+        Assert.Equal(520, prompt.Width);
         Assert.Equal(460, prompt.Left + prompt.Width / 2);
         Assert.Equal(pet.Top - 6, prompt.Top + 46);
         Assert.Equal(prompt.Top - 6, pet.Top - prompt.DialogueClearance);
@@ -49,7 +49,7 @@ public sealed class OverlayLayoutPolicyTests
 
     [Theory]
     [InlineData(-1550, -1500)]
-    [InlineData(-540, -716)]
+    [InlineData(-540, -996)]
     public void PromptStaysInsideTheSelectedMonitorsWorkArea(int petLeft, int expectedLeft)
     {
         var work = new RectangleF(-1500, -150, 1024, 740);
@@ -68,6 +68,22 @@ public sealed class OverlayLayoutPolicyTests
         Assert.Equal(20, prompt.Left);
         Assert.Equal(200, prompt.Width);
         Assert.Equal(144, prompt.Top);
+    }
+
+    [Theory]
+    [InlineData(240, 1024, 520)]
+    [InlineData(480, 1024, 520)]
+    [InlineData(580, 1024, 580)]
+    [InlineData(900, 1024, 640)]
+    [InlineData(900, 600, 600)]
+    [InlineData(240, 360, 360)]
+    public void PromptProvidesTypingRoomWithinTheAvailableWidth(int petWidth, int workWidth, int expectedWidth)
+    {
+        var work = new RectangleF(0, 0, workWidth, 800);
+        var pet = new RectangleF((workWidth - petWidth) / 2f, 450, petWidth, 200);
+        var prompt = OverlayLayoutPolicy.PlaceChatPrompt(pet, work, 58, 96);
+        Assert.Equal(expectedWidth, prompt.Width);
+        Assert.Equal(workWidth / 2d, prompt.Left + prompt.Width / 2);
     }
 
     [Theory]

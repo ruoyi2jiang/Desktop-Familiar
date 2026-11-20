@@ -5,6 +5,43 @@
              xmlns:controls="clr-namespace:DesktopFamiliar.Views.Controls"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
+        <Style x:Key="ThemedBusyBar" TargetType="ProgressBar">
+            <Setter Property="Width" Value="180" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="{DynamicResource PageAccentBrush}" CornerRadius="4" Opacity="0.18" />
+                            <Border x:Name="Segment" Width="60" HorizontalAlignment="Left" CornerRadius="4"
+                                    Background="{DynamicResource PageAccentBrush}" Opacity="0.55">
+                                <Border.RenderTransform><TranslateTransform X="60" /></Border.RenderTransform>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsVisible, RelativeSource={RelativeSource Self}}" Value="True" />
+                                    <Condition Binding="{Binding IsIndeterminate, RelativeSource={RelativeSource Self}}" Value="True" />
+                                    <Condition Binding="{Binding Source={x:Static SystemParameters.ClientAreaAnimation}}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <MultiDataTrigger.EnterActions>
+                                    <BeginStoryboard x:Name="Sweep">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Segment"
+                                                Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                From="0" To="120" Duration="0:0:0.9" AutoReverse="True" RepeatBehavior="Forever"
+                                                AccelerationRatio="0.25" DecelerationRatio="0.25" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </MultiDataTrigger.EnterActions>
+                                <MultiDataTrigger.ExitActions><RemoveStoryboard BeginStoryboardName="Sweep" /></MultiDataTrigger.ExitActions>
+                            </MultiDataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <SolidColorBrush x:Key="PageBackgroundBrush" Color="#FFFFFFFF" />
         <SolidColorBrush x:Key="TextOnPageBackgroundBrush" Color="#FF4A2638" />
         <SolidColorBrush x:Key="PageBackgroundHoverBrush" Color="#FFFFDCE8" />

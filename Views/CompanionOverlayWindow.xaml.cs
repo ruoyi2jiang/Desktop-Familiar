@@ -11,6 +11,7 @@ using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Animation;
 using DesktopFamiliar.Services.Dialogs;
 using DesktopFamiliar.Services.Focus;
+using DesktopFamiliar.Services.Voice;
 using DesktopFamiliar.Views.Controls;
 using Brush = System.Windows.Media.Brush;
 using RectangleF = System.Drawing.RectangleF;
@@ -35,6 +36,8 @@ public partial class CompanionOverlayWindow : Window
     private readonly DispatcherTimer _autoClickStatusTimer = new();
     private readonly DispatcherTimer _dragHoldTimer = new();
     private MediaPlayer? _voicePlayer;
+    private readonly VoicePlayback _sceneSpeech;
+    private readonly VoicePlayback _chatSpeech;
     private readonly Random _random = new();
     private AnimationScene? _activeScene;
     private AnimationSceneRole _sceneRole;
@@ -74,7 +77,13 @@ public partial class CompanionOverlayWindow : Window
     private bool _exitCloseCompleted;
 
     public CompanionOverlayWindow(CompanionManager manager, IAddonViewportActionRegistry addonViewportActions)
+        : this(manager, addonViewportActions, (text, voice, token) => App.CurrentApp.Voice.SpeakAsync(text, voice, token)) { }
+
+    internal CompanionOverlayWindow(CompanionManager manager, IAddonViewportActionRegistry addonViewportActions,
+        Func<string, CompanionVoice, CancellationToken, Task> speak)
     {
+        _sceneSpeech = new(speak, Dispatcher.Invoke);
+        _chatSpeech = new(speak, Dispatcher.Invoke);
         InitializeComponent();
         _manager = manager;
         _addonViewportActions = addonViewportActions ?? throw new ArgumentNullException(nameof(addonViewportActions));
@@ -303,7 +312,6 @@ public partial class CompanionOverlayWindow : Window
             "Calendar.Reminder.RemindLater", Math.Clamp(pending.CalendarEvent.SnoozeMinutes, 1, 1440));
         AcknowledgeReminderButton.Content = LocalizationService.Get("Calendar.Reminder.Acknowledge");
         DialogText.Text = BuildReminderText(pending.CalendarEvent, pending.OccurrenceStart);
-        ApplyDialogTextPresentation();
         UpdateDialogBubbleVisibility();
         UpdateDialogAreaForContent();
         return true;
@@ -349,7 +357,6 @@ public partial class CompanionOverlayWindow : Window
         BubbleRoot.MaxWidth = AppSettings.MaximumDialogBubbleWidth;
         DialogControlRoot.Width = dialogWidth;
         SetDialogAreaHeight(0, preserveCharacterPosition: false);
-        ApplyDialogTextPresentation();
     }
 
     private static RectangleF VirtualDesktop => new((float)SystemParameters.VirtualScreenLeft, (float)SystemParameters.VirtualScreenTop,
@@ -445,7 +452,6 @@ public partial class CompanionOverlayWindow : Window
 
     private void ManagerDialogPresentationChanged(object? sender, EventArgs e) => Dispatcher.Invoke(() =>
     {
-        ApplyDialogTextPresentation();
         UpdateDialogBubbleVisibility();
         UpdateDialogAreaForContent();
     });
@@ -461,13 +467,6 @@ public partial class CompanionOverlayWindow : Window
         if (IsVisible && _manager.ActivityState == CompanionActivityState.Idle)
             ScheduleRandomIdle();
     });
-
-    private void ApplyDialogTextPresentation()
-    {
-        var truncate = _manager.Data.Settings.TruncateLongDialogLines;
-        DialogText.TextWrapping = truncate ? TextWrapping.NoWrap : TextWrapping.Wrap;
-        DialogText.TextTrimming = truncate ? TextTrimming.CharacterEllipsis : TextTrimming.None;
-    }
 
     private void UpdateDialogAreaForContent()
     {
@@ -538,7 +537,6 @@ public partial class CompanionOverlayWindow : Window
     {
         DialogText.Foreground = TryBrush(companion.FontColor, (Brush)FindResource(ThemeTokens.TextOnOverlay));
         DialogText.FontFamily = ResolveFont(companion);
-        ApplyDialogTextPresentation();
         CompanionBubbleAppearance.Apply(ChatReplyBorder, companion);
         MissingAssetText.Text = companion.Name;
 
@@ -848,11 +846,12 @@ public partial class CompanionOverlayWindow : Window
         _dialogTimer.Stop();
         StopVoice();
 
-        if (!string.IsNullOrWhiteSpace(line.VoicePath) && File.Exists(line.VoicePath))
+        if (File.Exists(line.VoicePath))
         {
             try
             {
-                _voicePlayer = new MediaPlayer();
+                _chatSpeech.Stop();
+                _voicePlayer = new MediaPlayer { IsMuted = _voiceInputActive };
                 _voicePlayer.MediaEnded += VoicePlayerEnded;
                 _voicePlayer.MediaFailed += VoicePlayerFailed;
                 _voicePlayer.Open(new Uri(line.VoicePath, UriKind.Absolute));
@@ -863,11 +862,31 @@ public partial class CompanionOverlayWindow : Window
             {
                 AppLogger.Warning("A voice line could not be opened; text timing will be used.", exception);
                 StopVoice();
-                // Fall back to text timing if the audio cannot be opened.
             }
         }
+        else if (_playbackCompanion?.Voice is { } voice && ScenePlaybackPolicy.ShouldUseProfileVoice(line, voice, _voiceInputActive))
+        {
+            SpeakSceneLine(displayedText, voice);
+            return;
+        }
 
-        var seconds = ModelDialogueTiming.ReadingSeconds(displayedText, _activeScene.DialogCharactersPerSecond);
+        StartLineReadingTimer();
+    }
+
+    private async void SpeakSceneLine(string text, CompanionVoice voice)
+    {
+        _chatSpeech.Stop();
+        await _sceneSpeech.PlayAsync(text, voice, played =>
+        {
+            if (played) AdvanceDialog();
+            else StartLineReadingTimer();
+        });
+    }
+
+    private void StartLineReadingTimer()
+    {
+        if (_activeScene == null || !HasSceneDialog) return;
+        var seconds = ModelDialogueTiming.ReadingSeconds(DialogText.Text, _activeScene.DialogCharactersPerSecond);
         _dialogTimer.Interval = TimeSpan.FromSeconds(seconds);
         _dialogTimer.Start();
     }
@@ -880,6 +899,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void StopVoice()
     {
+        _sceneSpeech.Stop();
         if (_voicePlayer == null) return;
         _voicePlayer.MediaEnded -= VoicePlayerEnded;
         _voicePlayer.MediaFailed -= VoicePlayerFailed;
@@ -899,11 +919,8 @@ public partial class CompanionOverlayWindow : Window
             if (_activeScene is null || !HasSceneDialog || sender != _voicePlayer)
                 return;
             StopVoice();
-            var line = _activeScene.DialogLines[Math.Min(_dialogIndex, _activeScene.DialogLines.Count - 1)];
-            var displayedText = FormatDialogText(line.Text);
-            var seconds = ModelDialogueTiming.ReadingSeconds(displayedText, _activeScene.DialogCharactersPerSecond);
-            _dialogTimer.Interval = TimeSpan.FromSeconds(seconds);
-            _dialogTimer.Start();
+            AppLogger.Warning("A recorded dialogue line failed during playback.", e.ErrorException);
+            StartLineReadingTimer();
         });
     }
 

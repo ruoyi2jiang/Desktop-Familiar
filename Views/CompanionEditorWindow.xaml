@@ -473,7 +473,8 @@
             </DockPanel>
         </Border>
 
-        <TabControl Grid.Row="1" Margin="0,-49,0,0" Panel.ZIndex="1" Style="{StaticResource EditorTabControl}">
+        <TabControl Grid.Row="1" Margin="0,-49,0,0" Panel.ZIndex="1" x:Name="EditorTabs"
+                    Visibility="Collapsed" Style="{StaticResource EditorTabControl}">
             <TabItem Header="{loc:Loc Editor.Tab.Profile}" Style="{StaticResource EditorTabItem}">
                 <ScrollViewer Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="28,48,28,28">
@@ -595,6 +596,37 @@
                                 <TextBlock x:Name="DialogueExamplesText" TextWrapping="Wrap" IsVisibleChanged="DialogueExamples_IsVisibleChanged" />
                             </StackPanel>
                         </Border>
+                        <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" Margin="0,16,0,0"
+                                BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1" TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
+                            <StackPanel x:Name="ProfileVoicePanel" IsVisibleChanged="ProfileVoice_IsVisibleChanged">
+                                <TextBlock Text="{loc:Loc Voice.Profile}" Style="{StaticResource SectionTitle}"/>
+                                <Label Content="{loc:Loc Voice.ReplyLanguage}" Target="{Binding ElementName=ReplyLanguage}" Padding="0"/>
+                                <ComboBox x:Name="ReplyLanguage" DisplayMemberPath="Name" Style="{StaticResource EditorComboInput}" SelectionChanged="ProfileVoice_Changed"/>
+                                <Label Content="{loc:Loc Voice.Bank}" Target="{Binding ElementName=VoiceBank}" Margin="0,8,0,0" Padding="0"/>
+                                <ComboBox x:Name="VoiceBank" DisplayMemberPath="Name" Style="{StaticResource EditorComboInput}" SelectionChanged="ProfileVoice_Changed"/>
+                                <WrapPanel Margin="0,6,0,6">
+                                    <Button Content="{loc:Loc Voice.Import}" Click="ImportVoice_Click" Margin="0,0,6,0"/>
+                                    <Button Content="{loc:Loc Voice.WindowsPacks}" Click="OpenSpeechPacks_Click" Margin="0,0,6,0"/>
+                                    <Button Content="{loc:Loc Voice.Refresh}" Click="RefreshBanks_Click"/>
+                                </WrapPanel>
+                                <StackPanel x:Name="BankDownloads"/>
+                                <StackPanel x:Name="VoiceTuning">
+                                    <Label x:Name="SpeakerLabel" Content="{loc:Loc Voice.Speaker}" Target="{Binding ElementName=VoiceSpeaker}" Padding="0"/>
+                                    <ComboBox x:Name="VoiceSpeaker" Style="{StaticResource EditorComboInput}" SelectionChanged="ProfileVoice_Changed"/>
+                                <Label Content="{loc:Loc Voice.Rate}" Target="{Binding ElementName=VoiceRate}" Padding="0" Margin="0,6,0,0"/>
+                                <DockPanel><TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" Text="{Binding ElementName=VoiceRate,Path=Value,StringFormat=F0}"/>
+                                    <Slider x:Name="VoiceRate" Minimum="-5" Maximum="5" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Rate}"/></DockPanel>
+                                <Label Content="{loc:Loc Voice.Pitch}" Target="{Binding ElementName=VoicePitch}" Padding="0" Margin="0,6,0,0"/>
+                                <DockPanel><TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" Text="{Binding ElementName=VoicePitch,Path=Value,StringFormat=F0}"/>
+                                    <Slider x:Name="VoicePitch" Minimum="-10" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Pitch}"/></DockPanel>
+                                <Label Content="{loc:Loc Voice.Volume}" Target="{Binding ElementName=VoiceGain}" Padding="0" Margin="0,6,0,0"/>
+                                <DockPanel><TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" Text="{Binding ElementName=VoiceGain,Path=Value,StringFormat=F0}"/>
+                                    <Slider x:Name="VoiceGain" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Volume}"/></DockPanel>
+                                    <Button x:Name="PreviewVoice" Content="{loc:Loc Voice.Preview}" HorizontalAlignment="Left" Margin="0,8,0,0" Click="PreviewVoice_Click"/>
+                                </StackPanel>
+                                <TextBlock x:Name="ProfileVoiceStatus" TextWrapping="Wrap" Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -670,7 +702,8 @@
                                                 <TextBox x:Name="LengthBox" Style="{StaticResource EditorTextInput}" TextChanged="ModelTimingChanged" AutomationProperties.Name="{loc:Loc Model3D.LoopFor}"/>
                                             </StackPanel>
                                         </StackPanel>
-                                        <controls:CompanionModelView Grid.Column="1" Height="130" x:Name="ModelPreview"/>
+                                        <controls:CompanionModelView Grid.Column="1" Height="130" x:Name="ModelPreview"
+                                                                     IsVisibleChanged="ModelPreview_IsVisibleChanged"/>
                                     </Grid>
                                     <TextBlock x:Name="PlayheadText"/>
                                     <Slider x:Name="Scrubber" SmallChange="0.01" LargeChange="0.1" IsMoveToPointEnabled="True"
@@ -1019,8 +1052,22 @@
                             </StackPanel>
                         </Grid>
 
-                        <controls:FieldHelpLabel Text="{loc:Loc Editor.IdleRandomAssignment}" HelpText="{loc:Loc Editor.IdleRandomAssignment.Help}" Margin="0,12,0,4" />
-                        <WrapPanel x:Name="IdleRandomChecksPanel" />
+                        <Expander x:Name="RandomIdleExpander" Style="{StaticResource AdvancedInteractionExpander}"
+                                  Margin="0,12,0,4" IsExpanded="False" Expanded="RandomIdle_Expanded"
+                                  AutomationProperties.Name="{loc:Loc Editor.IdleRandomAssignment}"
+                                  AutomationProperties.ItemStatus="{Binding Text, ElementName=RandomIdleCount}">
+                            <Expander.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <controls:FieldHelpLabel Text="{loc:Loc Editor.IdleRandomAssignment}" HelpText="{loc:Loc Editor.IdleRandomAssignment.Help}" />
+                                    <TextBlock x:Name="RandomIdleCount" Margin="10,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" Opacity="0.72" />
+                                </StackPanel>
+                            </Expander.Header>
+                            <StackPanel>
+                                <WrapPanel x:Name="IdleRandomChecksPanel" />
+                                <TextBlock x:Name="RandomIdleEmpty" Text="{loc:Loc Editor.IdleRandomAssignment.Empty}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Expander>
 
                         <Expander x:Name="AdvancedInteractionsExpander" Style="{StaticResource AdvancedInteractionExpander}" Margin="0,18,0,0">
                             <Expander.Header>
@@ -1038,7 +1085,8 @@
                                     <Border Grid.Column="0" Height="260" Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource InputAccentBrush}" BorderThickness="1" CornerRadius="10" ClipToBounds="True">
                                         <Grid>
                                             <controls:CompanionModelView x:Name="ClickAreaModel" Visibility="Collapsed" IsHitTestVisible="False" IsVisibleChanged="ClickAreaModel_IsVisibleChanged" />
-                                            <Image x:Name="ClickAreaPreviewImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            <Image x:Name="ClickAreaPreviewImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                                                   IsVisibleChanged="ClickAreaImage_IsVisibleChanged" />
                                             <TextBlock x:Name="ClickAreaPreviewHint" Text="{loc:Loc Editor.CompanionPreview.Empty}" Foreground="{DynamicResource TextOnInputBackgroundBrush}" Opacity="0.72"
                                                        TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" />
                                             <Canvas x:Name="ClickAreaSelectionCanvas" Background="Transparent" Cursor="Cross"
@@ -1068,12 +1116,19 @@
             </TabItem>
         </TabControl>
 
-        <Border Grid.Row="2" Background="{DynamicResource PrimaryBackgroundBrush}" Padding="20,14" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="0,1,0,0"
+        <Border Grid.Row="2" Background="{DynamicResource PrimaryBackgroundBrush}" Visibility="{Binding Visibility, ElementName=EditorTabs}"
+                Padding="20,14" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="0,1,0,0"
                 TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
             <StackPanel>
                 <TextBlock x:Name="ValidationHint" Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,0,0,8" />
                 <Button x:Name="SaveButton" Content="{loc:Loc Editor.Save.Update}" Style="{StaticResource PrimaryButton}" Click="Save_Click" />
             </StackPanel>
         </Border>
+        <StackPanel x:Name="OpeningIndicator" Grid.RowSpan="3" Panel.ZIndex="2" IsHitTestVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Loc Editor.LoadingPreview}" HorizontalAlignment="Center" Margin="0,0,0,10" />
+            <ProgressBar Style="{StaticResource ThemedBusyBar}" IsIndeterminate="True"
+                         AutomationProperties.Name="{loc:Loc Editor.LoadingPreview}" />
+        </StackPanel>
     </Grid>
 </Window>
