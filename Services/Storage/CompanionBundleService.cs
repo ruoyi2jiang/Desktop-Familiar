@@ -1,8 +1,10 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
+using DesktopFamiliar.Services.Animation;
 using DesktopFamiliar.Services.Validation;
 
 namespace DesktopFamiliar.Services.Storage;
@@ -19,7 +21,7 @@ public sealed class CompanionBundleService
 {
     public const string FileExtension = ".companionpack";
     public const string FormatIdentifier = "DesktopCompanion.Bundle";
-    public const int CurrentFormatVersion = 1;
+    public const int CurrentFormatVersion = 5;
 
     private const string ManifestEntryName = "manifest.json";
     private const int MaximumEntryCount = 5000;
@@ -52,6 +54,10 @@ public sealed class CompanionBundleService
         var assets = MakeAssetsPortable(portableCompanion);
         var manifest = new CompanionBundleManifest
         {
+            FormatVersion = companion.ChatExpressions.Count > 0 || companion.Model3D.ChatExpressions.Count > 0
+                ? CurrentFormatVersion
+                : companion.Appearance == CompanionAppearance.Images2D && companion.Model3D.FilePath is null
+                    && companion.Model3D.Animations.Count == 0 ? 1 : 4,
             BundleId = $"companion.{companion.Id:N}",
             BundleVersion = 1,
             Companion = portableCompanion
@@ -95,7 +101,7 @@ public sealed class CompanionBundleService
         return new CompanionBundlePreview(
             companion.Name,
             companion.Id,
-            companion.Animations.Count);
+            ModelAnimationCatalog.VisibleScenes(companion.ActiveScenes, showParts: false).Count());
     }
 
     public CompanionBundleImportResult Import(
@@ -183,10 +189,11 @@ public sealed class CompanionBundleService
             return entryName;
         }
 
+        companion.Model3D.FilePath = Register(companion.Model3D.FilePath, "models");
         companion.ImportedFontPath = Register(companion.ImportedFontPath, "fonts");
         companion.ProfilePicturePath = Register(companion.ProfilePicturePath, "portraits");
         companion.BubbleImagePath = Register(companion.BubbleImagePath, "bubbles");
-        foreach (var scene in companion.Animations)
+        foreach (var scene in companion.Animations.Concat(companion.Model3D.Animations))
         {
             scene.AnimationPath = Register(scene.AnimationPath, "animations") ?? string.Empty;
             foreach (var frame in scene.PngFrames)
@@ -247,10 +254,11 @@ public sealed class CompanionBundleService
                 : throw new InvalidDataException(LocalizationService.Format("CompanionBundle.AssetMissing", normalized));
         }
 
+        companion.Model3D.FilePath = Resolve(companion.Model3D.FilePath);
         companion.ImportedFontPath = Resolve(companion.ImportedFontPath);
         companion.ProfilePicturePath = Resolve(companion.ProfilePicturePath);
         companion.BubbleImagePath = Resolve(companion.BubbleImagePath);
-        foreach (var scene in companion.Animations)
+        foreach (var scene in companion.Animations.Concat(companion.Model3D.Animations))
         {
             scene.AnimationPath = Resolve(scene.AnimationPath) ?? string.Empty;
             foreach (var frame in scene.PngFrames)
@@ -282,14 +290,17 @@ public sealed class CompanionBundleService
         }
 
         if (!string.Equals(manifest.Format, FormatIdentifier, StringComparison.Ordinal)
-            || manifest.FormatVersion != CurrentFormatVersion
+            || manifest.FormatVersion is < 1 or > CurrentFormatVersion
             || manifest.Companion is not { } companion
             || string.IsNullOrWhiteSpace(companion.Name)
-            || !HasRequiredCollections(companion))
+            || companion.Model3D is null || !Enum.IsDefined(companion.Appearance)
+            || (manifest.FormatVersion == 1 && (companion.Appearance != CompanionAppearance.Images2D || companion.Model3D.FilePath is not null))
+            || !HasRequiredCollections(companion) || !HasRequiredCollections(companion.Model3D))
         {
             throw new InvalidDataException(LocalizationService.Get("CompanionBundle.Unsupported"));
         }
 
+        if (manifest.FormatVersion == 2) CompanionDataNormalizer.MigrateModelClips(companion.Model3D);
         foreach (var assetPath in companion.GetAssetPaths().Where(path => !string.IsNullOrWhiteSpace(path)))
         {
             var normalized = NormalizeAssetEntryName(assetPath!);
@@ -299,13 +310,19 @@ public sealed class CompanionBundleService
         return manifest;
     }
 
-    private static bool HasRequiredCollections(CompanionDefinition companion) =>
-        companion.Animations is not null
-        && companion.IdleRandomAnimationIds is not null
-        && companion.Animations.All(scene =>
-            scene is not null
-            && scene.PngFrames is not null
-            && scene.DialogLines is not null);
+    private static bool HasRequiredCollections(CompanionScenes companion)
+    {
+        var sceneIds = new HashSet<Guid>();
+        return companion.Animations is not null
+            && companion.ChatExpressions is not null
+            && companion.IdleRandomAnimationIds is not null
+            && companion.InteractionStates?.ClickAreas?.Any(area => area == null) != true
+            && companion.Animations.All(scene =>
+                scene is not null && sceneIds.Add(scene.Id)
+                && scene.PngFrames is not null && scene.PngFrames.All(frame => frame != null)
+                && scene.DialogLines is not null && scene.DialogLines.All(line => line != null)
+                && (scene.ModelParts == null || scene.ModelParts.All(name => !string.IsNullOrWhiteSpace(name))));
+    }
 
     private static IReadOnlyDictionary<string, ZipArchiveEntry> BuildEntryMap(ZipArchive archive)
     {
@@ -402,7 +419,9 @@ public sealed class CompanionBundleService
 
     private sealed class CompanionBundleManifest
     {
+        [JsonRequired]
         public string Format { get; set; } = FormatIdentifier;
+        [JsonRequired]
         public int FormatVersion { get; set; } = CurrentFormatVersion;
         public string BundleId { get; set; } = string.Empty;
         public int BundleVersion { get; set; } = 1;

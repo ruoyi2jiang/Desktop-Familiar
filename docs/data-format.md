@@ -2,23 +2,27 @@
 
 ## User data
 
-The root JSON document is `DesktopCompanionData`, stored at `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json`, and currently uses schema version 11. It contains:
+The root JSON document is `DesktopCompanionData`. Schema 15 saves to `%LOCALAPPDATA%\DesktopFamiliar\Library\desktop-familiar.v15.json`. It contains:
 
 - `Settings`: selected companion, viewport, overlay position, dialogue behavior, random-idle interval, startup mirror, focus mode, user birthday, and saved themes.
 - `Companions`: locally configured `CompanionDefinition` objects.
 - `CalendarEvents`: local event definitions and reminder state.
 
-`CompanionDataNormalizer` repairs invalid current-format values after loading. Schema 3 adds empty grouped interaction-state assignments to every companion, preserving the existing idle-only behavior. Schema 8 retires the former core Auto Clicker fields. Before normalization writes a pre-schema-8 document, startup copies any legacy click preferences to the Auto Clicker addon's scoped settings file if it does not already exist. This preserves the settings even when the addon is installed later. Future schema changes must provide a tested migration before the application accepts the old format.
+Opening the library reads this build’s own schema file first. If it is absent, the app reads the highest numbered library in the same folder, then falls back to the original `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json` if there are no versioned libraries. Migration and normalization run in memory. A user save writes only the current schema’s file. A newer source can supply recognized fields and compatible list items. Unknown values stay in the source. Separate schema copies evolve independently. A newer document placed at the current write path is protected against replacement.
 
-Theme selection stores both `SelectedThemeId` and its `Theme` kind; the saved-theme ID is authoritative, and normalization repairs the kind from a selected built-in or custom theme before writing the repair back.
+Schema 3 adds empty grouped interaction-state assignments to every companion. Schema 8 retires the former core Auto Clicker fields. Startup can copy legacy click preferences from the original shared file to the addon's scoped settings file. Future schema changes require a tested migration.
+
+Theme selection stores both `SelectedThemeId` and its `Theme` kind. The saved-theme ID is authoritative. A correction to the theme kind is included in the next user save.
 
 ## Local chat
+
+Schema 15 adds a `ChatExpressions` object independently to the companion’s sprite settings and its `Model3D` settings. The supported keys are `happy`, `sad`, `surprised`, `confused`, `angry`, and `thoughtful`. A scene GUID assigns a reaction within that appearance, a JSON null disables it, and an omitted key enables automatic name matching. Schema 14 and older packs default to automatic matching in memory. A user save writes the new library file. The per-pet history format stays at version 2.
 
 Schema 10 adds `Settings.Chat` with `Enabled`, nullable `ModelId` (catalogue ID or linked file ID), and `Shortcut`. Schema 9 migrates with chat disabled, no selected model, and Ctrl+Shift+F9. The companion's optional `ThinkingPhrase` defaults to empty, which uses the localized thinking text. The phrase travels in companion bundles.
 
 Downloaded model weights live in `Chat/Models/<catalogue-id>/model.gguf` under the application data root. New setups share the CPU engine in `Chat/Engines/b12496/`. Existing installations with `Chat/Models/<catalogue-id>/engine/` still work and can run linked files. The optional `Chat/local-models.json` document has `Version: 1` and a `Files` object mapping each `local:<lowercase SHA-256>` ID to its absolute GGUF path. Linking saves the reference atomically and leaves the model file at the chosen location. Re-selecting the same content at a new path updates that entry. An absent index means there are no linked files.
 
-Private notes and conversations are stored separately in `Chat/history.json` (version 2). Its `Pets` dictionary is keyed by companion GUID. Each entry stores the last known name, ordered question/reply turns with timestamps, and explicit notes. Removing a pet while keeping its chat adds optional `ArchivedPortrait` paths for its profile picture and idle frame. Version 1 records migrate with no archived portrait and retain their notes and turns. The next write saves version 2. Per-pet clearing atomically updates this file. Clearing all history removes the file, including notes-only entries and records for deleted pets. Keeping notes leaves a notes-only entry available for later removal. Every new import receives a fresh local GUID, including after deleting and reimporting the same bundle. Overwriting an existing companion preserves its local conversation.
+Private notes and conversations are stored separately in `Chat/history.json` (version 2). Its `Pets` dictionary is keyed by companion GUID. Each entry stores the last known name, ordered question/reply turns with timestamps, and explicit notes. Removing a pet while keeping its chat saves the imported picture path and the active appearance’s fallback in `ArchivedPortrait`. Image pets use `IdleFramePath`. Model pets use optional `ModelPath` and `ModelClip` fields, with a null clip selecting the rest pose. Existing version-2 image portraits keep their original fields. Version 1 records migrate with no archived portrait and retain their notes and turns. The next write saves version 2. Per-pet clearing atomically updates this file. Clearing all history removes the file, including notes-only entries and records for deleted pets. Keeping notes leaves a notes-only entry available for later removal. Every new import receives a fresh local GUID, including after deleting and reimporting the same bundle. Overwriting an existing companion preserves its local conversation.
 
 ## Addon data and manifests
 
@@ -26,11 +30,21 @@ Addon installation state and addon-owned settings are separate from `DesktopComp
 
 ## Companion and scenes
 
-Schema 11 adds nullable `CompanionDefinition.ProfilePicturePath` and a root `PendingCompanionCleanup` list of GUIDs. Schema 10 migrates with the idle-preview fallback and an empty cleanup list. A confirmed full deletion saves its GUID in the same write that removes the pet. Successful cleanup removes the GUID. Startup and subsequent pet removals retry unfinished deletions, excluding live pets. A GUID stays queued while a live pet or an archived chat portrait still references a file in its directory.
+Schema 11 adds nullable `CompanionDefinition.ProfilePicturePath` and a root `PendingCompanionCleanup` list of GUIDs. Schema 10 migrates with the idle-preview fallback and an empty cleanup list. A confirmed full deletion saves its GUID in the same write that removes the pet. Successful cleanup removes the GUID. A retry during startup completes the previously requested wipe in the current library and records the cleared queue on the next user save. A build reading another format skips its pending wipes. Startup and subsequent pet removals retry unfinished deletions, excluding live pets. A GUID stays queued while a live pet or an archived chat portrait still references a file in its directory.
 
-The profile editor copies new portraits to `Assets/<companion-guid>/Portraits/` on save. Version-1 bundles can include the optional `profilePicturePath` field and its referenced image under `assets/`. Older bundles use the idle preview.
+Automatic idle portraits are rendered from the existing assets. The profile editor copies imported portraits to `Assets/<companion-guid>/Portraits/` on save. Version-1 bundles can include the optional `profilePicturePath` field and its referenced image under `assets/`. Older bundles use the idle preview.
 
-Schema 9 adds two optional text fields, `Description` and `Personality`, directly to each companion. A schema-8 library migrates with both fields empty. Version-1 companion bundles carry the fields in their companion object. Earlier bundles that omit the fields import with blank text. Speaking examples come from existing scene dialogue and have no separate serialized field.
+An empty `Library/history-wipe.v15.<pet-guid>` file records when the requested history wipe has completed. Asset retries preserve conversations started afterward in another version. The receipt is removed once the cleared queue is saved.
+
+Schema 9 adds two optional text fields, `Description` and `Personality`, directly to each companion. A schema-8 library migrates with empty defaults for missing fields and preserves any existing text. Version-1 companion bundles carry the fields in their companion object. Earlier bundles that omit the fields import with blank text. Speaking examples are derived from the selected appearance’s scene dialogue at read time.
+
+Schema 13 introduced the independent 3D scene registry and state assignments beneath `Model3D`. `Model3D.FilePath` is the shared GLB. Each scene has its own GUID, nullable `ModelClip` (null selects the rest pose), `DialogStartSeconds` (default 0), dialogue lines, optional voice files, speed and playback mode. Several scenes may use one clip. Role IDs and click areas resolve only within their appearance's registry. The sprite registry keeps its original field names on the companion. Both appearances share the pet GUID.
+
+Schema 14 adds optional ordered `ModelParts` (embedded clip names for one full activity), `PartOfSceneId` (source scene grouped beneath an activity), and `ModelLoop` with `Mode` (`Once`, `FixedDuration`, or `UntilDialogueEnds`), `StartSeconds`, optional `EndSeconds` (defaults to the end of the source), and `DurationSeconds` for a fixed loop. A source with several parts shares the existing GLB curves. A dialogue line can carry an optional scene-relative `StartSeconds`. Schema 13 migrates with the existing single clip and playback policy. Its scene IDs and assignments retain their meanings. The automatic portrait uses the first source clip.
+
+Schema 11 pets migrate as image pets. The schema 12 migration converts the previous `IdleClip` into an idle scene and any `GreetingClip` into a startup scene assigned to a full-viewport click area. The migration runs for a configured model even when the pet is displaying sprites. The new scene IDs persist on save.
+
+`ChatReplyAnimationId` is an optional scene GUID on the companion for 2D and on `Model3D` for 3D. Each ID resolves in its own registry and travels with that appearance in the bundle. A missing or null field leaves chat animation unassigned in existing schema-13 libraries and format-3 bundles.
 
 Each companion has a stable GUID, appearance settings, animation registries, and scene assignments for required idle plus optional start, reminder, exit, companion-birthday 1/2, user-birthday 1/2, and random-idle scenes. `InteractionStates` groups optional drag-left, drag-right, and drag-hold scene IDs plus ordered `ClickAreas`. Each click area stores a name, an optional scene ID, and percentage-based left, top, width, and height bounds. Scene sources are either `AnimationPath` for a GIF/static image or ordered `PngFrames` with per-frame `DurationSeconds`.
 
@@ -44,6 +58,8 @@ One-time events use `IsCompleted` and `IsExpired`. Weekly events store terminal 
 
 Terminal one-time events are removed when their end date is at least one year old. Active weekly series remain, while completed and expired occurrence history at least one year old is pruned.
 
+Observed expirations are written atomically to `Library/calendar-expirations.v15.json` between configuration saves. The document stores the source library’s SHA-256 and a list of event GUIDs and occurrence timestamps. On restart the app applies records that match the exact library it loaded. A user save commits those occurrences to the library and removes the temporary record. Opening an older or newer library leaves its configuration intact.
+
 ## Imported assets
 
 `CompanionAssetStore` copies imports to:
@@ -54,6 +70,8 @@ Terminal one-time events are removed when their end date is at least one year ol
 
 Name collisions receive a GUID suffix. Stored configuration paths are absolute local paths. Export converts them to portable bundle paths, and import converts them back to the receiving computer's local asset paths.
 
+When wiping a pet, cleanup also checks the legacy library and other versioned libraries for absolute paths used by different pets. These shared files remain until those references are released. The wiped pet’s own references in other versions do not protect its files.
+
 ## Portable companion bundles
 
 Portable companions use the `.companionpack` extension. The file is a ZIP archive containing `manifest.json` and referenced assets beneath `assets/`:
@@ -61,7 +79,7 @@ Portable companions use the `.companionpack` extension. The file is a ZIP archiv
 ```json
 {
   "format": "DesktopCompanion.Bundle",
-  "formatVersion": 1,
+  "formatVersion": 4,
   "bundleId": "companion.stable-id",
   "bundleVersion": 1,
   "companion": {
@@ -78,6 +96,8 @@ Portable companions use the `.companionpack` extension. The file is a ZIP archiv
 }
 ```
 
-Every non-empty portrait, font, bubble, animation, PNG-frame, and voice path must be relative and begin with `assets/`. Import rejects rooted paths, traversal, duplicate case-insensitive entries, more than 5,000 entries, individual assets over 512 MiB, and referenced assets totaling over 1 GiB. Only referenced entries are extracted. Extraction uses a unique staging directory before moving the completed set beneath `%LOCALAPPDATA%\DesktopFamiliar\Assets\<companion-id>\Bundles`.
+Format 5 carries explicit chat expression overrides for either appearance. Exports using only automatic expression matches retain the existing format. Format 4 includes combined activities, loop ranges and dialogue cues. Format 3 remains readable and includes the model, 3D scenes, assignments and their voice files. Import migrates format 2 model bundles using the same clip migration as schema 12. Image-only exports using automatic expressions keep format 1 for existing readers. Every non-empty model, portrait, font, bubble, animation, PNG-frame, and voice path must be relative and begin with `assets/`. Import rejects rooted paths, traversal, duplicate case-insensitive entries, more than 5,000 entries, individual assets over 512 MiB, and referenced assets totaling over 1 GiB. Only referenced entries are extracted. Extraction uses a unique staging directory before moving the completed set beneath `%LOCALAPPDATA%\DesktopFamiliar\Assets\<companion-id>\Bundles`.
+
+The manifest must declare its format and version. Each appearance must have unique scene GUIDs so state assignments and combined activities can identify their scenes. The import preview counts the animations listed for the active appearance, counting each combined activity once.
 
 On import, **Overwrite existing** preserves the existing companion GUID, while **Import as new** assigns a new GUID and unique display name. Scene GUIDs remain scoped to the imported companion.

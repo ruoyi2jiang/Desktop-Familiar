@@ -181,6 +181,18 @@
                             <TextBlock Text="{loc:Loc Settings.RunAtStartup.Description}" Foreground="{DynamicResource TextOnPageBackgroundBrush}" Opacity="0.72" Margin="0,5,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </CheckBox>
+                    <Border Style="{StaticResource SettingsDivider}" />
+                    <TextBlock Text="{loc:Loc Settings.Updates.Title}" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock x:Name="InstalledAppVersion" Style="{StaticResource MutedPageTextBlock}" Margin="0,5,0,0" />
+                    <TextBlock x:Name="AppUpdateStatus" TextWrapping="Wrap" Margin="0,8,0,12"
+                               AutomationProperties.LiveSetting="Polite" />
+                    <WrapPanel>
+                        <Button x:Name="CheckAppUpdates" Content="{loc:Loc Settings.Updates.Check}"
+                                Style="{StaticResource OutlineButton}" Click="CheckAppUpdates_Click" Margin="0,0,8,6" />
+                        <Button x:Name="ApplyAppUpdate" Visibility="Collapsed" Click="ApplyAppUpdate_Click" Margin="0,0,8,6" />
+                        <Button x:Name="SaveAppUpdate" Visibility="Collapsed" Content="{loc:Loc Settings.Updates.SaveCopy}"
+                                Style="{StaticResource OutlineButton}" Click="SaveAppUpdate_Click" Margin="0,0,0,6" />
+                    </WrapPanel>
                 </StackPanel>
 
                 <StackPanel x:Name="ChatPanel" Visibility="Collapsed">

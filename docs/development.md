@@ -61,6 +61,8 @@ The canonical application-icon artwork is `Assets/AppIcon.png`. Regenerate the m
 
 The product name is **Desktop Familiar**, the executable is `DesktopFamiliar.exe`, and source namespaces use `DesktopFamiliar`.
 
+The in-app updater reads published stable `vMAJOR.MINOR.PATCH` tags from the official GitHub repository. Attach both `DesktopFamiliar.exe` and `Desktop-Familiar-Setup-MAJOR.MINOR.PATCH.exe` to enable in-place updates for portable and installed copies. The release API must expose the uploaded size and SHA-256 digest for each asset. If only the other package type is available, General offers to save it separately. General shows a newer version even when both downloads are pending. SDK builds offer to save the release separately. Test replacement using a disposable copy of a published executable. The portable executable embeds the SharpGLTF licence, and the installer also includes a readable copy in `Resources\Licenses`.
+
 ## Public repository safety
 
 The public repository must remain character-neutral. `.gitignore` excludes `CompanionPacks/`, private pack-builder scripts, generated `.companionpack` files, local application data, and `Artifacts/`. Before committing or publishing, verify ignored and staged files with:
@@ -74,10 +76,16 @@ Do not force-add ignored character assets. The public application and installer 
 
 ## Manual UI checklist
 
+- Open Settings → General and check the installed version, latest release status, and keyboard access to **Check for updates**. Exercise current, newer, and offline responses. A published app offers download followed by an explicit restart or setup. A source build offers **Save a copy…**. Cancel a download by closing Settings, then reopen it and check again.
+
 - App starts once, selects/shows the current companion, and exits from both menus.
 - Notification-area and overlay context menus open at the same width without an unused right column and follow the active theme; their 4px row inset, text alignment, and font sizing match. Focus has no row-level hover fill. **Select companion** retains the ordinary hover colour while its child is open without switching to the darker pressed colour; the child stays open while the pointer crosses into it and closes after the pointer leaves it or enters another root row.
 - Switching companions does not move card layout or animation registration.
 - GIF, one PNG, and multi-PNG previews play with expected timing.
+- In a temporary library, scrub a combined 3D activity, set fractional loop marks, preview all three playback modes and verify the outro. Toggle Show parts and verify a part assigned to a state survives saving. Trigger an entrance whose greeting outlasts its motion and verify idle moves beneath the greeting.
+- Preview a one-shot whose final pose differs visibly from idle. Check that both selecting the scene and replaying it ease into the assigned idle. The playhead should stay at the source end, and scrubbing back should immediately restore the chosen frame. Assign the scene as the only random idle and use **Action → Play random idle** to check the same return on the desktop.
+- Play a 3D entrance and a travelling dance on the desktop. Check that the pet crosses its usual resting area at a fixed scale, including above and below it, and that dialogue remains readable in front. Try near a screen edge and at different viewport sizes. Drag and reopen the app to check the resting position. Right-click the moving mesh and the center of its resting area, then verify Focus still suppresses the menu.
+- In a temporary library, import a self-contained GLB with idle and greeting clips. Create separate startup and click scenes using the same clip and different dialogue. Set a fractional start delay and attach a voice. Check that each line can finish, switching or hiding cancels stale speech, and Focus suppresses interaction dialogue. Switch to 2D, save, reopen, and return to 3D. Enter a description and personality before switching and check the exact text after reopening. Verify that Profile plays the assigned idle and that its separate portrait, Configure card and chat icons use the active idle snapshot. Import a different picture, then reset it and verify the live preview keeps playing throughout. Assign a 3D chat scene with a visibly different pose from idle. Check the first and last reply frames, a reply spanning multiple pages, and an interruption mid-gesture. Verify the desktop overlay, the click greeting, hiding and showing the pet, and export/import with each appearance selected. Wipe a disposable pet and confirm its 2D and 3D files are removed.
 - **Set the frames to loop** and **Start dialog at** remain hidden for empty, GIF, and static-image registries and appear after PNG frames are imported. Switching between PNG and GIF/static sources resets all four persisted frame settings, and runtime ignores stale non-PNG frame settings.
 - State-assignment helper text appears from the question-mark icons without a hover delay; the compact grid shows Idle above Start.
 - Idle and reminder custom loops play their intro, selected range, and outro at the correct state boundary; birthday scenes return to idle, and an assigned exit scene completes before normal shutdown.
@@ -97,6 +105,8 @@ Do not force-add ignored character assets. The public application and installer 
 - A forced recoverable save failure preserves the prior state; a fatal test failure produces a copyable latest-session log.
 
 ### Local chat verification
+
+- In a disposable pet, expand **Configure → States → Expressions**. Check a unique automatic match, select another scene, disable a reaction, switch appearances and reopen the editor after saving. Send an upbeat and a neutral message with the local model. Check multi-page replies, a switch between queued expressions, a reminder interruption, and the idle return. The bubble and chat history should contain only the spoken reply.
 
 - Start with chat disabled. Enable it with no installed model and check all three setup actions in **Local model**. Cancel the catalogue picker and verify the previous selection. Complete a model download and check the selector and viewport command.
 - Choose an existing GGUF and confirm **Use model**. With a previously installed engine, verify setup works offline. Scan a chosen folder with nested GGUFs, confirm only those candidates appear, and select one. Check an empty folder and an invalid file. Restart and send a message from the linked model. Move the file, verify chat becomes unavailable, then select the new path to reconnect it.

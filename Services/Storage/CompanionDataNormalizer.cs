@@ -12,6 +12,7 @@ public sealed class CompanionDataNormalizer
     public void Normalize(DesktopCompanionData data)
     {
         ArgumentNullException.ThrowIfNull(data);
+        NewerLibraryVersionException.Check(data.SchemaVersion);
         Migrate(data);
         data.SchemaVersion = DesktopCompanionData.CurrentSchemaVersion;
         data.Companions ??= [];
@@ -68,27 +69,48 @@ public sealed class CompanionDataNormalizer
             data.SchemaVersion = 8;
 
         if (data.SchemaVersion == 8)
-        {
-            foreach (var companion in data.Companions ?? [])
-            {
-                companion.Description = string.Empty;
-                companion.Personality = string.Empty;
-            }
             data.SchemaVersion = 9;
-        }
         if (data.SchemaVersion == 9)
         {
             data.Settings ??= new();
-            data.Settings.Chat = new();
-            foreach (var pet in data.Companions ?? []) pet.ThinkingPhrase = string.Empty;
+            data.Settings.Chat ??= new();
             data.SchemaVersion = 10;
         }
         if (data.SchemaVersion == 10)
         {
-            foreach (var pet in data.Companions ?? []) pet.ProfilePicturePath = null;
-            data.PendingCompanionCleanup = [];
+            data.PendingCompanionCleanup ??= [];
             data.SchemaVersion = 11;
         }
+        if (data.SchemaVersion == 11)
+        {
+            foreach (var pet in data.Companions ?? [])
+                pet.Model3D ??= new();
+            data.SchemaVersion = 12;
+        }
+        if (data.SchemaVersion == 12)
+        {
+            foreach (var pet in data.Companions ?? [])
+                if (pet.Model3D is { } model) MigrateModelClips(model);
+            data.SchemaVersion = 13;
+        }
+        if (data.SchemaVersion == 13)
+        {
+            // Existing single clips retain their playback policy and full native range.
+            data.SchemaVersion = 14;
+        }
+        if (data.SchemaVersion == 14)
+        {
+            // Missing expression overrides use automatic matching separately in each appearance.
+            data.SchemaVersion = 15;
+        }
+    }
+
+    internal static void MigrateModelClips(ModelAppearance model)
+    {
+        model.Animations ??= [];
+        if (!string.IsNullOrWhiteSpace(model.FilePath) && model.Animations.Count == 0)
+            model.CreateInitialScenes(model.LegacyIdleClip, model.LegacyGreetingClip);
+        model.LegacyIdleClip = model.LegacyGreetingClip = null;
     }
 
     private static void EnsureSavedThemes(AppSettings settings)
@@ -233,16 +255,43 @@ public sealed class CompanionDataNormalizer
         companion.Description ??= string.Empty;
         companion.Personality ??= string.Empty;
         companion.ThinkingPhrase ??= string.Empty;
+        if (!Enum.IsDefined(companion.Appearance)) companion.Appearance = CompanionAppearance.Images2D;
+        companion.Model3D ??= new();
+        NormalizeScenes(companion);
+        NormalizeScenes(companion.Model3D);
+    }
+
+    private static void NormalizeScenes(CompanionScenes companion)
+    {
         companion.Animations ??= [];
+        companion.ChatExpressions ??= new();
+        foreach (var key in companion.ChatExpressions.Keys.ToArray())
+            if (companion.ChatExpressions[key] is Guid id && companion.FindAnimation(id) == null)
+                companion.ChatExpressions[key] = null;
         companion.IdleRandomAnimationIds ??= [];
         companion.InteractionStates ??= new CompanionInteractionStateAssignments();
 
         foreach (var scene in companion.Animations)
         {
+            scene.DialogStartSeconds = double.IsFinite(scene.DialogStartSeconds)
+                ? Math.Clamp(scene.DialogStartSeconds, 0, AnimationScene.MaximumDialogStartSeconds) : 0;
             scene.Name ??= string.Empty;
             scene.AnimationPath ??= string.Empty;
             scene.PngFrames ??= [];
             scene.DialogLines ??= [];
+            if (companion is ModelAppearance)
+            {
+                scene.DialogLines.RemoveAll(line => line == null);
+                scene.ModelParts?.RemoveAll(string.IsNullOrWhiteSpace);
+                if (scene.ModelLoop is { } loop && !ModelClipTimeline.ValidSettings(loop)) scene.ModelLoop = null;
+                var previous = -1d;
+                foreach (var line in scene.DialogLines.Where(ModelDialogueTiming.HasContent))
+                {
+                    if (line.StartSeconds is double cue && (!ModelDialogueTiming.ValidSeconds(cue) || cue <= previous))
+                        line.StartSeconds = null;
+                    previous = line.StartSeconds ?? (previous < 0 ? scene.DialogStartSeconds : previous);
+                }
+            }
             scene.DialogCharactersPerSecond = Math.Clamp(scene.DialogCharactersPerSecond, 5, 40);
             if (!Enum.IsDefined(scene.PlaybackMode))
                 scene.PlaybackMode = ScenePlaybackMode.LoopUntilDialogEnds;
@@ -273,7 +322,7 @@ public sealed class CompanionDataNormalizer
         NormalizeInteractionStates(companion);
     }
 
-    private static void NormalizeInteractionStates(CompanionDefinition companion)
+    private static void NormalizeInteractionStates(CompanionScenes companion)
     {
         foreach (var state in Enum.GetValues<CompanionInteractionState>())
         {

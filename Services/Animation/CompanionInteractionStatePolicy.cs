@@ -21,14 +21,14 @@ public static class CompanionInteractionStatePolicy
         CompanionInteractionState state)
     {
         ArgumentNullException.ThrowIfNull(companion);
-        return companion.GetInteractionAnimation(state);
+        return companion.ActiveScenes.GetInteractionAnimation(state);
     }
 
     public static bool HasAnyClickScene(CompanionDefinition companion)
     {
         ArgumentNullException.ThrowIfNull(companion);
-        return companion.InteractionStates?.ClickAreas?.Any(area =>
-            companion.FindAnimation(area.AnimationId) is not null) == true;
+        var scenes = companion.ActiveScenes;
+        return scenes.InteractionStates?.ClickAreas?.Any(area => scenes.FindAnimation(area.AnimationId) is not null) == true;
     }
 
     public static AnimationScene? GetClickScene(
@@ -44,12 +44,13 @@ public static class CompanionInteractionStatePolicy
 
         var horizontalPercent = horizontalPosition / viewportWidth * 100d;
         var verticalPercent = verticalPosition / viewportHeight * 100d;
-        var clickArea = companion.InteractionStates?.ClickAreas?.FirstOrDefault(area =>
+        var scenes = companion.ActiveScenes;
+        var clickArea = scenes.InteractionStates?.ClickAreas?.FirstOrDefault(area =>
             horizontalPercent >= area.LeftPercent
             && horizontalPercent <= area.LeftPercent + area.WidthPercent
             && verticalPercent >= area.TopPercent
             && verticalPercent <= area.TopPercent + area.HeightPercent);
-        return companion.FindAnimation(clickArea?.AnimationId);
+        return scenes.FindAnimation(clickArea?.AnimationId);
     }
 
     public static bool IsDragState(CompanionInteractionState state) => state is

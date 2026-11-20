@@ -1,6 +1,7 @@
 <Window x:Class="DesktopFamiliar.Views.CompanionOverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:DesktopFamiliar.Views.Controls"
         xmlns:loc="clr-namespace:DesktopFamiliar.Localization"
         Width="240" Height="336"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
@@ -91,61 +92,68 @@
             <Setter Property="Foreground" Value="{DynamicResource TextOnOverlayBrush}" />
         </Style>
     </Window.Resources>
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition x:Name="DialogRow" Height="96" />
-            <RowDefinition x:Name="CharacterRow" Height="240" />
-        </Grid.RowDefinitions>
+    <Canvas>
+        <controls:CompanionModelView x:Name="PetModel" Visibility="Collapsed" />
+        <Grid x:Name="OverlayContent">
+            <Grid.RowDefinitions>
+                <RowDefinition x:Name="DialogRow" Height="96" />
+                <RowDefinition x:Name="CharacterRow" Height="240" />
+            </Grid.RowDefinitions>
 
-        <!-- The dialog row reserves space above the character and grows upward when a full line needs it. -->
-        <Grid x:Name="DialogArea" Grid.Row="0" MinHeight="70" VerticalAlignment="Bottom">
-            <Border x:Name="ChatReplyBorder" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                    Background="{DynamicResource OverlaySurfaceBrush}" CornerRadius="16" Padding="16,12" Margin="0,14,0,0">
-                <TextBlock x:Name="ChatReplyText" TextWrapping="Wrap" TextTrimming="None" FontSize="15" TextAlignment="Center" />
-            </Border>
-            <Grid x:Name="BubbleRoot" HorizontalAlignment="Center" VerticalAlignment="Bottom" Visibility="Collapsed">
-                <Border x:Name="BubbleBorder" Background="{DynamicResource OverlaySurfaceBrush}" CornerRadius="16" Padding="16,12" Margin="0,14,0,0">
-                    <Grid>
-                        <Image x:Name="BubbleImage" Stretch="Fill" Visibility="Collapsed" />
-                        <StackPanel>
-                            <TextBlock x:Name="DialogText" TextWrapping="Wrap" FontSize="15" Foreground="{DynamicResource TextOnOverlayBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" />
-                            <StackPanel x:Name="ReminderActions" Orientation="Vertical" HorizontalAlignment="Stretch" Margin="0,10,0,0" Visibility="Collapsed">
-                                <Button x:Name="RemindLaterButton" MinHeight="34" Padding="10,6" Margin="0,0,0,6"
-                                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                        FontSize="12" Click="RemindLaterButton_Click" />
-                                <Button x:Name="AcknowledgeReminderButton" MinHeight="34" Padding="10,6" Margin="0"
-                                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                        FontSize="12" Style="{StaticResource SecondaryButton}" Click="AcknowledgeReminderButton_Click" />
+            <!-- The dialog row reserves space above the character and grows upward when a full line needs it. -->
+            <Grid x:Name="DialogArea" Grid.Row="0" MinHeight="70" VerticalAlignment="Bottom">
+                <Border x:Name="ChatReplyBorder" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                        Background="{DynamicResource OverlaySurfaceBrush}" CornerRadius="16" Padding="16,12" Margin="0,14,0,0">
+                    <TextBlock x:Name="ChatReplyText" TextWrapping="Wrap" TextTrimming="None" FontSize="15" TextAlignment="Center" />
+                </Border>
+                <Grid x:Name="BubbleRoot" HorizontalAlignment="Center" VerticalAlignment="Bottom" Visibility="Collapsed">
+                    <Border x:Name="BubbleBorder" Background="{DynamicResource OverlaySurfaceBrush}" CornerRadius="16" Padding="16,12" Margin="0,14,0,0">
+                        <Grid>
+                            <Image x:Name="BubbleImage" Stretch="Fill" Visibility="Collapsed" />
+                            <StackPanel>
+                                <TextBlock x:Name="DialogText" TextWrapping="Wrap" FontSize="15" Foreground="{DynamicResource TextOnOverlayBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" />
+                                <StackPanel x:Name="ReminderActions" Orientation="Vertical" HorizontalAlignment="Stretch" Margin="0,10,0,0" Visibility="Collapsed">
+                                    <Button x:Name="RemindLaterButton" MinHeight="34" Padding="10,6" Margin="0,0,0,6"
+                                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                            FontSize="12" Click="RemindLaterButton_Click" />
+                                    <Button x:Name="AcknowledgeReminderButton" MinHeight="34" Padding="10,6" Margin="0"
+                                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                            FontSize="12" Style="{StaticResource SecondaryButton}" Click="AcknowledgeReminderButton_Click" />
+                                </StackPanel>
                             </StackPanel>
-                        </StackPanel>
-                    </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <Grid x:Name="CompanionViewport" Grid.Row="1" HorizontalAlignment="Center" ClipToBounds="True">
+                <!-- Fully transparent pixels pass through a layered window before WPF can hit-test them. -->
+                <Border x:Name="ModelMenuTarget" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="{DynamicResource PageBackgroundBrush}" Opacity="0.008"
+                        Visibility="{Binding Visibility, ElementName=PetModel}" />
+                <Image x:Name="TransitionImage" Stretch="UniformToFill" StretchDirection="Both"
+                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                       RenderOptions.BitmapScalingMode="HighQuality" Opacity="0" IsHitTestVisible="False" />
+                <Image x:Name="CompanionImage" Stretch="UniformToFill" StretchDirection="Both"
+                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <Border x:Name="MissingAssetCard" Background="{DynamicResource DangerBrush}" Opacity="0.88" CornerRadius="24" Width="190" Height="190"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                    <StackPanel VerticalAlignment="Center" Margin="20">
+                        <TextBlock Text="🐾" FontSize="52" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="MissingAssetText" Foreground="{DynamicResource TextOnDangerBrush}" TextAlignment="Center" TextWrapping="Wrap" />
+                    </StackPanel>
                 </Border>
             </Grid>
+            <Grid x:Name="DialogControlRoot" Grid.Row="1" HorizontalAlignment="Center" Panel.ZIndex="2">
+                <Button x:Name="HideDialogButton" Style="{StaticResource OverlayBubbleHideButton}"
+                        Panel.ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0"
+                        ToolTip="{loc:Loc Overlay.HideDialog}" Click="HideDialogBubble_Click" Visibility="Collapsed" />
+                <Button x:Name="ShowDialogButton" Style="{StaticResource OverlayBubbleRestoreButton}"
+                        Panel.ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0"
+                        ToolTip="{loc:Loc Overlay.ShowDialog}" Click="ShowDialogBubble_Click" Visibility="Collapsed" />
+            </Grid>
         </Grid>
-
-        <Grid x:Name="CompanionViewport" Grid.Row="1" HorizontalAlignment="Center" ClipToBounds="True">
-            <Image x:Name="TransitionImage" Stretch="UniformToFill" StretchDirection="Both"
-                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                   RenderOptions.BitmapScalingMode="HighQuality" Opacity="0" IsHitTestVisible="False" />
-            <Image x:Name="CompanionImage" Stretch="UniformToFill" StretchDirection="Both"
-                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                   RenderOptions.BitmapScalingMode="HighQuality" />
-            <Border x:Name="MissingAssetCard" Background="{DynamicResource DangerBrush}" Opacity="0.88" CornerRadius="24" Width="190" Height="190"
-                    HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
-                <StackPanel VerticalAlignment="Center" Margin="20">
-                    <TextBlock Text="🐾" FontSize="52" HorizontalAlignment="Center" />
-                    <TextBlock x:Name="MissingAssetText" Foreground="{DynamicResource TextOnDangerBrush}" TextAlignment="Center" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-        </Grid>
-        <Grid x:Name="DialogControlRoot" Grid.Row="1" HorizontalAlignment="Center" Panel.ZIndex="2">
-            <Button x:Name="HideDialogButton" Style="{StaticResource OverlayBubbleHideButton}"
-                    Panel.ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0"
-                    ToolTip="{loc:Loc Overlay.HideDialog}" Click="HideDialogBubble_Click" Visibility="Collapsed" />
-            <Button x:Name="ShowDialogButton" Style="{StaticResource OverlayBubbleRestoreButton}"
-                    Panel.ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0"
-                    ToolTip="{loc:Loc Overlay.ShowDialog}" Click="ShowDialogBubble_Click" Visibility="Collapsed" />
-        </Grid>
-    </Grid>
+    </Canvas>
 </Window>

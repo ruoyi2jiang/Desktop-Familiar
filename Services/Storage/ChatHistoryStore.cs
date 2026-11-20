@@ -4,7 +4,7 @@ using DesktopFamiliar.Models;
 
 namespace DesktopFamiliar.Services.Storage;
 
-public sealed record ChatHistoryPetSummary(string Name, ArchivedPetPortrait? Portrait, long SizeBytes);
+public sealed record ChatHistoryPetSummary(string Name, CompanionPortrait? Portrait, long SizeBytes);
 
 /// <summary>Each read returns a detached snapshot. A change is published only after atomic replacement.</summary>
 public sealed class ChatHistoryStore(string root)
@@ -96,7 +96,7 @@ public sealed class ChatHistoryStore(string root)
         {
             if (!pets.TryGetValue(companion.Id, out var saved)) return false;
             saved.Name = companion.Name;
-            saved.ArchivedPortrait = new(companion.ProfilePicturePath, companion.IdleDefaultAnimation?.GetPreviewPath());
+            saved.ArchivedPortrait = CompanionPortrait.From(companion);
             return true;
         });
     }

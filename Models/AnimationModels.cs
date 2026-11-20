@@ -7,8 +7,21 @@ public sealed class DialogLine
 {
     public string Text { get; set; } = string.Empty;
     public string? VoicePath { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? StartSeconds { get; set; }
 
-    public DialogLine Clone() => new() { Text = Text, VoicePath = VoicePath };
+    public DialogLine Clone() => new() { Text = Text, VoicePath = VoicePath, StartSeconds = StartSeconds };
+}
+
+public enum ModelLoopMode { Once, FixedDuration, UntilDialogueEnds }
+
+public sealed class ModelLoopSettings
+{
+    public ModelLoopMode Mode { get; set; }
+    public double StartSeconds { get; set; }
+    public double? EndSeconds { get; set; }
+    public double DurationSeconds { get; set; } = 5;
+    public ModelLoopSettings Clone() => (ModelLoopSettings)MemberwiseClone();
 }
 
 public sealed class PngAnimationFrame
@@ -30,12 +43,28 @@ public sealed class PngAnimationFrame
 
 public sealed class AnimationScene
 {
+    public const int MaximumDialogStartSeconds = 600;
+
     public string? GetPreviewPath() => PngFrames.FirstOrDefault()?.FilePath ?? AnimationPath;
 
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = LocalizationService.Get("Model.Animation.New");
     public string AnimationPath { get; set; } = string.Empty;
     public List<PngAnimationFrame> PngFrames { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ModelClip { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? ModelParts { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ModelLoopSettings? ModelLoop { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? PartOfSceneId { get; set; }
+    [JsonIgnore]
+    public string? FirstModelClip => ModelParts?.FirstOrDefault() ?? ModelClip;
+    [JsonIgnore]
+    public IEnumerable<string> SourceClips => ModelParts is { Count: > 0 } ? ModelParts : ModelClip == null ? [] : [ModelClip];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double DialogStartSeconds { get; set; }
     public double DialogCharactersPerSecond { get; set; } = 14;
     public ScenePlaybackMode PlaybackMode { get; set; } = ScenePlaybackMode.LoopUntilDialogEnds;
     public List<DialogLine> DialogLines { get; set; } = [];
@@ -47,7 +76,7 @@ public sealed class AnimationScene
     [JsonIgnore]
     public string DisplayName => string.IsNullOrWhiteSpace(Name)
         ? LocalizationService.Get("Model.Animation.Untitled")
-        : Name;
+        : PartOfSceneId.HasValue ? LocalizationService.Format("Model3D.Part", Name) : Name;
 
     [JsonIgnore]
     public bool UsesPngSequence => PngFrames.Count > 0;
@@ -65,6 +94,11 @@ public sealed class AnimationScene
         Name = Name,
         AnimationPath = AnimationPath,
         PngFrames = PngFrames.Select(frame => frame.Clone()).ToList(),
+        ModelClip = ModelClip,
+        ModelParts = ModelParts?.ToList(),
+        ModelLoop = ModelLoop?.Clone(),
+        PartOfSceneId = PartOfSceneId,
+        DialogStartSeconds = DialogStartSeconds,
         DialogCharactersPerSecond = DialogCharactersPerSecond,
         PlaybackMode = PlaybackMode,
         DialogLines = DialogLines.Select(line => line.Clone()).ToList(),

@@ -6,6 +6,20 @@ namespace DesktopFamiliar.Tests;
 public sealed class CompanionOverlayLayoutTests
 {
     [Fact]
+    public void ModelDrawsOnItsOwnSurfaceBehindDialogueAndTheLogicalCharacterArea()
+    {
+        var document = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "CompanionOverlayWindow.xaml")));
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement Named(string name) => document.Descendants().Single(e => (string?)e.Attribute(x + "Name") == name);
+        var model = Named("PetModel");
+        var overlay = Named("OverlayContent");
+        Assert.Equal("Canvas", model.Parent!.Name.LocalName);
+        Assert.Contains(overlay, model.ElementsAfterSelf());
+        Assert.Contains(Named("DialogArea"), overlay.Elements());
+        Assert.Contains(Named("CompanionViewport"), overlay.Elements());
+    }
+
+    [Fact]
     public void DialogControls_AreCenteredInTheDialogWidthRatherThanTheCharacterViewport()
     {
         var source = File.ReadAllText(FindRepositoryFile(Path.Combine("Views", "CompanionOverlayWindow.xaml")));

@@ -23,6 +23,33 @@ public sealed class ChatTests : IDisposable
     }
 
     [Fact]
+    public async Task SwitchingAppearanceUsesOnlyItsDialogueInTheProfileAndChatRequest()
+    {
+        var pet = new CompanionDefinition { Appearance = CompanionAppearance.Model3D,
+            Animations = [new() { DialogLines = [new() { Text = "Sprite greeting." }] }] };
+        var engine = new TestEngine();
+        var session = new ChatSession(new ChatHistoryStore(_root), engine);
+        session.Select(pet.Id);
+
+        Assert.Empty(pet.GetDialogueExamples());
+        await session.SendAsync(pet.Clone(), "local", "Hello", default);
+        Assert.DoesNotContain("Sprite greeting.", engine.Requests[0][0].Content);
+        Assert.DoesNotContain("examples of style", engine.Requests[0][0].Content);
+
+        pet.Model3D.Animations.Add(new() { DialogLines = [new() { Text = "Model greeting." }] });
+        Assert.Equal(["Model greeting."], pet.GetDialogueExamples());
+        await session.SendAsync(pet.Clone(), "local", "Hello", default);
+        Assert.Contains("Model greeting.", engine.Requests[1][0].Content);
+        Assert.DoesNotContain("Sprite greeting.", engine.Requests[1][0].Content);
+
+        pet.Appearance = CompanionAppearance.Images2D;
+        Assert.Equal(["Sprite greeting."], pet.GetDialogueExamples());
+        await session.SendAsync(pet.Clone(), "local", "Hello", default);
+        Assert.Contains("Sprite greeting.", engine.Requests[2][0].Content);
+        Assert.DoesNotContain("Model greeting.", engine.Requests[2][0].Content);
+    }
+
+    [Fact]
     public async Task SwitchingPets_IsolatesNotesMessagesAndSpeakingExamplesEvenWhenNamesMatch()
     {
         var a = new CompanionDefinition { Name = "Twin", Personality = "Solemn", UserNickname = "Keeper",
@@ -141,6 +168,26 @@ public sealed class ChatTests : IDisposable
         Assert.Equal("remember this", Assert.Single(saved.Notes));
         using var json = JsonDocument.Parse(File.ReadAllText(path));
         Assert.Equal(2, json.RootElement.GetProperty("Version").GetInt32());
+    }
+
+    [Fact]
+    public void ArchivedModelPortraitKeepsItsAssignedIdleAndOlderImagePortraitsStillLoad()
+    {
+        var id = Guid.NewGuid();
+        var directory = Directory.CreateDirectory(Path.Combine(_root, "Chat"));
+        File.WriteAllText(Path.Combine(directory.FullName, "history.json"), JsonSerializer.Serialize(new
+        {
+            Version = 2, Pets = new Dictionary<Guid, object>
+            {
+                [id] = new { Name = "Pip", ArchivedPortrait = new { PicturePath = "pic.png", IdleFramePath = "idle.png" } }
+            }
+        }));
+        var store = new ChatHistoryStore(_root);
+        Assert.Equal(new CompanionPortrait("pic.png", "idle.png"), store.ListPets()[id].Portrait);
+        var pet = new CompanionDefinition { Id = id, Appearance = CompanionAppearance.Model3D, Model3D = new() { FilePath = "pet.glb" } };
+        pet.Model3D.CreateInitialScenes("Breathing", "Greeting");
+        store.RememberArchivedAppearance(pet);
+        Assert.Equal(new CompanionPortrait(null, null, "pet.glb", "Breathing"), new ChatHistoryStore(_root).ListPets()[id].Portrait);
     }
 
     [Fact]

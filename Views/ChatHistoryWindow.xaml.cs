@@ -1,5 +1,6 @@
 using System.Windows.Automation;
 using DesktopFamiliar.Localization;
+using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Chat;
 using DesktopFamiliar.Views.Controls;
@@ -58,9 +59,7 @@ public partial class ChatHistoryWindow : Window
                 var pet = _manager.Data.Companions.FirstOrDefault(c => c.Id == id);
                 var name = pet?.Name ?? saved.Name;
                 var sizeText = _manage ? FileSizeFormatter.Format(saved.SizeBytes) : null;
-                var row = new ChatHistoryPetRow(name,
-                    pet == null ? saved.Portrait?.PicturePath : pet.ProfilePicturePath,
-                    pet == null ? saved.Portrait?.IdleFramePath : pet.IdleDefaultAnimation?.GetPreviewPath(),
+                var row = new ChatHistoryPetRow(name, pet == null ? saved.Portrait : CompanionPortrait.From(pet),
                     sizeText, dividerBefore: items.Count > 0);
                 if (_manage)
                 {

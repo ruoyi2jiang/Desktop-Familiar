@@ -13,6 +13,7 @@ public sealed class CompanionManager
     private DesktopCompanionData _lastPersistedData;
 
     public DesktopCompanionData Data { get; }
+    internal bool RequiresExplicitSave => _storage.RequiresExplicitSave;
     public CompanionDefinition? CurrentCompanion => Data.Settings.CurrentCompanionId is Guid id
         ? Data.Companions.FirstOrDefault(companion => companion.Id == id)
         : null;
@@ -82,9 +83,9 @@ public sealed class CompanionManager
             CurrentCompanionChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    internal void CompleteCompanionCleanup(Guid id)
+    internal void CompleteCompanionCleanup(Guid id, bool deferSave)
     {
-        if (Data.PendingCompanionCleanup.Remove(id)) Persist();
+        if (Data.PendingCompanionCleanup.Remove(id) && !deferSave) Persist();
     }
 
     public void SelectCompanion(Guid companionId)
@@ -179,13 +180,13 @@ public sealed class CompanionManager
         DialogPresentationChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetDialogBubbleHidden(bool hidden)
+    public void SetDialogBubbleHidden(bool hidden, bool automatic = false)
     {
         if (Data.Settings.DialogBubbleHidden == hidden)
             return;
 
         Data.Settings.DialogBubbleHidden = hidden;
-        Persist();
+        if (!automatic) Persist();
         DialogPresentationChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -421,13 +422,22 @@ public sealed class CompanionManager
         CalendarEventsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void UpdateCalendarReminderState(CalendarEvent calendarEvent)
+    public void ExpireCalendarReminder(CalendarEvent calendarEvent, DateTime occurrence)
+    {
+        _storage.RecordCalendarExpiration(calendarEvent.Id, occurrence);
+        CalendarOccurrenceStatusTracker.MarkExpired(calendarEvent, occurrence);
+        var saved = _lastPersistedData.CalendarEvents.FirstOrDefault(item => item.Id == calendarEvent.Id);
+        if (saved != null) CalendarOccurrenceStatusTracker.MarkExpired(saved, occurrence);
+        UpdateCalendarReminderState(calendarEvent, automatic: true);
+    }
+
+    public void UpdateCalendarReminderState(CalendarEvent calendarEvent, bool automatic = false)
     {
         var index = Data.CalendarEvents.FindIndex(existing => existing.Id == calendarEvent.Id);
         if (index < 0)
             return;
         Data.CalendarEvents[index] = calendarEvent.Clone();
-        Persist();
+        if (!automatic) Persist();
         CalendarEventsChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -436,7 +446,7 @@ public sealed class CompanionManager
         if (!CalendarRetentionPolicy.Prune(Data.CalendarEvents, today))
             return false;
 
-        Persist();
+        // Retention runs in memory until the next user save.
         CalendarEventsChanged?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -453,7 +463,9 @@ public sealed class CompanionManager
             Data.RestoreFrom(_lastPersistedData);
             AppLogger.Error("The application configuration could not be saved; the last saved state was restored.", exception);
             throw new AppPersistenceException(
-                LocalizationService.Get("Storage.ConfigurationSaveFailed"),
+                exception is NewerLibraryVersionException newer
+                    ? LocalizationService.Format("Storage.NewerLibrary", newer.Version)
+                    : LocalizationService.Get("Storage.ConfigurationSaveFailed"),
                 exception);
         }
     }

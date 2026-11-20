@@ -5,8 +5,9 @@ namespace DesktopFamiliar.Services.Storage;
 public interface IAppDataStore
 {
     string FilePath { get; }
-    bool Exists { get; }
-    DesktopCompanionData Read();
+    string ReadPath { get; }
+    string? SourceFingerprint { get; }
+    IEnumerable<string> OtherLibraryAssetReferences(Guid deletedCompanionId);
+    DesktopCompanionData Read(string path);
     void Write(DesktopCompanionData data);
-    string BackupInvalidFile(DateTime timestamp);
 }

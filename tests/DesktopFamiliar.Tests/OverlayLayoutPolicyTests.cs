@@ -6,6 +6,25 @@ namespace DesktopFamiliar.Tests;
 public sealed class OverlayLayoutPolicyTests
 {
     [Fact]
+    public void TravelExpandsBehindDialogueAndStopsAtTheDesktopEdges()
+    {
+        var desktop = new RectangleF(-1000, -100, 1000, 800);
+        var pet = new RectangleF(-820, 40, 120, 180);
+        var rest = new RectangleF(0, 0, 120, 180);
+        var logical = OverlayLayoutPolicy.GetDrawingWindow(pet, 96, RectangleF.Empty, desktop);
+        Assert.Equal(new RectangleF(-880, -56, 240, 276), logical);
+        Assert.Equal(logical, OverlayLayoutPolicy.GetDrawingWindow(pet, 96, rest, desktop));
+        var extent = OverlayLayoutPolicy.ExpandModelExtent(rest, new(-400, -240, 600, 580));
+        Assert.Equal(extent, OverlayLayoutPolicy.ExpandModelExtent(extent, rest));
+        var expanded = OverlayLayoutPolicy.GetDrawingWindow(pet, 96, extent, desktop);
+        Assert.Equal(desktop.Left, expanded.Left);
+        Assert.Equal(desktop.Top, expanded.Top);
+        Assert.True(expanded.Right > logical.Right && expanded.Bottom > logical.Bottom);
+        // Dialogue and pet live inside the same surface, and its bounds depend only on visible content.
+        Assert.Equal(expanded, OverlayLayoutPolicy.GetDrawingWindow(pet, 130, extent, desktop));
+    }
+
+    [Fact]
     public void PromptSitsAboveThePetWithRoomForSpeechAboveIt()
     {
         var pet = new RectangleF(400, 480, 120, 240);

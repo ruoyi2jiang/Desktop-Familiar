@@ -13,17 +13,21 @@ namespace DesktopFamiliar.Services.Chat;
 /// <summary>A turn has its own CPU process and context. Idle companions consume no model RAM.</summary>
 public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
 {
-    public Task<string> ReplyAsync(string modelId, IReadOnlyList<ChatMessage> messages, CancellationToken token)
+    public async Task<string> ReplyAsync(string modelId, IReadOnlyList<ChatMessage> messages, CancellationToken token) =>
+        (await ReplyWithExpressionAsync(modelId, messages, [], token).ConfigureAwait(false)).Text;
+
+    public Task<ModelChatReply> ReplyWithExpressionAsync(string modelId, IReadOnlyList<ChatMessage> messages,
+        IReadOnlyList<string> expressions, CancellationToken token)
     {
         if (!models.Installed(modelId)) throw new FileNotFoundException("Chat model unavailable.");
-        return GenerateAsync(models.EnginePath(modelId), models.ModelPath(modelId), messages, 220, token);
+        return GenerateAsync(models.EnginePath(modelId), models.ModelPath(modelId), messages, expressions, 220, token);
     }
 
     internal static Task ProbeAsync(string enginePath, string modelPath, CancellationToken token) =>
-        GenerateAsync(enginePath, modelPath, [new ChatMessage("user", "Hello")], 1, token);
+        GenerateAsync(enginePath, modelPath, [new ChatMessage("user", "Hello")], [], 1, token);
 
-    private static async Task<string> GenerateAsync(string enginePath, string modelPath,
-        IReadOnlyList<ChatMessage> messages, int maxTokens, CancellationToken token)
+    private static async Task<ModelChatReply> GenerateAsync(string enginePath, string modelPath,
+        IReadOnlyList<ChatMessage> messages, IReadOnlyList<string> expressions, int maxTokens, CancellationToken token)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromMinutes(3));
@@ -60,7 +64,7 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
                 catch (HttpRequestException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionRefused }) { }
                 await Task.Delay(60, timeout.Token).ConfigureAwait(false);
             }
-            return await RequestReplyAsync(http, secret, messages, maxTokens, timeout.Token).ConfigureAwait(false);
+            return await RequestReplyAsync(http, secret, messages, expressions, maxTokens, timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException ex) when (!token.IsCancellationRequested)
         {
@@ -73,12 +77,51 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
         }
     }
 
-    private static async Task<string> RequestReplyAsync(HttpClient http, string secret,
-        IReadOnlyList<ChatMessage> messages, int maxTokens, CancellationToken token)
+    internal static async Task<ModelChatReply> RequestReplyAsync(HttpClient http, string secret,
+        IReadOnlyList<ChatMessage> messages, IReadOnlyList<string> expressions, int maxTokens, CancellationToken token)
+    {
+        if (expressions.Count != 0)
+        {
+            string[] choices = ["neutral", .. expressions];
+            var schema = new { type = "object", properties = new {
+                expression = new { type = "string", @enum = choices }, reply = new { type = "string" }
+            }, required = new[] { "expression", "reply" }, additionalProperties = false };
+            var instructions = "Return JSON with expression and reply. Choose your own expression for this response from "
+                + string.Join(", ", choices) + ". Use neutral for ordinary conversation. Put only your spoken words in reply.";
+            var structured = messages.ToList();
+            if (structured.Count > 0 && structured[0].Role == "system")
+                structured[0] = structured[0] with { Content = structured[0].Content + "\n" + instructions };
+            else structured.Insert(0, new("system", instructions));
+            var format = new { type = "json_schema", json_schema = new { name = "companion_reply", strict = true, schema } };
+            try
+            {
+                var content = await CompleteAsync(http, secret, structured, maxTokens, format, token).ConfigureAwait(false);
+                using var json = JsonDocument.Parse(content);
+                var obj = json.RootElement;
+                if (obj.ValueKind == JsonValueKind.Object && obj.TryGetProperty("reply", out var spoken)
+                    && spoken.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(spoken.GetString()))
+                {
+                    var key = obj.TryGetProperty("expression", out var value) && value.ValueKind == JsonValueKind.String
+                        ? value.GetString() : null;
+                    return new(spoken.GetString()!, key != null && expressions.Contains(key) ? key : null);
+                }
+            }
+            catch (JsonException exception) { AppLogger.Warning("Invalid structured chat reply; retrying as text.", exception); }
+            catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity)
+            { AppLogger.Warning("The local engine rejected the expression format; retrying as text.", exception); }
+        }
+        return new(await CompleteAsync(http, secret, messages, maxTokens, null, token).ConfigureAwait(false));
+    }
+
+    private static async Task<string> CompleteAsync(HttpClient http, string secret,
+        IReadOnlyList<ChatMessage> messages, int maxTokens, object? format, CancellationToken token)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", secret);
-        request.Content = JsonContent.Create(new { model = "companion", messages, max_tokens = maxTokens, temperature = 0.65, stream = false });
+        var body = new Dictionary<string, object> { ["model"] = "companion", ["messages"] = messages,
+            ["max_tokens"] = maxTokens, ["temperature"] = 0.65, ["stream"] = false };
+        if (format != null) body["response_format"] = format;
+        request.Content = JsonContent.Create(body);
         using var response = await http.SendAsync(request, token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false));

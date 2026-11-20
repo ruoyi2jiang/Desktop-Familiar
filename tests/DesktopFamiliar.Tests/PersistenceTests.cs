@@ -4,11 +4,168 @@ using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Storage;
+using DesktopFamiliar.Services.Time;
 
 namespace DesktopFamiliar.Tests;
 
 public sealed class PersistenceTests
 {
+    private sealed class TestClock(DateTime now) : IClock
+    {
+        public DateTime Now { get; set; } = now;
+    }
+
+    [Fact]
+    public void ObservedWeeklyExpirationSurvivesRestartBeyondReminderLookbackWithoutRewritingTheLibrary()
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        var occurrence = new DateTime(2026, 7, 20, 12, 0, 0);
+        var calendarEvent = new CalendarEvent
+        {
+            Date = occurrence.Date, Recurrence = CalendarEventRecurrence.Weekly,
+            RecurringDays = [occurrence.DayOfWeek], StartTime = occurrence.TimeOfDay,
+            EndTime = TimeSpan.FromHours(13)
+        };
+        storage.Save(new DesktopCompanionData { CalendarEvents = [calendarEvent] });
+        var before = File.ReadAllBytes(storage.DataFilePath);
+        var clock = new TestClock(occurrence);
+        var manager = new CompanionManager(storage);
+        using (var reminders = new CalendarReminderService(manager, clock))
+        {
+            reminders.CheckNow();
+            clock.Now = occurrence.AddHours(1);
+            reminders.CheckNow();
+        }
+
+        clock.Now = occurrence.AddDays(30);
+        var reopened = new CompanionManager(new CompanionStorage(directory.Path));
+        using var restarted = new CalendarReminderService(reopened, clock);
+        restarted.CheckNow();
+        var expired = Assert.Single(reopened.Data.CalendarEvents).ExpiredOccurrences;
+        Assert.Contains(occurrence, expired);
+        Assert.DoesNotContain(occurrence.AddDays(7), expired);
+        Assert.Equal(before, File.ReadAllBytes(storage.DataFilePath));
+
+        // An intentional schedule replacement must not inherit the previous file's observations.
+        calendarEvent.ReminderEnabled = false;
+        storage.Save(new DesktopCompanionData { CalendarEvents = [calendarEvent] });
+        Assert.Empty(Assert.Single(storage.Load().CalendarEvents).ExpiredOccurrences);
+    }
+
+    [Fact]
+    public void OpeningAndReminderMaintenanceLeaveLegacyLibraryUntouchedUntilAUserSave()
+    {
+        using var directory = new TemporaryDirectory();
+        var legacy = Path.Combine(directory.Path, "desktop-familiar.json");
+        const string original = """{"SchemaVersion":8, "Companions":[{"Name":"Pip"}],"CalendarEvents":[{"Title":"Past","Date":"2000-01-01","IsCompleted":true}]}""";
+        File.WriteAllText(legacy, original);
+        var storage = new CompanionStorage(directory.Path);
+        var manager = new CompanionManager(storage);
+        manager.Data.Settings.DialogBubbleHidden = true;
+        manager.SetDialogBubbleHidden(false, automatic: true);
+        using var reminders = new CalendarReminderService(manager);
+        reminders.CheckNow();
+        Assert.Empty(manager.Data.CalendarEvents);
+        Assert.False(File.Exists(storage.DataFilePath));
+        Assert.Equal(original, File.ReadAllText(legacy));
+
+        manager.Data.Companions[0].Description = "Saved in this version";
+        manager.Persist();
+        Assert.Equal(original, File.ReadAllText(legacy));
+        var protectedBytes = File.ReadAllBytes(storage.DataFilePath);
+        File.WriteAllText(legacy, """{"SchemaVersion":8,"Companions":[]}""");
+        var reopened = Assert.Single(new CompanionStorage(directory.Path).Load().Companions);
+        Assert.Equal("Saved in this version", reopened.Description);
+        Assert.Equal(protectedBytes, File.ReadAllBytes(storage.DataFilePath));
+    }
+
+    [Fact]
+    public void FutureLibraryDisplaysKnownFieldsAndAnExplicitSaveCreatesAnIndependentCopy()
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        var futurePath = Path.Combine(Path.GetDirectoryName(storage.DataFilePath)!, "desktop-familiar.v99.json");
+        const string original = """
+            {"SchemaVersion":99,"FutureSettings":{"a":12},"Companions":[
+                {"Name":"Pip","Appearance":"Hologram","Personality":"Lively",
+                 "ChatExpressions":{"happy":"6f414e5c-fafd-4f68-9291-a569695bfb83","sad":null,"angry":{"future":true}},
+                 "Animations":[{"Name":"Wave","Id":"6f414e5c-fafd-4f68-9291-a569695bfb83","DialogLines":[{"Text":"Hello","StartSeconds":{"tick":8}}]}]},
+                {"Name":"Other","Model3D":{"UnknownRig":"B"}}],"PendingCompanionCleanup":["3a6156c8-a581-4891-bd68-0000faeafb1a"]}
+            """;
+        File.WriteAllText(futurePath, original);
+        var data = storage.Load();
+        Assert.Null(storage.LastRecoveryNotice);
+        Assert.Equal(2, data.Companions.Count);
+        Assert.Equal("Lively", data.Companions[0].Personality);
+        Assert.Equal(CompanionAppearance.Images2D, data.Companions[0].Appearance);
+        Assert.Equal("Hello", Assert.Single(Assert.Single(data.Companions[0].Animations).DialogLines).Text);
+        Assert.Empty(data.PendingCompanionCleanup);
+        Assert.False(File.Exists(storage.DataFilePath));
+        data.Companions[0].Name = "Pip edited";
+        storage.Save(data);
+        Assert.Equal(original, File.ReadAllText(futurePath));
+        Assert.Equal("Pip edited", storage.Load().Companions[0].Name);
+        var pet = storage.Load().Companions[0];
+        Assert.Equal(Assert.Single(pet.Animations).Id, pet.ChatExpressions["happy"]);
+        Assert.Null(pet.ChatExpressions["sad"]);
+        Assert.False(pet.ChatExpressions.ContainsKey("angry"));
+    }
+
+    [Fact]
+    public void MigrationKeepsRecognizedFieldsAlreadyPresentInAnOlderDocument()
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        var legacy = Path.Combine(directory.Path, "desktop-familiar.json");
+        const string input = """
+            {"SchemaVersion":8,"Settings":{"Chat":{"Enabled":true,"ModelId":"my-model"}},
+             "Companions":[{"Name":"Pip","Appearance":"Model3D","ProfilePicturePath":"pip.png","ThinkingPhrase":"Hmm",
+             "Model3D":{"FilePath":"pip.glb","Animations":[{"Name":"Bow","ModelClip":"Bow"}]}}]}
+            """;
+        File.WriteAllText(legacy, input);
+        var loaded = storage.Load();
+        var pet = Assert.Single(loaded.Companions);
+        Assert.Equal(CompanionAppearance.Model3D, pet.Appearance);
+        Assert.Equal("pip.png", pet.ProfilePicturePath);
+        Assert.Equal("Hmm", pet.ThinkingPhrase);
+        Assert.Equal("Bow", Assert.Single(pet.Model3D.Animations).ModelClip);
+        Assert.Equal("my-model", loaded.Settings.Chat.ModelId);
+        Assert.Equal(input, File.ReadAllText(legacy));
+    }
+
+    [Fact]
+    public void SavingCannotDowngradeANewerDocumentPlacedAtTheCurrentWritePath()
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        const string original = """{"sChemAVersion":99,"Companions":[{"Name":"Pip","Future":"keep"}]}""";
+        File.WriteAllText(storage.DataFilePath, original);
+        var data = storage.Load();
+        Assert.Equal("Pip", Assert.Single(data.Companions).Name);
+        Assert.Null(storage.LastRecoveryNotice);
+        Assert.Throws<NewerLibraryVersionException>(() => storage.Save(data));
+        Assert.Equal(original, File.ReadAllText(storage.DataFilePath));
+    }
+
+    [Fact]
+    public void UnreadableLibraryIsUntouchedOnOpenAndArchivedOnExplicitReplacement()
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        const string original = """{"SchemaVersion":14,broken""";
+        File.WriteAllText(storage.DataFilePath, original);
+        var data = storage.Load();
+        Assert.Equal(storage.DataFilePath, storage.LastRecoveryNotice!.FilePath);
+        Assert.Equal(original, File.ReadAllText(storage.DataFilePath));
+        Assert.Single(Directory.GetFiles(directory.Path, "*.json", SearchOption.AllDirectories));
+        storage.Save(data);
+        var backup = Assert.Single(Directory.GetFiles(directory.Path, "*.invalid-*.json", SearchOption.AllDirectories));
+        Assert.Equal(original, File.ReadAllText(backup));
+        storage.Load();
+        Assert.Null(storage.LastRecoveryNotice);
+    }
+
     [Fact]
     public void JsonStore_RoundTripsConfiguration()
     {
@@ -113,7 +270,7 @@ public sealed class PersistenceTests
     {
         var data = new DesktopCompanionData
         {
-            SchemaVersion = 99,
+            SchemaVersion = DesktopCompanionData.CurrentSchemaVersion,
             Settings = new AppSettings { ViewportWidth = -10, ViewportHeight = 99999 },
             Companions =
             [
@@ -266,7 +423,7 @@ public sealed class PersistenceTests
     }
 
     [Fact]
-    public void Storage_PersistsBuiltInThemeRepairInsteadOfCreatingCustomThemeOnEveryStartup()
+    public void Storage_RepairsBuiltInThemeInMemoryOnEachRead()
     {
         using var directory = new TemporaryDirectory();
         var seaBlueId = Guid.NewGuid();
@@ -291,6 +448,7 @@ public sealed class PersistenceTests
             }
         });
 
+        var original = File.ReadAllBytes(storage.DataFilePath);
         var firstLoad = storage.Load();
         var secondLoad = storage.Load();
 
@@ -299,6 +457,7 @@ public sealed class PersistenceTests
         Assert.Equal(AppTheme.SeaBlue, secondLoad.Settings.Theme);
         Assert.Equal(seaBlueId, secondLoad.Settings.SelectedThemeId);
         Assert.DoesNotContain(secondLoad.Settings.SavedThemes, theme => !theme.IsBuiltIn);
+        Assert.Equal(original, File.ReadAllBytes(storage.DataFilePath));
     }
 
     [Fact]
@@ -360,11 +519,28 @@ public sealed class PersistenceTests
         Assert.Equal("Pip", companion.Name);
         Assert.Equal(["Hello, {{user}}!", "Desk secure."], companion.GetDialogueExamples());
         Assert.Equal("  Hello, {{user}}!  ", companion.Animations[0].DialogLines[0].Text);
+        using var original = JsonDocument.Parse(File.ReadAllText(storage.DataFilePath));
+        Assert.Equal(8, original.RootElement.GetProperty("SchemaVersion").GetInt32());
+        storage.Save(data);
         using var saved = JsonDocument.Parse(File.ReadAllText(storage.DataFilePath));
         Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, saved.RootElement.GetProperty("SchemaVersion").GetInt32());
         var profile = saved.RootElement.GetProperty("Companions")[0];
         Assert.Equal("", profile.GetProperty("Description").GetString());
         Assert.Equal("", profile.GetProperty("Personality").GetString());
+    }
+
+    [Fact]
+    public void UpgradingAnOlderLibraryRetainsAnyExistingProfileText()
+    {
+        using var directory = new TemporaryDirectory();
+        var storage = new CompanionStorage(directory.Path);
+        File.WriteAllText(storage.DataFilePath, """
+            {"SchemaVersion":8,"Companions":[{"Description":"A librarian","Personality":"Inquisitive"}]}
+            """);
+        storage.Load();
+        var pet = Assert.Single(storage.Load().Companions);
+        Assert.Equal("A librarian", pet.Description);
+        Assert.Equal("Inquisitive", pet.Personality);
     }
 
     [Fact]
@@ -408,7 +584,7 @@ public sealed class PersistenceTests
     }
 
     [Fact]
-    public void FirstLoad_CreatesNormalizedEmptyConfiguration()
+    public void FirstLoad_LeavesNormalizedEmptyConfigurationInMemory()
     {
         using var directory = new TemporaryDirectory();
         var storage = new CompanionStorage(directory.Path);
@@ -418,7 +594,7 @@ public sealed class PersistenceTests
         Assert.Empty(loaded.Companions);
         Assert.Equal(DesktopCompanionData.CurrentSchemaVersion, loaded.SchemaVersion);
         Assert.NotEmpty(loaded.Settings.SavedThemes);
-        Assert.True(File.Exists(storage.DataFilePath));
+        Assert.False(File.Exists(storage.DataFilePath));
     }
 
     private static JsonSerializerOptions CreateOptions() => new()

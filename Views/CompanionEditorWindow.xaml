@@ -549,10 +549,12 @@
                                         <TextBlock Text="{loc:Loc Editor.CompanionPreview.Title}" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                         <Grid Grid.Row="1" Height="108" Margin="0,8,0,0">
                                             <Image x:Name="CompanionPreviewImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            <controls:CompanionModelView x:Name="CompanionPreviewModel" Visibility="Collapsed" IsHitTestVisible="False" />
                                             <TextBlock x:Name="CompanionPreviewHint" Text="{loc:Loc Editor.CompanionPreview.Empty}" Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}"
                                                        TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Grid>
                                         <StackPanel Grid.Row="2" Margin="0,8,0,0">
+                                            <TextBlock Text="{loc:Loc Editor.Picture.Title}" HorizontalAlignment="Center" Margin="0,0,0,5" />
                                             <controls:CompanionAvatar x:Name="ProfileAvatar" Width="48" Height="48" />
                                             <Button Content="{loc:Loc Editor.Picture.Import}" Click="ImportProfilePicture_Click"
                                                     Style="{StaticResource EditorImportButton}" HorizontalAlignment="Center" Margin="0,6,0,0" />
@@ -599,11 +601,33 @@
             <TabItem Header="{loc:Loc Editor.Tab.Animations}" Style="{StaticResource EditorTabItem}">
                 <ScrollViewer Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="28,48,28,28">
-                <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
+                <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" Margin="0,0,0,14" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
+                        TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Loc Model3D.Mode}" Style="{StaticResource SectionTitle}" />
+                        <ComboBox x:Name="AppearanceCombo" Style="{StaticResource EditorComboInput}" HorizontalAlignment="Left" MinWidth="220" Margin="0,8"
+                                  AutomationProperties.Name="{loc:Loc Model3D.Mode}" SelectionChanged="Appearance_Changed">
+                            <ComboBoxItem Content="{loc:Loc Model3D.Images}" />
+                            <ComboBoxItem Content="{loc:Loc Model3D.Model}" />
+                        </ComboBox>
+                        <TextBlock Text="{loc:Loc Model3D.ModeHelp}" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="ModelSettings" Margin="0,0,0,14" Visibility="Collapsed" Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
+                        TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
+                    <DockPanel>
+                        <Button Content="{loc:Loc Model3D.Import}" Style="{StaticResource OutlineButton}" Click="ChooseModel_Click" DockPanel.Dock="Right" />
+                        <StackPanel>
+                            <TextBlock Text="{loc:Loc Model3D.Title}" Style="{StaticResource SectionTitle}" />
+                            <TextBlock x:Name="ModelFileLabel" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <Border x:Name="ImageSettings" Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
                         TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
                     <StackPanel>
                         <DockPanel>
-                            <TextBlock Text="{loc:Loc Editor.Animations.Title}" Style="{StaticResource SectionTitle}" DockPanel.Dock="Left" />
+                            <TextBlock x:Name="ScenesTitle" Text="{loc:Loc Editor.Animations.Title}" Style="{StaticResource SectionTitle}" DockPanel.Dock="Left" />
                         </DockPanel>
                         <Grid MinHeight="410">
                             <Grid.ColumnDefinitions>
@@ -612,6 +636,7 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
+                                <CheckBox x:Name="ShowModelParts" Content="{loc:Loc Model3D.ShowParts}" Visibility="Collapsed" Click="ShowModelParts_Click" Margin="0,0,0,8"/>
                                 <ListBox x:Name="SceneList" Height="330" DisplayMemberPath="DisplayName" SelectionChanged="SceneList_SelectionChanged"
                                          Style="{StaticResource EditorSceneList}" ItemContainerStyle="{StaticResource EditorSceneListItem}" />
                                 <WrapPanel Margin="0,8,0,0">
@@ -626,9 +651,49 @@
                             </Border>
 
                             <StackPanel x:Name="SceneEditor" Grid.Column="2" Visibility="Collapsed" MaxWidth="650" HorizontalAlignment="Stretch">
-                                <TextBlock Text="{loc:Loc Editor.RegistryName}" Style="{StaticResource FieldLabel}" />
+                                <TextBlock x:Name="SceneNameLabel" Text="{loc:Loc Editor.RegistryName}" Style="{StaticResource FieldLabel}" />
                                 <TextBox x:Name="SceneNameBox" Style="{StaticResource EditorTextInput}" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" TextChanged="SceneNameBox_TextChanged" />
 
+                                <StackPanel x:Name="ModelSceneSource" Margin="0,6,0,10" Visibility="Collapsed">
+                                    <TextBlock Text="{loc:Loc Model3D.Clip}" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="SceneClip" Style="{StaticResource EditorComboInput}" DisplayMemberPath="Label"
+                                              TextSearch.TextPath="Label" AutomationProperties.Name="{loc:Loc Model3D.Clip}" SelectionChanged="ModelSourceChanged"/>
+                                    <Grid Margin="0,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="145"/></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Loc Model3D.Playback}" Style="{StaticResource FieldLabel}"/>
+                                            <ComboBox x:Name="ModelMode" Style="{StaticResource EditorComboInput}" SelectionChanged="ModelModeChanged">
+                                                <ComboBoxItem Content="{loc:Loc Model3D.Once}"/><ComboBoxItem Content="{loc:Loc Model3D.Fixed}"/><ComboBoxItem Content="{loc:Loc Model3D.Until}"/>
+                                            </ComboBox>
+                                            <StackPanel x:Name="FixedLength" Visibility="Collapsed">
+                                                <TextBlock Text="{loc:Loc Model3D.LoopFor}" Style="{StaticResource FieldLabel}"/>
+                                                <TextBox x:Name="LengthBox" Style="{StaticResource EditorTextInput}" TextChanged="ModelTimingChanged" AutomationProperties.Name="{loc:Loc Model3D.LoopFor}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <controls:CompanionModelView Grid.Column="1" Height="130" x:Name="ModelPreview"/>
+                                    </Grid>
+                                    <TextBlock x:Name="PlayheadText"/>
+                                    <Slider x:Name="Scrubber" SmallChange="0.01" LargeChange="0.1" IsMoveToPointEnabled="True"
+                                            IsSelectionRangeEnabled="True" Foreground="{DynamicResource PrimaryAccentBrush}" ValueChanged="ScrubberChanged"
+                                            AutomationProperties.Name="{loc:Loc Model3D.Scrub}"/>
+                                    <Grid Margin="0,6">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <StackPanel><TextBlock Text="{loc:Loc Model3D.LoopStart}" Style="{StaticResource FieldLabel}"/>
+                                            <TextBox x:Name="RangeStart" Style="{StaticResource EditorTextInput}" TextChanged="ModelTimingChanged" AutomationProperties.Name="{loc:Loc Model3D.LoopStart}"/>
+                                            <Button Content="{loc:Loc Model3D.MarkStart}" Click="MarkStart_Click"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2"><TextBlock Text="{loc:Loc Model3D.LoopEnd}" Style="{StaticResource FieldLabel}"/>
+                                            <TextBox x:Name="RangeEnd" Style="{StaticResource EditorTextInput}" TextChanged="ModelTimingChanged" AutomationProperties.Name="{loc:Loc Model3D.LoopEnd}"/>
+                                            <Button Content="{loc:Loc Model3D.MarkEnd}" Click="MarkEnd_Click"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <Button Content="{loc:Loc Model3D.Replay}" Click="ReplayModelScene_Click" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="ModelPreviewDialogue" TextWrapping="Wrap" FontStyle="Italic"/>
+                                        <TextBlock Text="{loc:Loc Model3D.StartSeconds}" Style="{StaticResource FieldLabel}" />
+                                        <TextBox x:Name="ModelDelay" Style="{StaticResource EditorTextInput}" AutomationProperties.Name="{loc:Loc Model3D.StartSeconds}"
+                                                 Text="{Binding DialogStartSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+                                </StackPanel>
+                                <StackPanel x:Name="ImageSceneSource">
                                 <TextBlock Text="{loc:Loc Editor.AnimationSource}" Style="{StaticResource FieldLabel}" />
                                 <TextBlock x:Name="SourceSummaryText" Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" Opacity="0.72" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="0,2,0,8" />
                                 <WrapPanel Margin="0,-6,0,8">
@@ -749,6 +814,7 @@
                                     </StackPanel>
                                 </Border>
 
+                                </StackPanel>
                                 <Grid HorizontalAlignment="Stretch">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -756,7 +822,7 @@
                                         <ColumnDefinition Width="250" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
-                                        <StackPanel Orientation="Horizontal">
+                                        <StackPanel x:Name="SpriteModeLabel" Orientation="Horizontal">
                                             <TextBlock Text="{loc:Loc Editor.CompletionMode}" Style="{StaticResource FieldLabel}" />
                                             <Button Content="?" Style="{StaticResource DialogHelpButton}" Margin="6,0,0,4"
                                                     ToolTip="{loc:Loc Editor.CompletionMode.LoopTooltip}" />
@@ -794,7 +860,7 @@
                                 </DockPanel>
                                 <Border Height="180" Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource InputAccentBrush}" BorderThickness="1" CornerRadius="10" ClipToBounds="True">
                                     <Grid>
-                                    <DataGrid x:Name="DialogGrid" Style="{StaticResource EditorDataGrid}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+                                    <DataGrid x:Name="DialogGrid" Style="{StaticResource EditorDataGrid}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserSortColumns="False" HeadersVisibility="Column"
                                               ColumnHeaderStyle="{StaticResource EditorDataGridColumnHeader}" RowHeaderStyle="{StaticResource EditorDataGridRowHeader}"
                                               CellStyle="{StaticResource EditorDataGridCell}" SelectionMode="Single" SizeChanged="DataGrid_SizeChanged">
                                         <DataGrid.Resources>
@@ -807,6 +873,9 @@
                                             <DataGridTextColumn Header="{loc:Loc Editor.Dialog.TextHeader}" Width="2*" Binding="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
                                                                 HeaderStyle="{StaticResource EditorDataGridColumnHeaderTopLeft}"
                                                                 ElementStyle="{StaticResource EditorDataGridText}" EditingElementStyle="{StaticResource EditorDataGridEditingText}" />
+                                            <DataGridTextColumn x:Name="CueSecondsColumn" Visibility="Collapsed" Header="{loc:Loc Model3D.CueSeconds}" Width="90"
+                                                Binding="{Binding StartSeconds, TargetNullValue='', ValidatesOnExceptions=True}"
+                                                ElementStyle="{StaticResource EditorDataGridText}" EditingElementStyle="{StaticResource EditorDataGridEditingText}"/>
                                             <DataGridTextColumn Header="{loc:Loc Editor.Dialog.VoiceHeader}" Width="*" Binding="{Binding VoicePath}" IsReadOnly="True"
                                                                 HeaderStyle="{StaticResource EditorDataGridColumnHeaderTopRight}"
                                                                 ElementStyle="{StaticResource EditorDataGridText}" />
@@ -814,6 +883,8 @@
                                     </DataGrid>
                                     </Grid>
                                 </Border>
+                                <TextBlock x:Name="CueHelp" Text="{loc:Loc Model3D.CueHelp}" Visibility="Collapsed"
+                                           TextWrapping="Wrap" Opacity="0.74" FontSize="12" Margin="0,6,0,0"/>
                                 <TextBlock Text="{loc:Loc Editor.Dialog.Help}"
                                            Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" Opacity="0.72" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
                             </StackPanel>
@@ -823,7 +894,7 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-            <TabItem Header="{loc:Loc Editor.Tab.States}" Style="{StaticResource EditorTabItem}">
+            <TabItem x:Name="ImageStatesTab" Header="{loc:Loc Editor.Tab.States}" Style="{StaticResource EditorTabItem}">
                 <ScrollViewer Style="{StaticResource OverlayScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="28,48,28,28">
                 <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1"
@@ -840,6 +911,8 @@
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="{loc:Loc Editor.IdleDefaultAssignment}" Style="{StaticResource FieldLabel}" Height="18" VerticalAlignment="Center" />
                                 <ComboBox x:Name="IdleDefaultCombo" Style="{StaticResource EditorComboInput}" DisplayMemberPath="DisplayName" SelectionChanged="StateAssignment_SelectionChanged" />
+                                <controls:FieldHelpLabel Text="{loc:Loc Editor.ChatReplyAssignment}" HelpText="{loc:Loc Editor.ChatReplyAssignment.Help}" Margin="0,10,0,0" />
+                                <ComboBox x:Name="ChatReplyCombo" Style="{StaticResource EditorComboInput}" DisplayMemberPath="DisplayName" SelectionChanged="StateAssignment_SelectionChanged" />
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <controls:FieldHelpLabel Text="{loc:Loc Editor.ReminderAssignment}" HelpText="{loc:Loc Editor.ReminderAssignment.Help}" />
@@ -848,6 +921,29 @@
                         </Grid>
 
                         <Border Height="1" Background="{DynamicResource PrimaryAccentBrush}" Opacity="0.45" Margin="0,18,0,10" />
+                        <Expander Style="{StaticResource AdvancedInteractionExpander}" Margin="0,0,0,18">
+                            <Expander.Header>
+                                <TextBlock Text="{loc:Loc Editor.ChatExpressions}" Style="{StaticResource FieldLabel}" />
+                            </Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="{loc:Loc Editor.ChatExpressions.Help}" TextWrapping="Wrap" Margin="0,4,0,10" />
+                                <ItemsControl x:Name="ExpressionAssignments">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,12,8">
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}" />
+                                                <ComboBox Style="{StaticResource EditorComboInput}" AutomationProperties.Name="{Binding Label}"
+                                                          ItemsSource="{Binding Choices}" DisplayMemberPath="Label"
+                                                          SelectedItem="{Binding Selected, Mode=TwoWay}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Expander>
                         <controls:FieldHelpLabel Text="{loc:Loc Editor.StateGroup.Interaction}" HelpText="{loc:Loc Editor.StateGroup.Interaction.Help}" Margin="0,0,0,4" />
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -941,6 +1037,7 @@
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Height="260" Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource InputAccentBrush}" BorderThickness="1" CornerRadius="10" ClipToBounds="True">
                                         <Grid>
+                                            <controls:CompanionModelView x:Name="ClickAreaModel" Visibility="Collapsed" IsHitTestVisible="False" IsVisibleChanged="ClickAreaModel_IsVisibleChanged" />
                                             <Image x:Name="ClickAreaPreviewImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
                                             <TextBlock x:Name="ClickAreaPreviewHint" Text="{loc:Loc Editor.CompanionPreview.Empty}" Foreground="{DynamicResource TextOnInputBackgroundBrush}" Opacity="0.72"
                                                        TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" />

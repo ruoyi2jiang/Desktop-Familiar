@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Storage;
@@ -176,6 +177,58 @@ public sealed class CompanionBundleServiceTests
     }
 
     [Fact]
+    public void InspectCountsOnlyVisibleScenesOfTheActiveAppearance()
+    {
+        using var directory = new TemporaryDirectory();
+        var full = new AnimationScene { ModelParts = ["in", "out"] };
+        var pet = new CompanionDefinition { Name = "Test", Appearance = CompanionAppearance.Model3D };
+        pet.Model3D.Animations = [full, new() { ModelClip = "in", PartOfSceneId = full.Id }, new()];
+        var path = Path.Combine(directory.Path, "preview.companionpack");
+        var manifest = JsonSerializer.SerializeToNode(new { Format = CompanionBundleService.FormatIdentifier,
+            FormatVersion = CompanionBundleService.CurrentFormatVersion, Companion = pet }, CreateOptions())!.AsObject();
+        WriteManifestOnly(path, manifest);
+        Assert.Equal(2, new CompanionBundleService(directory.Path, CreateOptions()).Inspect(path).AnimationCount);
+    }
+
+    [Theory]
+    [InlineData("missingFormat")]
+    [InlineData("missingVersion")]
+    [InlineData("nullFrame")]
+    [InlineData("nullClickArea")]
+    [InlineData("duplicateId")]
+    public void InvalidManifestIsRejectedBeforeImportCreatesFiles(string problem)
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "invalid.companionpack");
+        var group = new AnimationScene { ModelParts = ["intro", "loop"] };
+        var pet = new CompanionDefinition { Name = "Test", Model3D = new() { Animations = [group] } };
+        var manifest = JsonSerializer.SerializeToNode(new { Format = CompanionBundleService.FormatIdentifier,
+            FormatVersion = CompanionBundleService.CurrentFormatVersion, Companion = pet }, CreateOptions())!.AsObject();
+        var model = manifest["Companion"]!["Model3D"]!;
+        var scenes = model["Animations"]!.AsArray();
+        switch (problem)
+        {
+            case "missingFormat": manifest.Remove("Format"); break;
+            case "missingVersion": manifest.Remove("FormatVersion"); break;
+            case "nullFrame": scenes[0]!["PngFrames"]!.AsArray().Add((JsonNode?)null); break;
+            case "nullClickArea": model["InteractionStates"]!["ClickAreas"]!.AsArray().Add((JsonNode?)null); break;
+            case "duplicateId": scenes.Add(scenes[0]!.DeepClone()); break;
+        }
+        WriteManifestOnly(path, manifest);
+        var service = new CompanionBundleService(directory.Path, CreateOptions());
+        Assert.Throws<InvalidDataException>(() => service.Inspect(path));
+        Assert.Throws<InvalidDataException>(() => service.Import(path, Guid.NewGuid()));
+        Assert.False(Directory.Exists(Path.Combine(directory.Path, "Assets")));
+    }
+
+    private static void WriteManifestOnly(string path, JsonObject manifest)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        using var writer = new StreamWriter(archive.CreateEntry("manifest.json").Open());
+        writer.Write(manifest.ToJsonString());
+    }
+
+    [Fact]
     public void StorageWithoutExplicitPackage_StartsWithoutACharacter()
     {
         using var directory = new TemporaryDirectory();
@@ -183,7 +236,7 @@ public sealed class CompanionBundleServiceTests
         var loaded = new CompanionStorage(directory.Path).Load();
 
         Assert.Empty(loaded.Companions);
-        Assert.True(File.Exists(Path.Combine(directory.Path, "desktop-familiar.json")));
+        Assert.Empty(Directory.EnumerateFiles(directory.Path, "*.json", SearchOption.AllDirectories));
     }
 
     private static IEnumerable<string> EnumerateAssets(CompanionDefinition companion)
