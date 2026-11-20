@@ -6,6 +6,10 @@ namespace DesktopFamiliar.Services;
 /// <summary>Calculates character, dialogue, and chat prompt geometry in device-independent units.</summary>
 public static class OverlayLayoutPolicy
 {
+    private const float DrawingBlock = 64;
+    // Room for the prompt, its scrolling sent message, and a reply above it.
+    private const float InitialDialogueSpace = 320;
+
     public static int GetDialogWidth(int characterViewportWidth) => Math.Clamp(
         characterViewportWidth,
         AppSettings.MinimumDialogBubbleWidth,
@@ -18,17 +22,26 @@ public static class OverlayLayoutPolicy
     public static double GetCharacterHorizontalOffset(int characterViewportWidth) =>
         (GetWindowWidth(characterViewportWidth) - characterViewportWidth) / 2d;
 
-    // Grow in blocks for the duration of a clip so each pixel of travel doesn't resize a layered HWND.
+    internal static RectangleF ReserveDrawingExtent(RectangleF previous, int characterWidth, int characterHeight,
+        float dialogueHeight, bool hasModel)
+    {
+        var motionMargin = hasModel ? DrawingBlock : 0;
+        var width = Math.Max(GetWindowWidth(characterWidth), characterWidth + 2 * motionMargin);
+        var above = Math.Max(InitialDialogueSpace, MathF.Ceiling(dialogueHeight / DrawingBlock) * DrawingBlock);
+        var required = new RectangleF((characterWidth - width) / 2, -above, width, above + characterHeight + motionMargin);
+        return previous.IsEmpty ? required : RectangleF.Union(previous, required);
+    }
+
+    // Round the configured motion bounds outward, allowing a small rasterization margin.
     public static RectangleF ExpandModelExtent(RectangleF extent, RectangleF pose)
     {
-        const float step = 64;
         pose.Inflate(2, 2);
         if (extent.Contains(pose)) return extent;
         return RectangleF.FromLTRB(
-            Math.Min(extent.Left, MathF.Floor(pose.Left / step) * step),
-            Math.Min(extent.Top, MathF.Floor(pose.Top / step) * step),
-            Math.Max(extent.Right, MathF.Ceiling(pose.Right / step) * step),
-            Math.Max(extent.Bottom, MathF.Ceiling(pose.Bottom / step) * step));
+            Math.Min(extent.Left, MathF.Floor(pose.Left / DrawingBlock) * DrawingBlock),
+            Math.Min(extent.Top, MathF.Floor(pose.Top / DrawingBlock) * DrawingBlock),
+            Math.Max(extent.Right, MathF.Ceiling(pose.Right / DrawingBlock) * DrawingBlock),
+            Math.Max(extent.Bottom, MathF.Ceiling(pose.Bottom / DrawingBlock) * DrawingBlock));
     }
 
     public static RectangleF GetDrawingWindow(RectangleF character, float dialogHeight,

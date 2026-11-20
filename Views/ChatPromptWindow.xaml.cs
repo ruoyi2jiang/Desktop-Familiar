@@ -71,11 +71,33 @@ public partial class ChatPromptWindow : Window
         Input.Clear();
         SendButton.IsEnabled = false;
         Input.Focus();
+        var previous = SentText.Text;
+        var succeeded = false;
         try
         {
-            if (!await _send(text) && Input.Text.Length == 0) Input.Text = text;
+            SetSentMessage(text);
+            succeeded = await _send(text);
         }
-        finally { SendButton.IsEnabled = true; }
+        finally
+        {
+            if (!succeeded && !_talk.Closed)
+            {
+                SetSentMessage(previous);
+                if (Input.Text.Length == 0)
+                {
+                    Input.Text = text;
+                    Input.CaretIndex = text.Length;
+                }
+            }
+            SendButton.IsEnabled = true;
+        }
+    }
+
+    private void SetSentMessage(string text)
+    {
+        SentText.Text = text;
+        SentBubble.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        SentScroll.ScrollToTop();
     }
 
     private void Status(string? key)

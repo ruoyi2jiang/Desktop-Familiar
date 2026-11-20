@@ -8,6 +8,8 @@ The root JSON document is `DesktopCompanionData`. Schema 16 saves to `%LOCALAPPD
 - `Companions`: locally configured `CompanionDefinition` objects.
 - `CalendarEvents`: local event definitions and reminder state.
 
+The `RunAtStartup` field mirrors the per-user Windows sign-in registration when the library opens. Setup and the portable app enable it by default only if both the `Library` directory and the legacy `desktop-familiar.json` are absent. The first use creates the directory, so an empty library also preserves an opt-out. Opening the app leaves the configuration JSON untouched.
+
 Opening the library reads this build’s own schema file first. If it is absent, the app reads the highest numbered library in the same folder, then falls back to the original `%LOCALAPPDATA%\DesktopFamiliar\desktop-familiar.json` if there are no versioned libraries. Migration and normalization run in memory. A user save writes only the current schema’s file. A newer source can supply recognized fields and compatible list items. Unknown values stay in the source. Separate schema copies evolve independently. A newer document placed at the current write path is protected against replacement.
 
 Schema 3 adds empty grouped interaction-state assignments to every companion. Schema 8 retires the former core Auto Clicker fields. Startup can copy legacy click preferences from the original shared file to the addon's scoped settings file. Future schema changes require a tested migration.

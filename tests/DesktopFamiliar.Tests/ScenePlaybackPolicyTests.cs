@@ -37,6 +37,33 @@ public sealed class ScenePlaybackPolicyTests
         Assert.Equal(0.6f, ScenePlaybackPolicy.ModelBlendSeconds(from, AnimationSceneRole.IdleDefault));
 
     [Theory]
+    [InlineData(AnimationSceneRole.IdleDefault)]
+    [InlineData(AnimationSceneRole.IdleRandom)]
+    [InlineData(AnimationSceneRole.SelfBirthday)]
+    [InlineData(AnimationSceneRole.UserBirthday)]
+    public void ChatSilencesAmbientDialogueAndUsesTheShortBlendWhileWaiting(AnimationSceneRole role)
+    {
+        foreach (var appearance in Enum.GetValues<CompanionAppearance>())
+        {
+            Assert.True(ScenePlaybackPolicy.ShouldPresentSceneDialog(false, role, appearance));
+            Assert.False(ScenePlaybackPolicy.ShouldPresentSceneDialog(false, role, appearance, chatInProgress: true));
+        }
+        Assert.Equal(0.3f, ScenePlaybackPolicy.ModelBlendSeconds(role, AnimationSceneRole.IdleDefault, chatInProgress: true));
+    }
+
+    [Theory]
+    [InlineData(AnimationSceneRole.Reminder)]
+    [InlineData(AnimationSceneRole.Start)]
+    [InlineData(AnimationSceneRole.Click)]
+    [InlineData(AnimationSceneRole.DragHold)]
+    [InlineData(AnimationSceneRole.Exit)]
+    public void ChatPreservesPrioritySceneDialogue(AnimationSceneRole role)
+    {
+        Assert.False(ScenePlaybackPolicy.IsAmbientIdle(role));
+        Assert.True(ScenePlaybackPolicy.ShouldPresentSceneDialog(false, role, CompanionAppearance.Model3D, chatInProgress: true));
+    }
+
+    [Theory]
     [InlineData(AnimationSceneRole.Start, AnimationSceneRole.IdleDefault, 0.3f)]
     [InlineData(AnimationSceneRole.ChatReply, AnimationSceneRole.IdleDefault, 0.3f)]
     [InlineData(AnimationSceneRole.IdleDefault, AnimationSceneRole.ChatReply, 0.3f)]

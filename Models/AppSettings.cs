@@ -14,7 +14,7 @@ public sealed class AppSettings
 
     public ChatPreferences Chat { get; set; } = new();
     public bool FocusModeEnabled { get; set; }
-    public bool RunAtStartup { get; set; }
+    public bool RunAtStartup { get; set; } = true;
     public DateTime? UserBirthday { get; set; }
     public double IdleDelaySeconds { get; set; } = DefaultIdleDelaySeconds;
     public AppTheme Theme { get; set; } = AppTheme.Crimson;

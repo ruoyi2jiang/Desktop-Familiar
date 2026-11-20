@@ -19,6 +19,33 @@ namespace DesktopFamiliar.Tests;
 public class CompanionAppearanceTests
 {
     [Fact]
+    public void NewSpriteFramesKeepTheirFadeUntilTheTransitionEnds()
+    {
+        RunOnSta(() =>
+        {
+            var current = new System.Windows.Controls.Image();
+            var outgoing = new System.Windows.Controls.Image();
+            var sprites = new SpriteCrossfade(current, outgoing);
+            BitmapSource Frame(byte shade) => BitmapSource.Create(1, 1, 96, 96,
+                System.Windows.Media.PixelFormats.Gray8, null, new byte[] { shade }, 1);
+            var idle = Frame(0);
+            var next = Frame(128);
+            sprites.Present(idle);
+            sprites.BeginScene(transition: true);
+            sprites.Present(Frame(255));
+            sprites.Present(next);
+            Assert.Same(next, current.Source);
+            Assert.Same(idle, outgoing.Source);
+            Assert.True(current.HasAnimatedProperties);
+
+            sprites.Clear();
+            Assert.Equal(1d, current.Opacity);
+            Assert.Null(outgoing.Source);
+            Assert.False(current.HasAnimatedProperties);
+        });
+    }
+
+    [Fact]
     public void SchemaElevenAddsAnEmptyModelAndPreservesSpriteRolesAndIdentity()
     {
         using var dir = new TemporaryDirectory();
@@ -574,6 +601,164 @@ public class CompanionAppearanceTests
             Assert.Same(image, CompanionPictureLoader.Load(CompanionPortrait.From(pet)));
             pet.Appearance = CompanionAppearance.Images2D;
             Assert.Null(CompanionPictureLoader.Load(CompanionPortrait.From(pet)));
+        });
+    }
+
+    [Fact]
+    public void ConfiguredMotionReservesBothDirectionsBeforePlaybackAndRecalculatesOnEdit()
+    {
+        using var dir = new TemporaryDirectory();
+        var source = ModelRoot.Load(CreateTriangle(dir.Path));
+        var body = source.LogicalNodes.Single();
+        source.CreateAnimation("West").CreateTranslationChannel(body, new Dictionary<float, Vector3>
+            { [0] = Vector3.Zero, [0.004f] = new(-12, 8, 0), [0.008f] = Vector3.Zero });
+        source.CreateAnimation("East").CreateTranslationChannel(body, new Dictionary<float, Vector3>
+            { [0] = Vector3.Zero, [1] = new(9, -5, 0) });
+        source.CreateAnimation("Unused").CreateTranslationChannel(body, new Dictionary<float, Vector3>
+            { [0] = Vector3.Zero, [1] = new(1000, 0, 0) });
+        var path = Path.Combine(dir.Path, "motion.glb");
+        source.SaveGLB(path);
+        RunOnSta(() =>
+        {
+            var view = new CompanionModelView();
+            var frame = new System.Windows.Size(180, 240);
+            var scene = new AnimationScene { ModelParts = ["West", "East"] };
+            var appearance = new ModelAppearance { FilePath = path, Animations = [scene] };
+            view.Play(path, null, true);
+            var area = view.GetConfiguredMotionBounds(appearance, frame)!.Value;
+            foreach (var (name, time) in new[] { ("West", 0.004), ("East", 1.0) })
+            {
+                view.Play(path, name, false);
+                view.SeekSource(time);
+                Assert.True(area.Contains(view.GetPoseBounds(frame)));
+            }
+            scene.ModelParts = ["East"];
+            var smaller = view.GetConfiguredMotionBounds(appearance, frame)!.Value;
+            Assert.True(smaller.Left > area.Left && smaller.Top > area.Top);
+            Assert.Equal(area.Right, smaller.Right, 4);
+            scene.ModelParts.Add("Unused");
+            Assert.True(view.GetConfiguredMotionBounds(appearance, frame)!.Value.Right > area.Right * 5);
+            view.Clear();
+        });
+    }
+
+    [Fact]
+    public void DisplayChangeReappliesMotionOnTheExpandedDesktopAndStopsAfterClose()
+    {
+        RunOnSta(() =>
+        {
+            var desktop = new System.Drawing.RectangleF(0, 0, 800, 600);
+            var pet = new System.Drawing.RectangleF(560, 320, 200, 200);
+            var motion = new System.Drawing.RectangleF(0, 0, 1200, 200);
+            var surface = OverlayLayoutPolicy.GetDrawingWindow(pet, 96, motion, desktop);
+            using var window = new System.Windows.Interop.HwndSource(new("Display change test")
+                { Width = 1, Height = 1, WindowStyle = 0 });
+            var refreshes = 0;
+            using var observer = new DesktopFamiliar.Views.OverlayDisplayObserver(window, () =>
+            {
+                surface = OverlayLayoutPolicy.GetDrawingWindow(pet, 96, motion, desktop);
+                refreshes++;
+            });
+            void Notify() => SendMessage(window.Handle, 0x007E, 0, 0);
+            void Drain() => window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+
+            Assert.Equal(800, surface.Right);
+            desktop.Width = 2000;
+            Notify();
+            Notify();
+            Assert.Equal(0, refreshes);
+            Drain();
+            Assert.Equal(1, refreshes);
+            Assert.Equal(pet.X + motion.Right, surface.Right);
+            Notify();
+            observer.Dispose();
+            Notify();
+            Drain();
+            Assert.Equal(1, refreshes);
+        });
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
+        static extern nint SendMessage(nint hwnd, int message, nint wParam, nint lParam);
+    }
+
+    [Fact]
+    public void FixedOrientationModelReservesOnlyItsProjectedRestAndTranslation()
+    {
+        using var dir = new TemporaryDirectory();
+        var source = ModelRoot.Load(CreateTriangle(dir.Path));
+        var root = source.LogicalNodes.Single();
+        var body = root.CreateNode("body");
+        body.Mesh = root.Mesh;
+        root.Mesh = null;
+        root.LocalMatrix = Matrix4x4.CreateScale(2, 3, 1);
+        var origin = new Vector3(0, 0, 100);
+        body.LocalMatrix = Matrix4x4.CreateTranslation(origin);
+        source.CreateAnimation("Depth").CreateTranslationChannel(body, new Dictionary<float, Vector3>
+            { [0] = origin, [1] = origin + new Vector3(0, 0, 200) });
+        var travel = source.CreateAnimation("Travel");
+        travel.CreateTranslationChannel(root, new Dictionary<float, Vector3> { [0] = Vector3.Zero, [1] = Vector3.UnitX });
+        travel.CreateTranslationChannel(body, new Dictionary<float, Vector3>
+            { [0] = origin, [1] = origin + new Vector3(1, -2, -200) });
+        var path = Path.Combine(dir.Path, "off-origin.glb");
+        source.SaveGLB(path);
+        RunOnSta(() =>
+        {
+            var view = new CompanionModelView();
+            var frame = new System.Windows.Size(180, 240);
+            var scene = new AnimationScene();
+            var appearance = new ModelAppearance { Animations = [scene] };
+            view.Play(path, null, true);
+            var rest = view.GetPoseBounds(frame);
+            Assert.Equal(rest, view.GetConfiguredMotionBounds(appearance, frame));
+            foreach (var clip in new[] { "Depth", "Travel" })
+            {
+                scene.ModelClip = clip;
+                var reserved = view.GetConfiguredMotionBounds(appearance, frame);
+                view.PlayScene(path, scene, false);
+                view.SeekSource(1);
+                var actual = view.GetPoseBounds(frame);
+                if (clip == "Travel") Assert.True(actual.Left > rest.Right && actual.Top > rest.Bottom);
+                var expected = System.Windows.Rect.Union(rest, actual);
+                Assert.NotNull(reserved);
+                Assert.Equal(expected.Left, reserved.Value.Left, 6);
+                Assert.Equal(expected.Top, reserved.Value.Top, 6);
+                Assert.Equal(expected.Right, reserved.Value.Right, 6);
+                Assert.Equal(expected.Bottom, reserved.Value.Bottom, 6);
+            }
+            view.Clear();
+        });
+    }
+
+    [Fact]
+    public void ConfiguredMotionIncludesCubicOvershootAndAnimatedMorphDisplacement()
+    {
+        using var dir = new TemporaryDirectory();
+        var source = ModelRoot.Load(CreateTriangle(dir.Path));
+        var body = source.LogicalNodes.Single();
+        var primitive = body.Mesh.Primitives.Single();
+        primitive.SetMorphTargetAccessors(0, primitive.VertexAccessors);
+        var animation = source.CreateAnimation("Spring");
+        animation.CreateTranslationChannel(body, new Dictionary<float, (Vector3, Vector3, Vector3)>
+        {
+            [0] = (Vector3.Zero, Vector3.Zero, new(100, 0, 0)),
+            [1] = (new(-100, 0, 0), Vector3.Zero, Vector3.Zero)
+        });
+        animation.CreateMorphChannel(body, new Dictionary<float, SparseWeight8>
+            { [0] = default, [0.5f] = SparseWeight8.Create(new float[] { 4 }), [1] = default }, 1);
+        var path = Path.Combine(dir.Path, "spring.glb");
+        source.SaveGLB(path);
+        RunOnSta(() =>
+        {
+            var view = new CompanionModelView();
+            var appearance = new ModelAppearance { Animations = [new() { ModelClip = "Spring" }] };
+            var frame = new System.Windows.Size(200, 200);
+            view.Play(path, "Spring", false);
+            var area = view.GetConfiguredMotionBounds(appearance, frame)!.Value;
+            view.SeekSource(0.5);
+            var pose = view.GetPoseBounds(frame);
+            Assert.True(pose.X > frame.Width && pose.Height > frame.Height);
+            Assert.True(area.Contains(pose), $"Configured area {area} must enclose spring at its peak {pose}.");
+            view.Clear();
         });
     }
 

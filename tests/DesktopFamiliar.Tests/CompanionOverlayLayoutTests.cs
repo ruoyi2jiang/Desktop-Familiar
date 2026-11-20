@@ -95,13 +95,37 @@ public sealed class CompanionOverlayLayoutTests
         var status = window.Descendants().Single(e => (string?)e.Attribute(x + "Name") == "VoiceStatus");
         var input = window.Descendants().Single(e => (string?)e.Attribute(x + "Name") == "Input");
         Assert.Same(input.Parent, status.Parent);
-        Assert.Equal("1", status.Attribute("Grid.Row")?.Value);
+        Assert.Equal("2", status.Attribute("Grid.Row")?.Value);
         Assert.Equal("4", status.Attribute("Grid.ColumnSpan")?.Value);
         Assert.Equal("Wrap", status.Attribute("TextWrapping")?.Value);
         Assert.Equal("Collapsed", status.Attribute("Visibility")?.Value);
         Assert.Equal("Height", window.Attribute("SizeToContent")?.Value);
         Assert.Null(window.Attribute("Width"));
         Assert.Null(window.Attribute("Height"));
+    }
+
+    [Fact]
+    public void SentMessageWrapsAboveTheInputAndLongMessagesCanScroll()
+    {
+        var document = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "ChatPromptWindow.xaml")));
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement Named(string name) => document.Descendants().Single(e => (string?)e.Attribute(x + "Name") == name);
+        var bubble = Named("SentBubble");
+        var scroll = Named("SentScroll");
+        var text = Named("SentText");
+
+        Assert.Same(Named("Input").Parent, bubble.Parent);
+        Assert.Equal("0", (string?)bubble.Attribute("Grid.Row") ?? "0");
+        Assert.Equal("1", (string?)Named("Input").Attribute("Grid.Row"));
+        Assert.Equal("Right", (string?)bubble.Attribute("HorizontalAlignment"));
+        Assert.Equal("Collapsed", (string?)bubble.Attribute("Visibility"));
+        Assert.Contains(bubble, scroll.Ancestors());
+        Assert.Same(scroll, text.Parent);
+        Assert.NotNull(scroll.Attribute("MaxHeight"));
+        Assert.Equal("Auto", (string?)scroll.Attribute("VerticalScrollBarVisibility"));
+        Assert.Equal("Disabled", (string?)scroll.Attribute("HorizontalScrollBarVisibility"));
+        Assert.Equal("Wrap", (string?)text.Attribute("TextWrapping"));
+        Assert.Equal("None", (string?)text.Attribute("TextTrimming"));
     }
 
     private static string FindRepositoryFile(string relativePath)

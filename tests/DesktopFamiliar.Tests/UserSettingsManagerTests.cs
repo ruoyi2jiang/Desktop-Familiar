@@ -2,11 +2,96 @@ using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Storage;
+using Microsoft.Win32;
 
 namespace DesktopFamiliar.Tests;
 
 public sealed class UserSettingsManagerTests
 {
+    [Theory]
+    [InlineData(true, false, true, 1)]
+    [InlineData(true, true, true, 0)]
+    [InlineData(false, false, false, 0)]
+    [InlineData(false, true, true, 0)]
+    public void StartupDefaultOnlyRegistersOnFreshFirstUse(bool firstUse, bool registered, bool expected, int writes)
+    {
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData()) { FailSaves = true };
+        var startup = new TestStartupRegistration(registered);
+        var manager = new CompanionManager(repository, startup, firstUse);
+        Assert.Equal(expected, startup.IsEnabled());
+        Assert.Equal(expected, manager.Data.Settings.RunAtStartup);
+        Assert.Equal(writes, startup.Writes);
+    }
+
+    [Fact]
+    public void TurningStartupOffSurvivesRestartAndFailedChangesAreRolledBack()
+    {
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData());
+        var startup = new TestStartupRegistration(false);
+        var manager = new CompanionManager(repository, startup, isFirstUse: true);
+        manager.SetRunAtStartup(false);
+        var reopened = new CompanionManager(repository, startup, isFirstUse: false);
+        Assert.False(reopened.Data.Settings.RunAtStartup);
+        Assert.False(repository.Load().Settings.RunAtStartup);
+
+        repository.FailSaves = true;
+        Assert.Throws<AppPersistenceException>(() => reopened.SetRunAtStartup(true));
+        Assert.False(startup.IsEnabled());
+        Assert.False(reopened.Data.Settings.RunAtStartup);
+    }
+
+    [Fact]
+    public void StartupRegistrationDeniedStillOpensWithStartupOff()
+    {
+        var startup = new TestStartupRegistration(false) { DenyWrites = true };
+        var repository = new MemoryCompanionRepository(new DesktopCompanionData());
+        var manager = new CompanionManager(repository, startup, isFirstUse: true);
+        Assert.False(manager.Data.Settings.RunAtStartup);
+        Assert.False(startup.IsEnabled());
+    }
+
+    [Theory]
+    [InlineData(RegistryValueKind.String)]
+    [InlineData(RegistryValueKind.ExpandString)]
+    public void FailedStartupOptOutRestoresTheOriginalCommandAndRegistryType(RegistryValueKind kind)
+    {
+        var testKey = $@"Software\DesktopFamiliar-StartupTest-{Guid.NewGuid():N}";
+        const string name = "Desktop Familiar";
+        const string original = "\"%LOCALAPPDATA%\\Portable copy\\DesktopFamiliar.exe\"";
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(testKey);
+            key.SetValue(name, original, kind);
+            var repository = new MemoryCompanionRepository(new DesktopCompanionData()) { FailSaves = true };
+            var manager = new CompanionManager(repository, new StartupService(testKey), isFirstUse: false);
+
+            Assert.Throws<AppPersistenceException>(() => manager.SetRunAtStartup(false));
+
+            Assert.True(manager.Data.Settings.RunAtStartup);
+            Assert.Equal(original, key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames));
+            Assert.Equal(kind, key.GetValueKind(name));
+        }
+        finally
+        {
+            Registry.CurrentUser.DeleteSubKey(testKey, throwOnMissingSubKey: false);
+        }
+    }
+
+    private sealed class TestStartupRegistration(bool enabled) : IStartupRegistration
+    {
+        public int Writes { get; private set; }
+        public bool DenyWrites { get; init; }
+        public bool IsEnabled() => enabled;
+        public Action SetEnabled(bool value)
+        {
+            if (DenyWrites) throw new UnauthorizedAccessException();
+            var previous = enabled;
+            enabled = value;
+            Writes++;
+            return () => enabled = previous;
+        }
+    }
+
     [Fact]
     public void UserBirthdayIsNormalizedAndPersisted()
     {

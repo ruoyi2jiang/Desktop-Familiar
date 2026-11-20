@@ -10,6 +10,7 @@ namespace DesktopFamiliar.Services;
 public sealed class CompanionManager
 {
     private readonly ICompanionRepository _storage;
+    private readonly IStartupRegistration _startup;
     private DesktopCompanionData _lastPersistedData;
 
     public DesktopCompanionData Data { get; }
@@ -36,10 +37,28 @@ public sealed class CompanionManager
     public event EventHandler? CalendarEventsChanged;
 
     public CompanionManager(ICompanionRepository storage)
+        : this(storage, new StartupService(), isFirstUse: false) { }
+
+    internal CompanionManager(ICompanionRepository storage, IStartupRegistration startup, bool isFirstUse)
     {
         _storage = storage;
+        _startup = startup;
         Data = storage.Load();
-        Data.Settings.RunAtStartup = StartupService.IsEnabled();
+        try
+        {
+            var enabled = startup.IsEnabled();
+            if (isFirstUse && !enabled)
+            {
+                startup.SetEnabled(true);
+                enabled = true;
+            }
+            Data.Settings.RunAtStartup = enabled;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException or InvalidOperationException)
+        {
+            AppLogger.Warning("Windows sign-in startup could not be initialized.", ex);
+            Data.Settings.RunAtStartup = false;
+        }
 
         if (CurrentCompanion is null && Data.Companions.Count > 0)
             Data.Settings.CurrentCompanionId = Data.Companions[0].Id;
@@ -136,8 +155,7 @@ public sealed class CompanionManager
 
     public void SetRunAtStartup(bool enabled)
     {
-        var previous = Data.Settings.RunAtStartup;
-        StartupService.SetEnabled(enabled);
+        var undoRegistration = _startup.SetEnabled(enabled);
         Data.Settings.RunAtStartup = enabled;
         try
         {
@@ -147,7 +165,7 @@ public sealed class CompanionManager
         {
             try
             {
-                StartupService.SetEnabled(previous);
+                undoRegistration();
             }
             catch (Exception rollbackException)
             {

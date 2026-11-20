@@ -58,18 +58,25 @@ public static class ScenePlaybackPolicy
     public static bool ShouldPresentSceneDialog(
         bool focusModeEnabled,
         AnimationSceneRole role,
-        CompanionAppearance appearance = CompanionAppearance.Images2D) =>
+        CompanionAppearance appearance = CompanionAppearance.Images2D,
+        bool chatInProgress = false) =>
         role is not (AnimationSceneRole.ReminderFallback or AnimationSceneRole.ChatReply)
+        && !(chatInProgress && IsAmbientIdle(role))
         && (appearance == CompanionAppearance.Model3D || !IsInteractionRole(role))
         && (!focusModeEnabled || role == AnimationSceneRole.Reminder);
+
+    internal static bool IsAmbientIdle(AnimationSceneRole role) => role is
+        AnimationSceneRole.IdleDefault or AnimationSceneRole.IdleRandom
+        or AnimationSceneRole.SelfBirthday or AnimationSceneRole.UserBirthday;
 
     public static bool BeginIdleUnderDialogue(AnimationSceneRole role, CompanionActivityState state) =>
         role == AnimationSceneRole.Start && state == CompanionActivityState.Idle;
 
-    internal static float ModelBlendSeconds(AnimationSceneRole from, AnimationSceneRole to)
+    internal static float ModelBlendSeconds(AnimationSceneRole from, AnimationSceneRole to, bool chatInProgress = false)
     {
         if (from == AnimationSceneRole.None) return 0;
         if (from == AnimationSceneRole.ChatReply || to == AnimationSceneRole.ChatReply
+            || (chatInProgress && IsAmbientIdle(from) && to == AnimationSceneRole.IdleDefault)
             || (from == AnimationSceneRole.Start && to == AnimationSceneRole.IdleDefault))
             return ModelPoseTransition.DefaultDuration;
         return to == AnimationSceneRole.IdleDefault && from != AnimationSceneRole.IdleDefault
