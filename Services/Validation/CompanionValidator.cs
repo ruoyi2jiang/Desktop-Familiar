@@ -12,6 +12,26 @@ public static class CompanionValidator
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(companion.Name))
             errors.Add(LocalizationService.Get("Validation.CompanionName"));
+        if (companion.Appearance == CompanionAppearance.Model3D)
+        {
+            try
+            {
+                var model = companion.Model3D;
+                var clips = Animation.GlbModelFile.ReadClips(model.FilePath);
+                if (model.Animations.SelectMany(scene => scene.SourceClips).Any(clip => !clips.ContainsKey(clip)))
+                    errors.Add(LocalizationService.Get("Model3D.MissingClip"));
+                else if (model.Animations.Any(scene => !Animation.ModelClipTimeline.ValidSettings(scene.ModelLoop,
+                    scene.SourceClips.Sum(clip => clips[clip])))) errors.Add(LocalizationService.Get("Model3D.InvalidRange"));
+            }
+            catch (Exception exception) when (Animation.GlbModelFile.IsLoadError(exception))
+            {
+                errors.Add(LocalizationService.Get("Model3D.Invalid"));
+            }
+            if (companion.Model3D.Animations.Any(scene => !Animation.ModelDialogueTiming.HasValidCues(scene)))
+                errors.Add(LocalizationService.Get("Model3D.InvalidCues"));
+            ValidateAssignments(companion.Model3D, errors);
+            return errors;
+        }
         if (companion.Animations.Count == 0)
             errors.Add(LocalizationService.Get("Validation.AnimationRequired"));
         if (companion.Animations.Any(scene => !HasValidAnimationSource(scene)))
@@ -35,6 +55,12 @@ public static class CompanionValidator
         {
             errors.Add(LocalizationService.Get("Validation.DialogStartFrame"));
         }
+        ValidateAssignments(companion, errors);
+        return errors;
+    }
+
+    private static void ValidateAssignments(CompanionScenes companion, List<string> errors)
+    {
         if (companion.IdleDefaultAnimationId is null || companion.IdleDefaultAnimation is null)
             errors.Add(LocalizationService.Get("Validation.IdleDefaultAnimation"));
         if (companion.StartAnimationId is not null && companion.StartAnimation is null)
@@ -42,13 +68,14 @@ public static class CompanionValidator
         var optionalStateIds = new Guid?[]
         {
             companion.ReminderAnimationId,
+            companion.ChatReplyAnimationId,
             companion.SelfBirthdayAnimation1Id,
             companion.SelfBirthdayAnimation2Id,
             companion.UserBirthdayAnimation1Id,
             companion.UserBirthdayAnimation2Id,
             companion.ExitAnimationId
         };
-        if (optionalStateIds.Any(id => id is not null && companion.FindAnimation(id) is null))
+        if (optionalStateIds.Concat(companion.ChatExpressions.Values).Any(id => id is not null && companion.FindAnimation(id) is null))
             errors.Add(LocalizationService.Get("Validation.OptionalStateAnimation"));
         if (companion.InteractionStates is not null
             && Enum.GetValues<CompanionInteractionState>()
@@ -67,7 +94,6 @@ public static class CompanionValidator
             errors.Add(LocalizationService.Get("Validation.IdleRandomAnimation"));
         if (companion.Animations.Any(scene => scene.DialogCharactersPerSecond is < 5 or > 40))
             errors.Add(LocalizationService.Get("Validation.DialogSpeed"));
-        return errors;
     }
 
     private static bool HasValidAnimationSource(AnimationScene scene)

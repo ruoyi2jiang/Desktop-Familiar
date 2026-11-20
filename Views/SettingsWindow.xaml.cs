@@ -140,6 +140,9 @@ public partial class SettingsWindow : Window
         RefreshAddonManagerEntries();
         RefreshThemeCards();
         Loaded += (_, _) => _loaded = true;
+        InstalledAppVersion.Text = LocalizationService.Format("Settings.Updates.Installed", App.DisplayVersion);
+        Loaded += CheckAppUpdates_Click;
+        Closed += (_, _) => CloseAppUpdates();
         var history = App.CurrentApp.Chat.History;
         history.Changed += HistorySizeChanged;
         Closed += (_, _) => history.Changed -= HistorySizeChanged;

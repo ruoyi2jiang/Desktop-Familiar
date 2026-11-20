@@ -60,7 +60,7 @@ public static class IdleSceneSelectionPolicy
         CompanionDefinition companion,
         DateTime today) =>
         MatchesBirthday(companion.Birthday, today)
-            ? FindAssignedScenes(companion, companion.SelfBirthdayAnimation1Id, companion.SelfBirthdayAnimation2Id)
+            ? FindAssignedScenes(companion.ActiveScenes, companion.ActiveScenes.SelfBirthdayAnimation1Id, companion.ActiveScenes.SelfBirthdayAnimation2Id)
             : [];
 
     private static IReadOnlyList<AnimationScene> GetUserBirthdayCandidates(
@@ -68,11 +68,11 @@ public static class IdleSceneSelectionPolicy
         DateTime? userBirthday,
         DateTime today) =>
         userBirthday is DateTime birthday && IsSameMonthAndDay(birthday, today)
-            ? FindAssignedScenes(companion, companion.UserBirthdayAnimation1Id, companion.UserBirthdayAnimation2Id)
+            ? FindAssignedScenes(companion.ActiveScenes, companion.ActiveScenes.UserBirthdayAnimation1Id, companion.ActiveScenes.UserBirthdayAnimation2Id)
             : [];
 
     private static IReadOnlyList<AnimationScene> FindAssignedScenes(
-        CompanionDefinition companion,
+        CompanionScenes companion,
         params Guid?[] ids) =>
         ids.Where(id => id is not null)
             .Distinct()

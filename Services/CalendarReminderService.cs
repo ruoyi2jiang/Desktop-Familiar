@@ -172,7 +172,7 @@ public sealed class CalendarReminderService : IDisposable
             if (active.SnoozedUntil is not null)
             {
                 active.SnoozedUntil = null;
-                _manager.UpdateCalendarReminderState(active);
+                _manager.UpdateCalendarReminderState(active, automatic: true);
             }
             RaiseActiveReminder(active);
             return;
@@ -201,7 +201,7 @@ public sealed class CalendarReminderService : IDisposable
                 var occurrence = candidate.Occurrence!.Value;
                 if (CalendarOccurrenceCalculator.HasOccurrenceEnded(candidate.CalendarEvent, occurrence, now))
                 {
-                    MarkOccurrenceExpired(candidate.CalendarEvent, occurrence);
+                    _manager.ExpireCalendarReminder(candidate.CalendarEvent, occurrence);
                     expiredOccurrenceHandled = true;
                     break;
                 }
@@ -214,7 +214,7 @@ public sealed class CalendarReminderService : IDisposable
                 if (candidate.CalendarEvent.SnoozedUntil is not null)
                 {
                     candidate.CalendarEvent.SnoozedUntil = null;
-                    _manager.UpdateCalendarReminderState(candidate.CalendarEvent);
+                    _manager.UpdateCalendarReminderState(candidate.CalendarEvent, automatic: true);
                 }
                 _activeEventId = candidate.CalendarEvent.Id;
                 _activeOccurrence = occurrence;
@@ -263,7 +263,7 @@ public sealed class CalendarReminderService : IDisposable
             _isChecking = true;
         try
         {
-            MarkOccurrenceExpired(calendarEvent, occurrence.Value);
+            _manager.ExpireCalendarReminder(calendarEvent, occurrence.Value);
         }
         finally
         {
@@ -272,13 +272,6 @@ public sealed class CalendarReminderService : IDisposable
         }
         EndActiveReminder(CalendarReminderEndReason.Expired);
         return true;
-    }
-
-    private void MarkOccurrenceExpired(CalendarEvent calendarEvent, DateTime occurrence)
-    {
-        CalendarOccurrenceStatusTracker.MarkExpired(calendarEvent, occurrence);
-        calendarEvent.SnoozedUntil = null;
-        _manager.UpdateCalendarReminderState(calendarEvent);
     }
 
     private void EndActiveReminder(CalendarReminderEndReason reason)

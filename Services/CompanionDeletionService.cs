@@ -11,7 +11,7 @@ public sealed class CompanionDeletionService(CompanionManager manager, Companion
         manager.DeleteCompanion(id, deleteLocalData);
         if (deleteLocalData)
         {
-            var cleaned = FinishCleanup(id);
+            var cleaned = FinishCleanup(id, newRequest: companion != null);
             RetryPending(except: id);
             return cleaned;
         }
@@ -28,24 +28,34 @@ public sealed class CompanionDeletionService(CompanionManager manager, Companion
         return true;
     }
 
-    public void RetryPending(Guid? except = null)
+    public void RetryPending(Guid? except = null, bool deferSave = false)
     {
+        if (manager.RequiresExplicitSave) return;
         foreach (var id in manager.Data.PendingCompanionCleanup.ToArray())
-            if (id != except) FinishCleanup(id);
+            if (id != except) FinishCleanup(id, deferSave);
     }
 
-    private bool FinishCleanup(Guid id)
+    private bool FinishCleanup(Guid id, bool deferSave = false, bool newRequest = false)
     {
         if (!manager.Data.PendingCompanionCleanup.Contains(id) || manager.Data.Companions.Any(pet => pet.Id == id))
             return true;
         try
         {
-            history.Clear([id], ChatHistoryClearScope.MessagesAndNotes);
+            var receipt = storage.HistoryWipeReceipt(id);
+            if (newRequest || !File.Exists(receipt))
+            {
+                history.Clear([id], ChatHistoryClearScope.MessagesAndNotes);
+                // Remember this phase across asset retries and launches that leave the library read-only.
+                using var completed = File.Create(receipt);
+            }
             var liveAssets = manager.Data.Companions.SelectMany(pet => pet.GetAssetPaths());
-            var archivedImages = history.ListPets().Values.Select(pet => pet.Portrait).OfType<ArchivedPetPortrait>()
-                .SelectMany(portrait => new[] { portrait.PicturePath, portrait.IdleFramePath });
+            var archivedImages = history.ListPets().Values.Select(pet => pet.Portrait).OfType<CompanionPortrait>()
+                .SelectMany(portrait => new[] { portrait.PicturePath, portrait.IdleFramePath, portrait.ModelPath });
             if (storage.DeleteCompanionResources(id, liveAssets.Concat(archivedImages)))
-                manager.CompleteCompanionCleanup(id);
+            {
+                storage.FinishWipeOnNextSave(id);
+                manager.CompleteCompanionCleanup(id, deferSave);
+            }
             return true;
         }
         catch (Exception ex)

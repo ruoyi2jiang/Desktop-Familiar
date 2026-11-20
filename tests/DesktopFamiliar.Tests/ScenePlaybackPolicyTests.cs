@@ -5,6 +5,46 @@ namespace DesktopFamiliar.Tests;
 
 public sealed class ScenePlaybackPolicyTests
 {
+    [Theory]
+    [InlineData(AnimationSceneRole.IdleDefault, false)]
+    [InlineData(AnimationSceneRole.Reminder, false)]
+    [InlineData(AnimationSceneRole.ReminderFallback, false)]
+    [InlineData(AnimationSceneRole.DragLeft, false)]
+    [InlineData(AnimationSceneRole.DragRight, false)]
+    [InlineData(AnimationSceneRole.DragHold, false)]
+    [InlineData(AnimationSceneRole.ChatReply, false)]
+    [InlineData(AnimationSceneRole.Start, true)]
+    [InlineData(AnimationSceneRole.Click, true)]
+    [InlineData(AnimationSceneRole.IdleRandom, true)]
+    [InlineData(AnimationSceneRole.SelfBirthday, true)]
+    [InlineData(AnimationSceneRole.UserBirthday, true)]
+    [InlineData(AnimationSceneRole.Exit, true)]
+    public void ModelDialogueReleasesOnlyTransientDialogueLoops(AnimationSceneRole role, bool release)
+    {
+        Assert.Equal(release, ScenePlaybackPolicy.ShouldReleaseModelLoopAfterDialogue(role, ModelLoopMode.UntilDialogueEnds));
+        Assert.False(ScenePlaybackPolicy.ShouldReleaseModelLoopAfterDialogue(role, ModelLoopMode.FixedDuration));
+    }
+
+    [Theory]
+    [InlineData(AnimationSceneRole.IdleRandom)]
+    [InlineData(AnimationSceneRole.Click)]
+    [InlineData(AnimationSceneRole.DragLeft)]
+    [InlineData(AnimationSceneRole.DragRight)]
+    [InlineData(AnimationSceneRole.DragHold)]
+    [InlineData(AnimationSceneRole.SelfBirthday)]
+    [InlineData(AnimationSceneRole.UserBirthday)]
+    public void OrdinaryModelScenesBlendBackToIdle(AnimationSceneRole from) =>
+        Assert.Equal(0.6f, ScenePlaybackPolicy.ModelBlendSeconds(from, AnimationSceneRole.IdleDefault));
+
+    [Theory]
+    [InlineData(AnimationSceneRole.Start, AnimationSceneRole.IdleDefault, 0.3f)]
+    [InlineData(AnimationSceneRole.ChatReply, AnimationSceneRole.IdleDefault, 0.3f)]
+    [InlineData(AnimationSceneRole.IdleDefault, AnimationSceneRole.ChatReply, 0.3f)]
+    [InlineData(AnimationSceneRole.None, AnimationSceneRole.IdleDefault, 0f)]
+    [InlineData(AnimationSceneRole.IdleDefault, AnimationSceneRole.IdleDefault, 0f)]
+    public void ModelBlendsRespectExistingRoleBoundaries(AnimationSceneRole from, AnimationSceneRole to, float seconds) =>
+        Assert.Equal(seconds, ScenePlaybackPolicy.ModelBlendSeconds(from, to));
+
     [Fact]
     public void RandomIdleCandidates_ExcludeDefaultAndUnassignedScenes()
     {
@@ -103,6 +143,7 @@ public sealed class ScenePlaybackPolicyTests
     [Theory]
     [InlineData(false, AnimationSceneRole.IdleDefault, true)]
     [InlineData(false, AnimationSceneRole.ReminderFallback, false)]
+    [InlineData(false, AnimationSceneRole.ChatReply, false)]
     [InlineData(true, AnimationSceneRole.IdleDefault, false)]
     [InlineData(true, AnimationSceneRole.Start, false)]
     [InlineData(true, AnimationSceneRole.Exit, false)]
@@ -129,4 +170,15 @@ public sealed class ScenePlaybackPolicyTests
             focusModeEnabled: false,
             role));
     }
+
+    [Theory]
+    [InlineData(AnimationSceneRole.IdleDefault, CompanionActivityState.Idle, false, true)]
+    [InlineData(AnimationSceneRole.IdleRandom, CompanionActivityState.Idle, false, true)]
+    [InlineData(AnimationSceneRole.IdleRandom, CompanionActivityState.Idle, true, false)]
+    [InlineData(AnimationSceneRole.IdleDefault, CompanionActivityState.Reminder, false, false)]
+    [InlineData(AnimationSceneRole.DragLeft, CompanionActivityState.Idle, false, false)]
+    [InlineData(AnimationSceneRole.ChatReply, CompanionActivityState.Idle, false, false)]
+    public void ChatCanReplaceSilentIdleAndKeepsTheCurrentTalkLoopAcrossPages(AnimationSceneRole role,
+        CompanionActivityState activity, bool dialogue, bool expected) =>
+        Assert.Equal(expected, ScenePlaybackPolicy.CanStartChatReply(role, activity, dialogue));
 }

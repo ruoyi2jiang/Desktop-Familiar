@@ -45,6 +45,9 @@ public partial class CompanionEditorWindow : Window
     public CompanionEditorWindow(CompanionManager manager, CompanionStorage storage, CompanionDefinition? source)
     {
         InitializeComponent();
+        ModelPreview.SourceTimeChanged += UpdatePlayhead;
+        ModelPreview.Completed += ModelPreviewCompleted;
+        _captionTimer.Tick += (_, _) => UpdateModelCaption();
         _previewPlayer = new FrameAnimationPlayer(frame =>
         {
             FramePreviewImage.Source = frame;
@@ -86,11 +89,14 @@ public partial class CompanionEditorWindow : Window
         UpdateColorPreview();
         LoadBubbleChoices();
         UpdateChatPreview();
-        RefreshSceneSelectors();
-        if (_companion.Animations.Count > 0)
-            SceneList.SelectedIndex = 0;
+        AppearanceCombo.SelectedIndex = (int)_companion.Appearance;
+
         Closed += (_, _) =>
         {
+            StopModelCaptions();
+            ModelPreview.Clear();
+            CompanionPreviewModel.Clear();
+            ClickAreaModel.Clear();
             _previewPlayer.Dispose();
             _companionPreviewPlayer.Dispose();
             _clickAreaPreviewPlayer.Dispose();
@@ -130,33 +136,37 @@ public partial class CompanionEditorWindow : Window
         UpdateChatPreview();
     }
 
-    private void RefreshSceneSelectors(Guid? selectedId = null)
+    private void RefreshSceneSelectors(Guid? selectedId = null, bool switched = false)
     {
+        Guid? Assignment(ComboBox box, Guid? saved) => switched ? saved : GetAssignmentId(box, saved);
         selectedId ??= (SceneList.SelectedItem as AnimationScene)?.Id;
         SceneList.ItemsSource = null;
-        SceneList.ItemsSource = _companion.Animations;
-        SceneList.SelectedItem = _companion.Animations.FirstOrDefault(scene => scene.Id == selectedId);
+        var visible = VisibleScenes().ToList();
+        SceneList.ItemsSource = visible;
+        SceneList.SelectedItem = visible.FirstOrDefault(scene => scene.Id == selectedId) ?? (IsModel ? visible.FirstOrDefault() : null);
 
-        RefreshAssignmentCombo(StartCombo, GetAssignmentId(StartCombo, _companion.StartAnimationId));
-        RefreshAssignmentCombo(ReminderCombo, GetAssignmentId(ReminderCombo, _companion.ReminderAnimationId));
-        RefreshAssignmentCombo(IdleDefaultCombo, GetAssignmentId(IdleDefaultCombo, _companion.IdleDefaultAnimationId));
-        RefreshAssignmentCombo(ExitCombo, GetAssignmentId(ExitCombo, _companion.ExitAnimationId));
-        RefreshAssignmentCombo(DragLeftCombo, GetAssignmentId(DragLeftCombo, _companion.InteractionStates.DragLeftAnimationId));
-        RefreshAssignmentCombo(DragRightCombo, GetAssignmentId(DragRightCombo, _companion.InteractionStates.DragRightAnimationId));
-        RefreshAssignmentCombo(DragHoldCombo, GetAssignmentId(DragHoldCombo, _companion.InteractionStates.DragHoldAnimationId));
-        RefreshAssignmentCombo(SelfBirthday1Combo, GetAssignmentId(SelfBirthday1Combo, _companion.SelfBirthdayAnimation1Id));
-        RefreshAssignmentCombo(SelfBirthday2Combo, GetAssignmentId(SelfBirthday2Combo, _companion.SelfBirthdayAnimation2Id));
-        RefreshAssignmentCombo(UserBirthday1Combo, GetAssignmentId(UserBirthday1Combo, _companion.UserBirthdayAnimation1Id));
-        RefreshAssignmentCombo(UserBirthday2Combo, GetAssignmentId(UserBirthday2Combo, _companion.UserBirthdayAnimation2Id));
+        RefreshAssignmentCombo(StartCombo, Assignment(StartCombo, EditingScenes.StartAnimationId));
+        RefreshAssignmentCombo(ReminderCombo, Assignment(ReminderCombo, EditingScenes.ReminderAnimationId));
+        RefreshAssignmentCombo(ChatReplyCombo, Assignment(ChatReplyCombo, EditingScenes.ChatReplyAnimationId));
+        RefreshExpressionAssignments();
+        RefreshAssignmentCombo(IdleDefaultCombo, Assignment(IdleDefaultCombo, EditingScenes.IdleDefaultAnimationId));
+        RefreshAssignmentCombo(ExitCombo, Assignment(ExitCombo, EditingScenes.ExitAnimationId));
+        RefreshAssignmentCombo(DragLeftCombo, Assignment(DragLeftCombo, EditingScenes.InteractionStates.DragLeftAnimationId));
+        RefreshAssignmentCombo(DragRightCombo, Assignment(DragRightCombo, EditingScenes.InteractionStates.DragRightAnimationId));
+        RefreshAssignmentCombo(DragHoldCombo, Assignment(DragHoldCombo, EditingScenes.InteractionStates.DragHoldAnimationId));
+        RefreshAssignmentCombo(SelfBirthday1Combo, Assignment(SelfBirthday1Combo, EditingScenes.SelfBirthdayAnimation1Id));
+        RefreshAssignmentCombo(SelfBirthday2Combo, Assignment(SelfBirthday2Combo, EditingScenes.SelfBirthdayAnimation2Id));
+        RefreshAssignmentCombo(UserBirthday1Combo, Assignment(UserBirthday1Combo, EditingScenes.UserBirthdayAnimation1Id));
+        RefreshAssignmentCombo(UserBirthday2Combo, Assignment(UserBirthday2Combo, EditingScenes.UserBirthdayAnimation2Id));
 
         IdleRandomChecksPanel.Children.Clear();
-        foreach (var scene in _companion.Animations)
+        foreach (var scene in EditingScenes.Animations.Where(scene => visible.Contains(scene) || EditingScenes.IdleRandomAnimationIds.Contains(scene.Id)))
         {
             var check = new CheckBox
             {
                 Content = scene.DisplayName,
                 Tag = scene.Id,
-                IsChecked = _companion.IdleRandomAnimationIds.Contains(scene.Id),
+                IsChecked = EditingScenes.IdleRandomAnimationIds.Contains(scene.Id),
                 Margin = new Thickness(0, 4, 18, 8),
                 VerticalAlignment = VerticalAlignment.Center
             };
@@ -172,7 +182,7 @@ public partial class CompanionEditorWindow : Window
         {
             new(null, LocalizationService.Get("Editor.StateAssignment.None"))
         };
-        choices.AddRange(_companion.Animations.Select(scene =>
+        choices.AddRange(VisibleScenes().Concat(EditingScenes.Animations.Where(scene => scene.Id == selectedId)).Distinct().Select(scene =>
             new SceneAssignmentChoice(scene.Id, scene.DisplayName)));
         comboBox.ItemsSource = choices;
         comboBox.SelectedItem = choices.FirstOrDefault(choice => choice.Id == selectedId)
@@ -191,6 +201,7 @@ public partial class CompanionEditorWindow : Window
         SceneEmpty.Visibility = scene is null ? Visibility.Visible : Visibility.Collapsed;
         DialogGrid.ItemsSource = scene?.DialogLines;
         UpdateAnimationSourceUi(scene);
+        if (IsModel) ShowSelectedClip(scene);
     }
 
     private void UpdateAnimationSourceUi(AnimationScene? scene, int selectedFrame = -1)
@@ -314,6 +325,7 @@ public partial class CompanionEditorWindow : Window
 
     private void StateAssignment_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (sender != IdleDefaultCombo) return;
         RefreshCompanionPreview();
         RefreshClickAreaPreview();
     }
@@ -321,11 +333,16 @@ public partial class CompanionEditorWindow : Window
     private void RefreshCompanionPreview()
     {
         _companionPreviewPlayer.Stop(clearFrame: true);
-        var scene = _companion.FindAnimation(GetAssignmentId(IdleDefaultCombo, _companion.IdleDefaultAnimationId))
-            ?? _companion.FindAnimation(GetAssignmentId(StartCombo, _companion.StartAnimationId))
-            ?? _companion.Animations.FirstOrDefault();
-        ProfileAvatar.SetPicture(_companion.ProfilePicturePath, scene?.GetPreviewPath());
+        var scene = EditingScenes.FindAnimation(GetAssignmentId(IdleDefaultCombo, EditingScenes.IdleDefaultAnimationId));
+        ProfileAvatar.SetPicture(CompanionPortrait.From(_companion, scene));
         ResetPicture.Visibility = _companion.ProfilePicturePath == null ? Visibility.Collapsed : Visibility.Visible;
+        CompanionPreviewModel.Visibility = IsModel ? Visibility.Visible : Visibility.Collapsed;
+        if (IsModel)
+        {
+            CompanionPreviewHint.Visibility = PlayModelPreview(CompanionPreviewModel, scene)
+                ? Visibility.Collapsed : Visibility.Visible;
+            return;
+        }
         if (scene is null)
             return;
 
@@ -348,11 +365,11 @@ public partial class CompanionEditorWindow : Window
         {
             selectedId ??= (ClickAreaList.SelectedItem as CompanionClickArea)?.Id;
             ClickAreaList.ItemsSource = null;
-            ClickAreaList.ItemsSource = _companion.InteractionStates.ClickAreas;
+            ClickAreaList.ItemsSource = EditingScenes.InteractionStates.ClickAreas;
             ClickAreaAnimationCombo.ItemsSource = CreateSceneAssignmentChoices();
-            ClickAreaList.SelectedItem = _companion.InteractionStates.ClickAreas
+            ClickAreaList.SelectedItem = EditingScenes.InteractionStates.ClickAreas
                 .FirstOrDefault(area => area.Id == selectedId)
-                ?? _companion.InteractionStates.ClickAreas.FirstOrDefault();
+                ?? EditingScenes.InteractionStates.ClickAreas.FirstOrDefault();
             UpdateClickAreaSelectionFields();
             RenderClickAreas();
         }
@@ -369,14 +386,20 @@ public partial class CompanionEditorWindow : Window
         {
             new(null, LocalizationService.Get("Editor.StateAssignment.None"))
         };
-        choices.AddRange(_companion.Animations.Select(scene => new SceneAssignmentChoice(scene.Id, scene.DisplayName)));
+        choices.AddRange(VisibleScenes().Concat(EditingScenes.Animations.Where(scene => EditingScenes.InteractionStates.ClickAreas.Any(area => area.AnimationId == scene.Id))).Distinct().Select(scene => new SceneAssignmentChoice(scene.Id, scene.DisplayName)));
         return choices;
     }
 
     private void RefreshClickAreaPreview()
     {
         _clickAreaPreviewPlayer.Stop(clearFrame: true);
-        var scene = _companion.FindAnimation(GetAssignmentId(IdleDefaultCombo, _companion.IdleDefaultAnimationId));
+        var scene = EditingScenes.FindAnimation(GetAssignmentId(IdleDefaultCombo, EditingScenes.IdleDefaultAnimationId));
+        if (IsModel)
+        {
+            if (ClickAreaModel.IsVisible) PlayModelPreview(ClickAreaModel, scene);
+            ClickAreaPreviewHint.Visibility = scene is null ? Visibility.Visible : Visibility.Collapsed;
+            return;
+        }
         if (scene is null)
             return;
 
@@ -431,7 +454,7 @@ public partial class CompanionEditorWindow : Window
     {
         if (ClickAreaList.SelectedItem is not CompanionClickArea area)
             return;
-        _companion.InteractionStates.ClickAreas.Remove(area);
+        EditingScenes.InteractionStates.ClickAreas.Remove(area);
         RefreshClickAreaEditor();
     }
 
@@ -475,13 +498,13 @@ public partial class CompanionEditorWindow : Window
 
         var area = new CompanionClickArea
         {
-            Name = LocalizationService.Format("Editor.ClickAreas.DefaultName", _companion.InteractionStates.ClickAreas.Count + 1),
+            Name = LocalizationService.Format("Editor.ClickAreas.DefaultName", EditingScenes.InteractionStates.ClickAreas.Count + 1),
             LeftPercent = Math.Min(start.X, end.X) / ClickAreaSelectionCanvas.ActualWidth * 100d,
             TopPercent = Math.Min(start.Y, end.Y) / ClickAreaSelectionCanvas.ActualHeight * 100d,
             WidthPercent = width / ClickAreaSelectionCanvas.ActualWidth * 100d,
             HeightPercent = height / ClickAreaSelectionCanvas.ActualHeight * 100d
         };
-        _companion.InteractionStates.ClickAreas.Add(area);
+        EditingScenes.InteractionStates.ClickAreas.Add(area);
         RefreshClickAreaEditor(area.Id);
         e.Handled = true;
     }
@@ -494,7 +517,7 @@ public partial class CompanionEditorWindow : Window
         if (ClickAreaSelectionCanvas.ActualWidth <= 0 || ClickAreaSelectionCanvas.ActualHeight <= 0)
             return;
 
-        foreach (var area in _companion.InteractionStates.ClickAreas)
+        foreach (var area in EditingScenes.InteractionStates.ClickAreas)
         {
             var rectangle = new Rectangle
             {
@@ -523,9 +546,10 @@ public partial class CompanionEditorWindow : Window
     {
         var scene = new AnimationScene
         {
-            Name = LocalizationService.Format("Editor.Animation.DefaultNumberedName", _companion.Animations.Count + 1)
+            Name = LocalizationService.Format("Editor.Animation.DefaultNumberedName", EditingScenes.Animations.Count + 1)
         };
-        _companion.Animations.Add(scene);
+        StoreAssignments();
+        EditingScenes.Animations.Add(scene);
         RefreshSceneSelectors(scene.Id);
     }
 
@@ -541,26 +565,32 @@ public partial class CompanionEditorWindow : Window
             MessageBoxResult.No);
         if (result != MessageBoxResult.Yes)
             return;
-        _companion.Animations.Remove(scene);
-        _companion.IdleRandomAnimationIds.Remove(scene.Id);
-        if (_companion.StartAnimationId == scene.Id)
-            _companion.StartAnimationId = null;
-        if (_companion.ReminderAnimationId == scene.Id)
-            _companion.ReminderAnimationId = null;
-        if (_companion.IdleDefaultAnimationId == scene.Id)
-            _companion.IdleDefaultAnimationId = null;
-        if (_companion.SelfBirthdayAnimation1Id == scene.Id)
-            _companion.SelfBirthdayAnimation1Id = null;
-        if (_companion.SelfBirthdayAnimation2Id == scene.Id)
-            _companion.SelfBirthdayAnimation2Id = null;
-        if (_companion.UserBirthdayAnimation1Id == scene.Id)
-            _companion.UserBirthdayAnimation1Id = null;
-        if (_companion.UserBirthdayAnimation2Id == scene.Id)
-            _companion.UserBirthdayAnimation2Id = null;
-        if (_companion.ExitAnimationId == scene.Id)
-            _companion.ExitAnimationId = null;
-        _companion.InteractionStates.ClearAnimationId(scene.Id);
-        RefreshSceneSelectors(_companion.Animations.FirstOrDefault()?.Id);
+        StoreAssignments();
+        EditingScenes.Animations.Remove(scene);
+        foreach (var part in EditingScenes.Animations.Where(part => part.PartOfSceneId == scene.Id)) part.PartOfSceneId = null;
+        EditingScenes.IdleRandomAnimationIds.Remove(scene.Id);
+        if (EditingScenes.StartAnimationId == scene.Id)
+            EditingScenes.StartAnimationId = null;
+        if (EditingScenes.ReminderAnimationId == scene.Id)
+            EditingScenes.ReminderAnimationId = null;
+        if (EditingScenes.ChatReplyAnimationId == scene.Id)
+            EditingScenes.ChatReplyAnimationId = null;
+        foreach (var key in EditingScenes.ChatExpressions.Where(pair => pair.Value == scene.Id).Select(pair => pair.Key).ToArray())
+            EditingScenes.ChatExpressions[key] = null;
+        if (EditingScenes.IdleDefaultAnimationId == scene.Id)
+            EditingScenes.IdleDefaultAnimationId = null;
+        if (EditingScenes.SelfBirthdayAnimation1Id == scene.Id)
+            EditingScenes.SelfBirthdayAnimation1Id = null;
+        if (EditingScenes.SelfBirthdayAnimation2Id == scene.Id)
+            EditingScenes.SelfBirthdayAnimation2Id = null;
+        if (EditingScenes.UserBirthdayAnimation1Id == scene.Id)
+            EditingScenes.UserBirthdayAnimation1Id = null;
+        if (EditingScenes.UserBirthdayAnimation2Id == scene.Id)
+            EditingScenes.UserBirthdayAnimation2Id = null;
+        if (EditingScenes.ExitAnimationId == scene.Id)
+            EditingScenes.ExitAnimationId = null;
+        EditingScenes.InteractionStates.ClearAnimationId(scene.Id);
+        RefreshSceneSelectors(EditingScenes.Animations.FirstOrDefault()?.Id);
     }
 
     private void SceneNameBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -570,6 +600,7 @@ public partial class CompanionEditorWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             SceneList.Items.Refresh();
+            RefreshExpressionAssignments();
             foreach (var comboBox in GetAssignmentCombos())
             {
                 if (comboBox.Items.OfType<SceneAssignmentChoice>()
@@ -1115,7 +1146,7 @@ public partial class CompanionEditorWindow : Window
             Filter = LocalizationService.Get("FileDialog.Bubble.Filter")
         };
         if (picker.ShowDialog(this) != true) return;
-        if (CompanionPictureLoader.Load(picker.FileName) == null)
+        if (CompanionPictureLoader.LoadImage(picker.FileName) == null)
         {
             MessageBox.Show(this, LocalizationService.Get("Editor.Picture.Invalid"),
                 picker.Title, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -1160,10 +1191,29 @@ public partial class CompanionEditorWindow : Window
         UpdateChatPreview();
     }
 
+    private void StoreAssignments()
+    {
+        EditingScenes.StartAnimationId = GetAssignmentId(StartCombo, null);
+        EditingScenes.ReminderAnimationId = GetAssignmentId(ReminderCombo, null);
+        EditingScenes.ChatReplyAnimationId = GetAssignmentId(ChatReplyCombo, null);
+        EditingScenes.IdleDefaultAnimationId = GetAssignmentId(IdleDefaultCombo, null);
+        EditingScenes.ExitAnimationId = GetAssignmentId(ExitCombo, null);
+        EditingScenes.InteractionStates.DragLeftAnimationId = GetAssignmentId(DragLeftCombo, null);
+        EditingScenes.InteractionStates.DragRightAnimationId = GetAssignmentId(DragRightCombo, null);
+        EditingScenes.InteractionStates.DragHoldAnimationId = GetAssignmentId(DragHoldCombo, null);
+        EditingScenes.SelfBirthdayAnimation1Id = GetAssignmentId(SelfBirthday1Combo, null);
+        EditingScenes.SelfBirthdayAnimation2Id = GetAssignmentId(SelfBirthday2Combo, null);
+        EditingScenes.UserBirthdayAnimation1Id = GetAssignmentId(UserBirthday1Combo, null);
+        EditingScenes.UserBirthdayAnimation2Id = GetAssignmentId(UserBirthday2Combo, null);
+        EditingScenes.IdleRandomAnimationIds = IdleRandomChecksPanel.Children.OfType<CheckBox>()
+            .Where(check => check.IsChecked == true)
+            .Select(check => (Guid)check.Tag)
+            .ToList();
+    }
+
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        if (!CommitFrameEdits())
-            return;
+        if (!CommitSceneEdits()) return;
         _companion.Name = NameBox.Text.Trim();
         _companion.Birthday = BirthdayPicker.SelectedDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
         _companion.UserNickname = UserNicknameBox.Text.Trim();
@@ -1175,21 +1225,7 @@ public partial class CompanionEditorWindow : Window
             FontCombo.Text = _companion.FontFamilyName;
         if (string.IsNullOrWhiteSpace(ImportedFontLabel.Text))
             _companion.ImportedFontPath = null;
-        _companion.StartAnimationId = GetAssignmentId(StartCombo, null);
-        _companion.ReminderAnimationId = GetAssignmentId(ReminderCombo, null);
-        _companion.IdleDefaultAnimationId = GetAssignmentId(IdleDefaultCombo, null);
-        _companion.ExitAnimationId = GetAssignmentId(ExitCombo, null);
-        _companion.InteractionStates.DragLeftAnimationId = GetAssignmentId(DragLeftCombo, null);
-        _companion.InteractionStates.DragRightAnimationId = GetAssignmentId(DragRightCombo, null);
-        _companion.InteractionStates.DragHoldAnimationId = GetAssignmentId(DragHoldCombo, null);
-        _companion.SelfBirthdayAnimation1Id = GetAssignmentId(SelfBirthday1Combo, null);
-        _companion.SelfBirthdayAnimation2Id = GetAssignmentId(SelfBirthday2Combo, null);
-        _companion.UserBirthdayAnimation1Id = GetAssignmentId(UserBirthday1Combo, null);
-        _companion.UserBirthdayAnimation2Id = GetAssignmentId(UserBirthday2Combo, null);
-        _companion.IdleRandomAnimationIds = IdleRandomChecksPanel.Children.OfType<CheckBox>()
-            .Where(check => check.IsChecked == true)
-            .Select(check => (Guid)check.Tag)
-            .ToList();
+        StoreAssignments();
 
         var errors = CompanionValidator.Validate(_companion);
         if (errors.Count > 0)
@@ -1205,6 +1241,11 @@ public partial class CompanionEditorWindow : Window
 
         try
         {
+            if (_pendingModel != null)
+            {
+                _companion.Model3D.FilePath = _storage.ImportAsset(_companion.Id, _pendingModel, "Models");
+                _pendingModel = null;
+            }
             if (_pendingPicture != null)
             {
                 _companion.ProfilePicturePath = _storage.ImportAsset(_companion.Id, _pendingPicture, "Portraits");
@@ -1238,6 +1279,7 @@ public partial class CompanionEditorWindow : Window
     {
         yield return StartCombo;
         yield return ReminderCombo;
+        yield return ChatReplyCombo;
         yield return IdleDefaultCombo;
         yield return ExitCombo;
         yield return DragLeftCombo;

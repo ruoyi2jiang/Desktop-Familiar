@@ -1,15 +1,16 @@
 using System.Windows.Automation;
 using DesktopFamiliar.Localization;
+using DesktopFamiliar.Models;
 
 namespace DesktopFamiliar.Views.Controls;
 
 public partial class ChatHistoryPetRow : UserControl
 {
-    public ChatHistoryPetRow(string name, string? portrait, string? idleFrame, string? sizeText, bool dividerBefore)
+    public ChatHistoryPetRow(string name, CompanionPortrait? portrait, string? sizeText, bool dividerBefore)
     {
         InitializeComponent();
         PetDivider.Visibility = dividerBefore ? Visibility.Visible : Visibility.Collapsed;
-        Avatar.SetPicture(portrait, idleFrame);
+        Avatar.SetPicture(portrait);
         PetName.Text = name;
         if (sizeText == null)
         {

@@ -9,6 +9,7 @@ using DesktopFamiliar.Localization;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Calendar;
 using DesktopFamiliar.Services.Addons;
+using DesktopFamiliar.Services.Updates;
 using DesktopFamiliar.Views;
 
 namespace DesktopFamiliar;
@@ -27,7 +28,8 @@ public partial class App : System.Windows.Application
     private CalendarReminderService? _calendarReminders;
     private CalendarReminderPresentationCoordinator? _reminderPresentation;
     private AddonRuntimeLoader? _addonRuntimeLoader;
-    private readonly HttpClient _addonHttpClient = new();
+    private readonly HttpClient _httpClient = new();
+    internal AppUpdateService Updates { get; private set; } = null!;
     private readonly AddonViewportActionRegistry _addonViewportActions = new();
     private readonly AddonSettingsSectionRegistry _addonSettingsSections = new();
     private int _fatalReportShown;
@@ -40,16 +42,8 @@ public partial class App : System.Windows.Application
     public AddonManagerService AddonManager { get; private set; } = null!;
 
     public static App CurrentApp => (App)Current;
-    public static string DisplayVersion
-    {
-        get
-        {
-            var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version is null
-                ? "v0.0.0"
-                : $"v{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}";
-        }
-    }
+    internal static Version CurrentVersion { get; } = new(Assembly.GetExecutingAssembly().GetName().Version!.ToString(3));
+    public static string DisplayVersion => $"v{CurrentVersion}";
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
@@ -73,6 +67,7 @@ public partial class App : System.Windows.Application
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
             AppLogger.Info("Application startup began.");
             Storage = new CompanionStorage();
+            Manager = new CompanionManager(Storage);
             AddonSettings = new AddonSettingsStore(Storage.RootDirectory);
             try
             {
@@ -80,20 +75,19 @@ public partial class App : System.Windows.Application
             }
             catch (Exception exception)
             {
-                // Core storage will still run its own corruption recovery. A best-effort
-                // addon migration must never prevent that recovery or application startup.
+                // The legacy addon import can be retried on the next launch.
                 AppLogger.Warning("Could not migrate legacy Auto Clicker settings to addon storage.", exception);
             }
-            Manager = new CompanionManager(Storage);
             AddonInstallations = new AddonInstallationStore(Storage.RootDirectory);
-            AddonManager = new AddonManagerService(_addonHttpClient, AddonInstallations);
+            AddonManager = new AddonManagerService(_httpClient, AddonInstallations);
+            Updates = new AppUpdateService(_httpClient);
             ShowStorageRecoveryNotice(Storage.LastRecoveryNotice);
             ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             Manager.ThemeChanged += (_, _) => ThemeService.Apply(Manager.CurrentSavedTheme.Palette);
             _overlay = new CompanionOverlayWindow(Manager, _addonViewportActions);
-            Chat = new ChatController(Manager, _overlay, new ChatModelStore(Storage.RootDirectory, _addonHttpClient), new ChatHistoryStore(Storage.RootDirectory));
+            Chat = new ChatController(Manager, _overlay, new ChatModelStore(Storage.RootDirectory, _httpClient), new ChatHistoryStore(Storage.RootDirectory));
             _deletions = new CompanionDeletionService(Manager, Storage, Chat.History);
-            _deletions.RetryPending();
+            _deletions.RetryPending(deferSave: true);
             _addonRuntimeLoader = new AddonRuntimeLoader(AddonInstallations, AppLogger.Error);
             _addonRuntimeLoader.LoadEnabled(new DesktopFamiliarAddonHost(
                 _addonViewportActions,
@@ -238,9 +232,7 @@ public partial class App : System.Windows.Application
         if (notice is null)
             return;
 
-        var message = string.IsNullOrWhiteSpace(notice.BackupPath)
-            ? LocalizationService.Format("Storage.ConfigurationReadFailedNoBackup", notice.ErrorMessage)
-            : LocalizationService.Format("Storage.ConfigurationReadFailed", notice.BackupPath, notice.ErrorMessage);
+        var message = LocalizationService.Format("Storage.LibraryUnreadable", notice.FilePath, notice.ErrorMessage);
         MessageBox.Show(
             message,
             LocalizationService.Get("App.Name"),
@@ -345,17 +337,7 @@ public partial class App : System.Windows.Application
     {
         if (_overlay is null || _reminderPresentation is null)
             return;
-        if (Manager.Data.Settings.DialogBubbleHidden)
-        {
-            try
-            {
-                Manager.SetDialogBubbleHidden(false);
-            }
-            catch (Exception exception)
-            {
-                AppLogger.Warning("The reminder bubble preference could not be reset.", exception);
-            }
-        }
+        Manager.SetDialogBubbleHidden(false, automatic: true);
         AppLogger.Info($"Calendar reminder presentation requested while Focus mode is {Manager.Data.Settings.FocusModeEnabled}.");
         _reminderPresentation.Present(args);
     }
@@ -375,7 +357,7 @@ public partial class App : System.Windows.Application
         _trayService?.Dispose();
         _calendarReminders?.Dispose();
         Chat?.Dispose();
-        _addonHttpClient.Dispose();
+        _httpClient.Dispose();
         if (_overlay is not null)
         {
             _overlay.CloseForExit(CompleteNormalShutdown);
@@ -401,7 +383,7 @@ public partial class App : System.Windows.Application
         _addonRuntimeLoader?.Dispose();
         _calendarReminders?.Dispose();
         Chat?.Dispose();
-        _addonHttpClient.Dispose();
+        _httpClient.Dispose();
         base.OnExit(e);
     }
 }

@@ -15,6 +15,8 @@ public sealed class CompanionStorage : ICompanionRepository
     private readonly CompanionAssetStore _assetStore;
     private readonly CompanionBundleService _bundleService;
     private readonly CompanionDataNormalizer _normalizer;
+    private readonly CalendarExpirationStore _expirations;
+    private readonly HashSet<Guid> _finishedCleanups = [];
 
     public CompanionStorage()
         : this(Path.Combine(
@@ -37,6 +39,7 @@ public sealed class CompanionStorage : ICompanionRepository
         _assetStore = new CompanionAssetStore(RootDirectory);
         _bundleService = new CompanionBundleService(RootDirectory, jsonOptions);
         _normalizer = new CompanionDataNormalizer();
+        _expirations = new CalendarExpirationStore(Path.GetDirectoryName(_dataStore.FilePath)!);
     }
 
     public string RootDirectory { get; }
@@ -47,7 +50,8 @@ public sealed class CompanionStorage : ICompanionRepository
     {
         LastRecoveryNotice = null;
         DesktopCompanionData data;
-        if (!_dataStore.Exists)
+        var source = _dataStore.ReadPath;
+        if (!File.Exists(source))
         {
             data = new DesktopCompanionData();
         }
@@ -55,51 +59,54 @@ public sealed class CompanionStorage : ICompanionRepository
         {
             try
             {
-                data = _dataStore.Read();
+                data = _dataStore.Read(source);
             }
-            catch (Exception exception)
+            catch (Exception exception) when (exception is JsonException or InvalidDataException)
             {
                 AppLogger.Error("The saved companion configuration could not be read.", exception);
-                string? backupPath = null;
-                try
-                {
-                    backupPath = _dataStore.BackupInvalidFile(DateTime.Now);
-                }
-                catch (Exception backupException)
-                {
-                    AppLogger.Error("The invalid configuration could not be backed up.", backupException);
-                }
-
-                LastRecoveryNotice = new StorageRecoveryNotice(backupPath, exception.Message);
+                LastRecoveryNotice = new StorageRecoveryNotice(source, exception.Message);
                 data = new DesktopCompanionData();
             }
         }
 
-        var themeBeforeNormalization = data.Settings?.Theme;
-        var selectedThemeIdBeforeNormalization = data.Settings?.SelectedThemeId;
-        var savedThemeIdsBeforeNormalization = data.Settings?.SavedThemes?
-            .Where(theme => theme is not null)
-            .Select(theme => theme.Id)
-            .Order()
-            .ToArray() ?? [];
-        var requiresNormalizationSave = data.SchemaVersion != DesktopCompanionData.CurrentSchemaVersion
-            || data.Settings?.SavedThemes?.Count is not > 0;
+        RequiresExplicitSave = source != DataFilePath || data.SchemaVersion != DesktopCompanionData.CurrentSchemaVersion
+            || LastRecoveryNotice != null;
+        // The typed projection of a newer file is edited only in this build's own format.
+        if (data.SchemaVersion > DesktopCompanionData.CurrentSchemaVersion)
+            data.SchemaVersion = DesktopCompanionData.CurrentSchemaVersion;
         _normalizer.Normalize(data);
-        var normalizedSettings = data.Settings
-            ?? throw new InvalidOperationException("Configuration normalization did not create app settings.");
-        var savedThemeIdsAfterNormalization = normalizedSettings.SavedThemes
-            .Select(theme => theme.Id)
-            .Order()
-            .ToArray();
-        var normalizedThemeSelection = themeBeforeNormalization != normalizedSettings.Theme
-            || selectedThemeIdBeforeNormalization != normalizedSettings.SelectedThemeId
-            || !savedThemeIdsBeforeNormalization.SequenceEqual(savedThemeIdsAfterNormalization);
-        if (requiresNormalizationSave || normalizedThemeSelection)
-            Save(data);
+        if (LastRecoveryNotice == null && File.Exists(source) && _dataStore.SourceFingerprint is { } fingerprint)
+            _expirations.Apply(fingerprint, data);
         return data;
     }
 
-    public void Save(DesktopCompanionData data) => _dataStore.Write(data);
+    public bool RequiresExplicitSave { get; private set; }
+
+    public void RecordCalendarExpiration(Guid eventId, DateTime occurrence)
+    {
+        if (_dataStore.SourceFingerprint is { } fingerprint)
+            _expirations.Record(fingerprint, eventId, occurrence);
+    }
+
+    public void Save(DesktopCompanionData data)
+    {
+        _dataStore.Write(data);
+        RequiresExplicitSave = false;
+        _expirations.ClearAfterSave();
+        foreach (var id in _finishedCleanups.ToArray())
+        {
+            if (data.PendingCompanionCleanup.Contains(id)) continue;
+            try
+            {
+                File.Delete(HistoryWipeReceipt(id));
+                _finishedCleanups.Remove(id);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                AppLogger.Warning("The completed chat history wipe receipt could not be removed.", exception);
+            }
+        }
+    }
 
     public string ImportAsset(Guid companionId, string sourcePath, string category) =>
         _assetStore.Import(companionId, sourcePath, category);
@@ -108,7 +115,13 @@ public sealed class CompanionStorage : ICompanionRepository
         _assetStore.GetImportedBubbleImages(data);
 
     public bool DeleteCompanionResources(Guid companionId, IEnumerable<string?> retainedPaths) =>
-        _assetStore.DeleteCompanionResources(companionId, retainedPaths);
+        _assetStore.DeleteCompanionResources(companionId,
+            retainedPaths.Concat(_dataStore.OtherLibraryAssetReferences(companionId)));
+
+    internal string HistoryWipeReceipt(Guid companionId) => Path.Combine(
+        Path.GetDirectoryName(DataFilePath)!, $"history-wipe.v{DesktopCompanionData.CurrentSchemaVersion}.{companionId:N}");
+
+    internal void FinishWipeOnNextSave(Guid companionId) => _finishedCleanups.Add(companionId);
 
     public void ExportCompanion(CompanionDefinition companion, string destinationPath) =>
         _bundleService.Export(companion, destinationPath);
@@ -126,4 +139,4 @@ public sealed class CompanionStorage : ICompanionRepository
         _bundleService.DiscardImport(importResult);
 }
 
-public sealed record StorageRecoveryNotice(string? BackupPath, string ErrorMessage);
+public sealed record StorageRecoveryNotice(string FilePath, string ErrorMessage);

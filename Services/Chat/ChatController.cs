@@ -92,19 +92,19 @@ public sealed class ChatController : IDisposable
         _turn = turn;
         try
         {
-            var answer = _session.SendAsync(pet.Clone(), _manager.Data.Settings.Chat.ModelId!, prompt, turn.Token);
+            var answer = _session.SendReplyAsync(pet.Clone(), _manager.Data.Settings.Chat.ModelId!, prompt, turn.Token);
             if (await Task.WhenAny(answer, Task.Delay(200, turn.Token)) != answer && !turn.IsCancellationRequested)
                 _overlay.SetThinking(string.IsNullOrWhiteSpace(pet.ThinkingPhrase) ? LocalizationService.Get("Chat.Thinking") : pet.ThinkingPhrase);
             var reply = await answer;
             if (turn.IsCancellationRequested) return false;
-            _overlay.QueueReply(reply);
+            _overlay.QueueReply(reply.Text, expressionSceneId: reply.ExpressionSceneId);
             return true;
         }
         catch (OperationCanceledException) when (turn.IsCancellationRequested) { return false; }
         catch (Exception ex)
         {
             AppLogger.Error("Local companion chat failed.", ex);
-            if (!turn.IsCancellationRequested) _overlay.QueueReply(LocalizationService.Get("Chat.ReplyFailed"));
+            if (!turn.IsCancellationRequested) _overlay.QueueReply(LocalizationService.Get("Chat.ReplyFailed"), animate: false);
             return false;
         }
         finally

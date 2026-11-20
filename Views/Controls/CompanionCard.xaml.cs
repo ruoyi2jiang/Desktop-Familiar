@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
+using DesktopFamiliar.Services.Animation;
 
 namespace DesktopFamiliar.Views.Controls;
 
@@ -25,10 +26,7 @@ public partial class CompanionCard : UserControl
             isCurrent ? ThemeTokens.PageBackgroundHover : ThemeTokens.PageBackground);
 
         NameText.Text = companion.Name;
-        SummaryText.Text = LocalizationService.Format(
-            "Library.CompanionSummary",
-            companion.Animations.Count,
-            companion.IdleRandomAnimationIds.Count);
+        SummaryText.Text = FormatSummary(companion);
         SelectButton.Content = LocalizationService.Get("Common.Select");
         ConfigureButton.Content = LocalizationService.Get("Common.Configure");
         ExportButton.Content = LocalizationService.Get("CompanionBundle.Export");
@@ -37,11 +35,19 @@ public partial class CompanionCard : UserControl
         SelectedIndicatorHost.ToolTip = LocalizationService.Get("Common.Selected");
         SelectButton.Visibility = isCurrent ? Visibility.Collapsed : Visibility.Visible;
         SelectedIndicatorHost.Visibility = isCurrent ? Visibility.Visible : Visibility.Collapsed;
-        PreviewImage.Source = CompanionPictureLoader.Load(companion.ProfilePicturePath, companion.IdleDefaultAnimation?.GetPreviewPath());
+        PreviewImage.Source = CompanionPictureLoader.Load(CompanionPortrait.From(companion));
         PreviewPlaceholder.Visibility = PreviewImage.Source == null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public CompanionDefinition Companion { get; }
+
+    internal static string FormatSummary(CompanionDefinition companion)
+    {
+        var appearance = companion.ActiveScenes;
+        var dimension = LocalizationService.Get(appearance is ModelAppearance ? "Library.Dimension3D" : "Library.Dimension2D");
+        var count = ModelAnimationCatalog.VisibleScenes(appearance, showParts: false).Count();
+        return LocalizationService.Format(count == 1 ? "Library.AnimationCount.One" : "Library.AnimationCount.Other", dimension, count);
+    }
 
     public event EventHandler? SelectRequested;
     public event EventHandler? ConfigureRequested;

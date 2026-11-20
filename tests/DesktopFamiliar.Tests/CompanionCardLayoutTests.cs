@@ -1,9 +1,27 @@
 using System.Xml.Linq;
+using DesktopFamiliar.Models;
+using DesktopFamiliar.Views.Controls;
 
 namespace DesktopFamiliar.Tests;
 
 public sealed class CompanionCardLayoutTests
 {
+    [Fact]
+    public void CardCountsConfiguredAnimationsForTheActiveAppearance()
+    {
+        var pet = new CompanionDefinition();
+        Assert.Equal("2D · 0 animations", CompanionCard.FormatSummary(pet));
+        var sprite = new AnimationScene { PngFrames = [new(), new()] };
+        pet.Animations.Add(sprite);
+        pet.IdleRandomAnimationIds.Add(sprite.Id);
+        var combined = new AnimationScene { ModelParts = ["start", "loop"] };
+        pet.Model3D.Animations = [combined, new() { PartOfSceneId = combined.Id, ModelClip = "loop" }, new()];
+
+        Assert.Equal("2D · 1 animation", CompanionCard.FormatSummary(pet));
+        pet.Appearance = CompanionAppearance.Model3D;
+        Assert.Equal("3D · 2 animations", CompanionCard.FormatSummary(pet));
+    }
+
     [Fact]
     public void ConfigurePreviewFitsTheWholePictureInItsOriginalPortraitFrame()
     {

@@ -16,7 +16,8 @@ public enum AnimationSceneRole
     DragLeft,
     DragRight,
     DragHold,
-    Click
+    Click,
+    ChatReply
 }
 
 /// <summary>
@@ -29,9 +30,10 @@ public static class ScenePlaybackPolicy
     public static IReadOnlyList<AnimationScene> GetRandomIdleCandidates(CompanionDefinition companion)
     {
         ArgumentNullException.ThrowIfNull(companion);
-        return companion.Animations
-            .Where(scene => companion.IdleRandomAnimationIds.Contains(scene.Id)
-                && scene.Id != companion.IdleDefaultAnimationId)
+        var scenes = companion.ActiveScenes;
+        return scenes.Animations
+            .Where(scene => scenes.IdleRandomAnimationIds.Contains(scene.Id)
+                && scene.Id != scenes.IdleDefaultAnimationId)
             .ToList();
     }
 
@@ -44,18 +46,43 @@ public static class ScenePlaybackPolicy
             or AnimationSceneRole.Exit)
         && playbackMode == ScenePlaybackMode.LoopUntilDialogEnds;
 
+    public static bool ShouldReleaseModelLoopAfterDialogue(AnimationSceneRole role, ModelLoopMode mode) =>
+        mode == ModelLoopMode.UntilDialogueEnds && role is
+            AnimationSceneRole.Start or AnimationSceneRole.Click or AnimationSceneRole.IdleRandom or
+            AnimationSceneRole.SelfBirthday or AnimationSceneRole.UserBirthday or AnimationSceneRole.Exit;
+
     public static bool ShouldPresentSceneDialog(
         bool focusModeEnabled,
-        AnimationSceneRole role) =>
-        role != AnimationSceneRole.ReminderFallback
-        && !IsInteractionRole(role)
+        AnimationSceneRole role,
+        CompanionAppearance appearance = CompanionAppearance.Images2D) =>
+        role is not (AnimationSceneRole.ReminderFallback or AnimationSceneRole.ChatReply)
+        && (appearance == CompanionAppearance.Model3D || !IsInteractionRole(role))
         && (!focusModeEnabled || role == AnimationSceneRole.Reminder);
+
+    public static bool BeginIdleUnderDialogue(AnimationSceneRole role, CompanionActivityState state) =>
+        role == AnimationSceneRole.Start && state == CompanionActivityState.Idle;
+
+    internal static float ModelBlendSeconds(AnimationSceneRole from, AnimationSceneRole to)
+    {
+        if (from == AnimationSceneRole.None) return 0;
+        if (from == AnimationSceneRole.ChatReply || to == AnimationSceneRole.ChatReply
+            || (from == AnimationSceneRole.Start && to == AnimationSceneRole.IdleDefault))
+            return ModelPoseTransition.DefaultDuration;
+        return to == AnimationSceneRole.IdleDefault && from != AnimationSceneRole.IdleDefault
+            ? ModelPoseTransition.ReturnToIdleDuration : 0;
+    }
 
     public static bool IsInteractionRole(AnimationSceneRole role) => role is
         AnimationSceneRole.DragLeft or
         AnimationSceneRole.DragRight or
         AnimationSceneRole.DragHold or
         AnimationSceneRole.Click;
+
+    public static bool CanStartChatReply(AnimationSceneRole role, CompanionActivityState activity,
+        bool hasActiveDialogue, Guid? playingScene = null, Guid? requestedScene = null) =>
+        activity == CompanionActivityState.Idle && !hasActiveDialogue
+        && (role is AnimationSceneRole.IdleDefault or AnimationSceneRole.IdleRandom
+            || role == AnimationSceneRole.ChatReply && requestedScene.HasValue && requestedScene != playingScene);
 
     /// <summary>
     /// A calendar reminder may replace the bubble only after its assigned scene

@@ -45,6 +45,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 [Files]
 Source: "{#MyAppSourceExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#MyAppSourceRoot}\Resources\Strings\en.json"; DestDir: "{app}\Resources\Strings"; Flags: ignoreversion
+Source: "{#MyAppSourceRoot}\Resources\Licenses\SharpGLTF.txt"; DestDir: "{app}\Resources\Licenses"; Flags: ignoreversion
 
 [InstallDelete]
 Type: files; Name: "{app}\DesktopFamiliar.exe"

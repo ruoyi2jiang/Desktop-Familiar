@@ -63,6 +63,7 @@ public static class CalendarOccurrenceStatusTracker
     public static void MarkExpired(CalendarEvent calendarEvent, DateTime occurrence)
     {
         ArgumentNullException.ThrowIfNull(calendarEvent);
+        calendarEvent.SnoozedUntil = null;
         if (calendarEvent.Recurrence == CalendarEventRecurrence.OneTime)
         {
             calendarEvent.IsCompleted = false;

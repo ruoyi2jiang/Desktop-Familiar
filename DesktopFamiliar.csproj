@@ -22,9 +22,15 @@
     <Compile Remove="DesktopFamiliar.AddonSdk\**\*.cs" />
     <Compile Remove="tests\**\*.cs" />
     <Resource Include="Assets\AppIcon.ico" />
+    <Content Include="Resources\Licenses\SharpGLTF.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Resources\Licenses\SharpGLTF.txt" LogicalName="DesktopFamiliar.Licenses.SharpGLTF.txt" />
     <EmbeddedResource Include="Resources\Strings\en.json" LogicalName="DesktopFamiliar.Localization.Strings.en.json" />
     <InternalsVisibleTo Include="DesktopFamiliar.Tests" />
     <EmbeddedResource Include="Resources\chat-models.json" LogicalName="DesktopFamiliar.Resources.chat-models.json" />
+    <EmbeddedResource Include="Services\Updates\ApplyAppUpdate.ps1" LogicalName="DesktopFamiliar.Updates.ApplyAppUpdate.ps1" />
     <Content Include="Resources\Strings\en.json" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpGLTF.Runtime" Version="1.0.6" />
   </ItemGroup>
 </Project>
