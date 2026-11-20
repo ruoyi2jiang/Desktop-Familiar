@@ -16,6 +16,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -23,10 +24,24 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="Input" Margin="0" MaxLength="1200"
+            <Border x:Name="SentBubble" Grid.ColumnSpan="4" HorizontalAlignment="Right"
+                    Visibility="Collapsed" Margin="24,0,0,8" Padding="10,6" CornerRadius="10,10,3,10"
+                    Background="{DynamicResource PrimaryAccentBrush}">
+                <StackPanel>
+                    <TextBlock Text="{loc:Loc Chat.YouSent}" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextOnPrimaryAccentBrush}" />
+                    <ScrollViewer x:Name="SentScroll" MaxHeight="120" Margin="0,2,0,0"
+                                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="SentText" TextWrapping="Wrap" TextTrimming="None"
+                                   Foreground="{DynamicResource TextOnPrimaryAccentBrush}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+            <TextBox x:Name="Input" Grid.Row="1" Margin="0" MaxLength="1200"
                      AutomationProperties.Name="{loc:Loc Chat.Prompt}" ToolTip="{loc:Loc Chat.Prompt}"
                      FontFamily="{Binding ElementName=Surface,Path=(TextElement.FontFamily)}" />
-            <Button x:Name="TalkButton" Grid.Column="1" Style="{StaticResource PromptAction}"
+            <Button x:Name="TalkButton" Grid.Row="1" Grid.Column="1" Style="{StaticResource PromptAction}"
                     AutomationProperties.Name="{loc:Loc Voice.Hold}" ToolTip="{loc:Loc Voice.Hold}"
                     PreviewMouseLeftButtonDown="Talk_Down" PreviewMouseLeftButtonUp="Talk_Up" LostMouseCapture="Talk_LostCapture"
                     PreviewKeyDown="Talk_KeyDown" PreviewKeyUp="Talk_KeyUp">
@@ -35,19 +50,19 @@
                       Stroke="{Binding Foreground,ElementName=TalkButton}" StrokeThickness="1.5"
                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
             </Button>
-            <Button x:Name="SendButton" Grid.Column="2" Style="{StaticResource PromptAction}" Click="Send_Click"
+            <Button x:Name="SendButton" Grid.Row="1" Grid.Column="2" Style="{StaticResource PromptAction}" Click="Send_Click"
                     ToolTip="{loc:Loc Chat.Send}" AutomationProperties.Name="{loc:Loc Chat.Send}">
                 <Path Width="15" Height="13" Stretch="Fill" Data="M 14,1 V 7 H 1 M 6,2 L 1,7 L 6,12"
                       Stroke="{Binding Foreground, ElementName=SendButton}" StrokeThickness="1.6"
                       StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
             </Button>
-            <Button x:Name="CloseButton" Grid.Column="3" Width="24" Height="24" VerticalAlignment="Center"
+            <Button x:Name="CloseButton" Grid.Row="1" Grid.Column="3" Width="24" Height="24" VerticalAlignment="Center"
                     Margin="4,0,0,0" Padding="0" Click="Close_Click" Background="{DynamicResource OverlaySurfaceBrush}"
                     Foreground="{DynamicResource TextOnOverlayBrush}" ToolTip="{loc:Loc Chat.ClosePrompt}" AutomationProperties.Name="{loc:Loc Chat.ClosePrompt}">
                 <Path Width="10" Height="10" Stretch="Fill" Data="M 2,2 L 10,10 M 10,2 L 2,10"
                       Stroke="{Binding Foreground, ElementName=CloseButton}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
             </Button>
-            <TextBlock x:Name="VoiceStatus" Grid.Row="1" Grid.ColumnSpan="4" Visibility="Collapsed" Margin="0,4,0,0"
+            <TextBlock x:Name="VoiceStatus" Grid.Row="2" Grid.ColumnSpan="4" Visibility="Collapsed" Margin="0,4,0,0"
                        Foreground="{DynamicResource TextOnOverlayBrush}" FontSize="11" TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" />
         </Grid>

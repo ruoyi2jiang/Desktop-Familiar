@@ -5,6 +5,52 @@ namespace DesktopFamiliar.Tests;
 
 public sealed class OverlayLayoutPolicyTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OpeningSendingAndClosingChatKeepTheDrawingWindowAndCharacterAnchor(bool hasModel)
+    {
+        var desktop = new RectangleF(-800, 0, 1600, 900);
+        var pet = new RectangleF(-500, 480, 240, 240);
+        var extent = RectangleF.Empty;
+        var restingWindow = RectangleF.Empty;
+        // Plain prompt, sent receipt and reply, closed prompt, then a second exchange.
+        foreach (var dialogue in new[] { 96, 110, 285, 96, 285 })
+        {
+            extent = OverlayLayoutPolicy.ReserveDrawingExtent(extent, 240, 240, dialogue, hasModel);
+            var window = OverlayLayoutPolicy.GetDrawingWindow(pet, dialogue, extent, desktop);
+            if (restingWindow.IsEmpty) restingWindow = window;
+            Assert.Equal(restingWindow, window);
+            Assert.True(window.Contains(new RectangleF(pet.X, pet.Y - dialogue, pet.Width, pet.Height + dialogue)));
+        }
+    }
+
+    [Fact]
+    public void ExtraSpaceForLongDialogueAndTravelIsReusedAcrossSceneChanges()
+    {
+        var desktop = new RectangleF(-1000, -100, 2000, 1000);
+        var pet = new RectangleF(-250, 560, 200, 220);
+        var extent = OverlayLayoutPolicy.ReserveDrawingExtent(RectangleF.Empty, 200, 220, 96, true);
+        var rest = new RectangleF(10, 8, 170, 200);
+        var dance = new RectangleF(-320, -140, 750, 420);
+        var growth = OverlayLayoutPolicy.ExpandModelExtent(extent, dance);
+        Assert.NotEqual(extent, growth);
+        growth = OverlayLayoutPolicy.ReserveDrawingExtent(growth, 200, 220, 450, true);
+        var expanded = OverlayLayoutPolicy.GetDrawingWindow(pet, 450, growth, desktop);
+        Assert.True(expanded.Contains(pet.X + dance.Left, pet.Y + dance.Top));
+        Assert.True(expanded.Contains(pet.X, pet.Y - 450));
+        foreach (var pose in new[] { rest, dance, rest })
+        {
+            growth = OverlayLayoutPolicy.ExpandModelExtent(growth, pose);
+            growth = OverlayLayoutPolicy.ReserveDrawingExtent(growth, 200, 220, 96, true);
+            Assert.Equal(expanded, OverlayLayoutPolicy.GetDrawingWindow(pet, 96, growth, desktop));
+        }
+        var besideEdge = new RectangleF(desktop.Left + 20, desktop.Top + 96, 200, 220);
+        var clipped = OverlayLayoutPolicy.GetDrawingWindow(besideEdge, 96, growth, desktop);
+        Assert.True(desktop.Contains(clipped));
+        Assert.True(clipped.Contains(besideEdge));
+    }
+
     [Fact]
     public void TravelExpandsBehindDialogueAndStopsAtTheDesktopEdges()
     {

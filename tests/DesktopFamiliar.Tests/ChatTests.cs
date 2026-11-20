@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using DesktopFamiliar.Models;
+using DesktopFamiliar.Services.Animation;
 using DesktopFamiliar.Services.Chat;
 using DesktopFamiliar.Services.Storage;
 
@@ -145,6 +146,42 @@ public sealed class ChatTests : IDisposable
         Assert.Equal(reply.Replace(" ", "").Replace("\n", ""), string.Concat(pages).Replace(" ", "").Replace("\n", ""));
         Assert.All(pages, page => Assert.InRange(new System.Globalization.StringInfo(page).LengthInTextElements, 1, 110));
         Assert.True(ChatBubbleTiming.ReadingTime("Hello there!") > ChatBubbleTiming.ReadingTime("Hi"));
+    }
+
+    [Fact]
+    public void FollowUpKeepsOnlyTheVisiblePageUntilItsReadingTimeFinishes()
+    {
+        var pages = new ChatReplyPages();
+        var oldPlayback = new ChatReplyPlayback(null);
+        pages.Enqueue("This is the first page of my long reply. The unread ending belongs to the previous turn.", oldPlayback);
+        pages.Update(TimeSpan.Zero, speaking: false);
+        var first = Assert.IsType<ChatReplyPages.Page>(pages.Current);
+        Assert.Equal("This is the first page of my long reply.", first.Text);
+
+        var newPlayback = new ChatReplyPlayback(null);
+        pages.DiscardSuperseded(keepVisiblePage: true);
+        pages.Enqueue("Here is my new reply.", newPlayback);
+        var duration = ChatBubbleTiming.ReadingTime(first.Text);
+        pages.Update(duration - TimeSpan.FromMilliseconds(1), speaking: false);
+        Assert.Same(first, pages.Current);
+        Assert.True(oldPlayback.SpeechInterrupted);
+        pages.Update(duration, speaking: false);
+        Assert.Equal("Here is my new reply.", pages.Current?.Text);
+        Assert.Same(newPlayback, pages.Current!.Playback);
+        Assert.False(newPlayback.SpeechInterrupted);
+    }
+
+    [Fact]
+    public void FollowUpDuringAReminderDiscardsEveryHiddenPageOfTheOldReply()
+    {
+        var pages = new ChatReplyPages();
+        pages.Enqueue(new string('x', 250), null);
+        pages.Update(TimeSpan.Zero, speaking: false);
+        pages.DiscardSuperseded(keepVisiblePage: false);
+        Assert.False(pages.HasPages);
+        pages.Enqueue("A new answer", null);
+        pages.Update(TimeSpan.Zero, speaking: false);
+        Assert.Equal("A new answer", pages.Current?.Text);
     }
 
     [Fact]

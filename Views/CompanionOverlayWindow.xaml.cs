@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DesktopFamiliar.Localization;
@@ -48,8 +48,7 @@ public partial class CompanionOverlayWindow : Window
     private bool _pointerDown;
     private Point _pointerDownScreen;
     private Point _lastPointerScreen;
-    private bool _sceneTransitionPending;
-    private int _sceneTransitionVersion;
+    private readonly SpriteCrossfade _sprites;
     private bool _playStartOnNextShow = true;
     private Action? _afterLoopFinishes;
     private int? _pendingDialogStartFrame;
@@ -69,7 +68,9 @@ public partial class CompanionOverlayWindow : Window
     private bool _inactiveDialogButtonDismissed = true;
     private double _dialogAreaHeight = ReservedDialogHeight;
     private Point _characterPosition;
-    private RectangleF _modelExtent;
+    private RectangleF _drawingExtent;
+    private bool _reserveDesktopForModel;
+    private OverlayDisplayObserver? _displayObserver;
     private CalendarEvent? _activeReminder;
     private PendingCalendarReminder? _pendingReminder;
     private bool _activeScenePlaybackFailed;
@@ -89,10 +90,10 @@ public partial class CompanionOverlayWindow : Window
         _addonViewportActions = addonViewportActions ?? throw new ArgumentNullException(nameof(addonViewportActions));
         ApplyViewportSize();
         ApplySavedPosition();
-        _animationPlayer = new FrameAnimationPlayer(SetFrame);
+        _sprites = new SpriteCrossfade(CompanionImage, TransitionImage);
+        _animationPlayer = new FrameAnimationPlayer(_sprites.Present);
         _animationPlayer.CycleCompleted += AnimationCycleCompleted;
         PetModel.Completed += AnimationCycleCompleted;
-        PetModel.PosePresented += UpdateModelExtent;
         _modelDialogDelay.Tick += (_, _) => PresentDueModelCue();
         _animationPlayer.FramePresented += AnimationFramePresented;
         _idleTimer.Tick += IdleTimerTick;
@@ -116,7 +117,14 @@ public partial class CompanionOverlayWindow : Window
                 args.Cancel = true;
         };
         LocationChanged += (_, _) => QueuePromptLayout();
-        DpiChanged += (_, _) => QueuePromptLayout();
+        SourceInitialized += (_, _) =>
+        {
+            var source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            _displayObserver = new OverlayDisplayObserver(source, RefreshDisplayLayout);
+            _displayObserver.QueueRefresh();
+        };
+        DpiChanged += (_, _) => _displayObserver?.QueueRefresh();
+        Closed += (_, _) => _displayObserver?.Dispose();
         _chatClock.Tick += (_, _) => RenderChat();
         // Scene changes can hide this bubble synchronously while the next scene is starting.
         BubbleRoot.IsVisibleChanged += (_, _) => { if (_chatClock.IsEnabled) RenderChat(updateAnimation: false); };
@@ -180,7 +188,7 @@ public partial class CompanionOverlayWindow : Window
             var randomIdle = new System.Windows.Controls.MenuItem
             {
                 Header = LocalizationService.Get("Overlay.PlayRandomIdle"),
-                IsEnabled = _playbackCompanion is { } companion
+                IsEnabled = !ChatInProgress && _playbackCompanion is { } companion
                     && ScenePlaybackPolicy.GetRandomIdleCandidates(companion).Count > 0,
                 Style = (Style)FindResource("Windows11MenuItem")
             };
@@ -238,6 +246,7 @@ public partial class CompanionOverlayWindow : Window
         if (IsVisible)
             return;
 
+        _drawingExtent = RectangleF.Empty;
         _playStartOnNextShow = true;
         // Replace the retained image while the transparent window is still
         // hidden so WPF can never paint a frame from the previous state.
@@ -330,7 +339,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void PlayRandomIdleNow()
     {
-        if (_manager.ActivityState != CompanionActivityState.Idle
+        if (ChatInProgress || _manager.ActivityState != CompanionActivityState.Idle
             || _playbackCompanion is not { } companion)
             return;
         StartRandomIdle(companion);
@@ -347,6 +356,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void ApplyViewportSize()
     {
+        _drawingExtent = RectangleF.Empty;
         var characterWidth = _manager.Data.Settings.ViewportWidth;
         OverlayContent.Width = OverlayLayoutPolicy.GetWindowWidth(characterWidth);
         CharacterRow.Height = new GridLength(_manager.Data.Settings.ViewportHeight);
@@ -374,18 +384,30 @@ public partial class CompanionOverlayWindow : Window
         ApplyDrawingWindow();
     }
 
-    private void UpdateModelExtent(bool firstFrame)
+    private void ReserveModelExtent(ModelAppearance model)
     {
         var settings = _manager.Data.Settings;
-        var frame = new Size(settings.ViewportWidth, settings.ViewportHeight);
-        var pose = PetModel.GetPoseBounds(frame);
-        if (pose.IsEmpty) return;
-        var extent = firstFrame ? new RectangleF(0, 0, settings.ViewportWidth, settings.ViewportHeight) : _modelExtent;
-        extent = OverlayLayoutPolicy.ExpandModelExtent(extent,
-            new RectangleF((float)pose.X, (float)pose.Y, (float)pose.Width, (float)pose.Height));
-        if (_modelExtent == extent) return;
-        _modelExtent = extent;
-        ApplyDrawingWindow();
+        var area = PetModel.GetConfiguredMotionBounds(model, new Size(settings.ViewportWidth, settings.ViewportHeight));
+        _reserveDesktopForModel = area == null;
+        if (area is { IsEmpty: false } rect)
+        {
+            // A character can be moved anywhere on this desktop. Retain every reachable offset,
+            // without converting enormous authored coordinates into native window dimensions.
+            var desktop = VirtualDesktop;
+            rect.Intersect(new Rect(-desktop.Width, -desktop.Height, 2 * desktop.Width, 2 * desktop.Height));
+            if (!rect.IsEmpty)
+                _drawingExtent = OverlayLayoutPolicy.ExpandModelExtent(_drawingExtent,
+                    new RectangleF((float)rect.X, (float)rect.Y, (float)rect.Width, (float)rect.Height));
+        }
+    }
+
+    private void RefreshDisplayLayout()
+    {
+        if (_closingForExit) return;
+        if (PetModel.Visibility == Visibility.Visible && _playbackCompanion is { } pet)
+            ReserveModelExtent(pet.Model3D);
+        PlaceCharacter(_characterPosition.X, _characterPosition.Y);
+        if (_chatPrompt != null) UpdateDialogAreaForContent();
     }
 
     private void ApplyDrawingWindow()
@@ -393,7 +415,11 @@ public partial class CompanionOverlayWindow : Window
         var settings = _manager.Data.Settings;
         var character = new RectangleF((float)_characterPosition.X, (float)_characterPosition.Y,
             settings.ViewportWidth, settings.ViewportHeight);
-        var bounds = OverlayLayoutPolicy.GetDrawingWindow(character, (float)_dialogAreaHeight, _modelExtent, VirtualDesktop);
+        _drawingExtent = OverlayLayoutPolicy.ReserveDrawingExtent(_drawingExtent, settings.ViewportWidth,
+            settings.ViewportHeight, (float)_dialogAreaHeight, _manager.CurrentCompanion?.Appearance == CompanionAppearance.Model3D);
+        var desktop = VirtualDesktop;
+        var bounds = OverlayLayoutPolicy.GetDrawingWindow(character, (float)_dialogAreaHeight, _drawingExtent, desktop);
+        if (_reserveDesktopForModel) bounds = RectangleF.Union(bounds, desktop);
         var x = character.X - bounds.X;
         var y = character.Y - bounds.Y;
         Left = bounds.X;
@@ -403,13 +429,6 @@ public partial class CompanionOverlayWindow : Window
         Canvas.SetLeft(OverlayContent, x - OverlayLayoutPolicy.GetCharacterHorizontalOffset(settings.ViewportWidth));
         Canvas.SetTop(OverlayContent, y - _dialogAreaHeight);
         PetModel.SetCharacterFrame(new Rect(x, y, character.Width, character.Height));
-    }
-
-    private void HideModel()
-    {
-        PetModel.Visibility = Visibility.Collapsed;
-        _modelExtent = RectangleF.Empty;
-        ApplyDrawingWindow();
     }
 
     private void ManagerStateChanged(object? sender, EventArgs e) => Dispatcher.Invoke(() =>
@@ -437,6 +456,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void ManagerCurrentCompanionChanged(object? sender, EventArgs e) => Dispatcher.Invoke(() =>
     {
+        _drawingExtent = RectangleF.Empty;
         _inactiveDialogButtonDismissed = true;
         if (IsVisible)
             RefreshCompanion();
@@ -445,7 +465,7 @@ public partial class CompanionOverlayWindow : Window
     private void ManagerViewportChanged(object? sender, EventArgs e) => Dispatcher.Invoke(() =>
     {
         ApplyViewportSize();
-        if (PetModel.Visibility == Visibility.Visible) UpdateModelExtent(firstFrame: true);
+        if (PetModel.Visibility == Visibility.Visible && _playbackCompanion is { } pet) ReserveModelExtent(pet.Model3D);
         ApplySavedPosition();
         UpdateDialogAreaForContent();
     });
@@ -510,6 +530,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void RefreshCompanion()
     {
+        _reserveDesktopForModel = false;
         StopAll();
         var source = _manager.CurrentCompanion;
         if (source is null)
@@ -639,6 +660,11 @@ public partial class CompanionOverlayWindow : Window
         if (companion is null || _manager.ActivityState != CompanionActivityState.Idle)
             return;
 
+        if (ChatInProgress)
+        {
+            ScheduleRandomIdle();
+            return;
+        }
         if (!FinishCurrentLoopThen(() =>
             {
                 if (_manager.ActivityState == CompanionActivityState.Idle
@@ -654,6 +680,12 @@ public partial class CompanionOverlayWindow : Window
 
     private void StartScheduledIdleScene(CompanionDefinition companion)
     {
+        // The previous loop can finish after a chat turn was accepted.
+        if (ChatInProgress)
+        {
+            ScheduleRandomIdle();
+            return;
+        }
         var selection = IdleSceneSelectionPolicy.Select(
             companion,
             _manager.Data.Settings.UserBirthday,
@@ -695,23 +727,20 @@ public partial class CompanionOverlayWindow : Window
         bool forceOneShot = false,
         bool transition = false)
     {
-        if (transition)
-            BeginSceneTransition();
-        else
-            ClearSceneTransition();
+        _sprites.BeginScene(transition);
         var keepIdleMotion = role == AnimationSceneRole.IdleDefault && _idleUnderGreeting == scene.Id;
         _idleUnderGreeting = null;
         _afterLoopFinishes = null;
         StopDialog();
         _activeScenePlaybackFailed = false;
-        var blendSeconds = ScenePlaybackPolicy.ModelBlendSeconds(_sceneRole, role);
+        var blendSeconds = ScenePlaybackPolicy.ModelBlendSeconds(_sceneRole, role, ChatInProgress);
         _activeScene = scene;
         _sceneRole = role;
         MissingAssetCard.Visibility = Visibility.Collapsed;
         CompanionImage.Visibility = Visibility.Visible;
         var hasDialog = ScenePlaybackPolicy.ShouldPresentSceneDialog(
                 _manager.Data.Settings.FocusModeEnabled,
-                role, _playbackCompanion?.Appearance ?? CompanionAppearance.Images2D)
+                role, _playbackCompanion?.Appearance ?? CompanionAppearance.Images2D, ChatInProgress)
             && scene.DialogLines.Any(line =>
                 !string.IsNullOrWhiteSpace(line.Text)
                 || !string.IsNullOrWhiteSpace(line.VoicePath));
@@ -731,6 +760,8 @@ public partial class CompanionOverlayWindow : Window
                     loop = forceLoop || (settings.Mode == ModelLoopMode.UntilDialogueEnds && hasDialog);
                 if (!keepIdleMotion)
                     PetModel.PlayScene(modelPet.Model3D.FilePath, scene, loop, blendSeconds);
+                ReserveModelExtent(modelPet.Model3D);
+                ApplyDrawingWindow();
                 if (role == AnimationSceneRole.Start && modelPet.ActiveScenes.IdleDefaultAnimation?.FirstModelClip is { } idleClip)
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                     {
@@ -1201,12 +1232,12 @@ public partial class CompanionOverlayWindow : Window
         Cursor = null;
         if (Mouse.Captured == this)
             Mouse.Capture(null);
-        ClearSceneTransition();
+        _sprites.Clear();
         _afterLoopFinishes = null;
         _idleTimer.Stop();
         StopDialog();
         _animationPlayer.Stop(clearFrame: true);
-        HideModel();
+        PetModel.Visibility = Visibility.Collapsed;
         if (!releaseModel && _manager.CurrentCompanion is { Appearance: CompanionAppearance.Model3D } selected
             && _playbackCompanion?.Id == selected.Id && _playbackCompanion.Model3D.FilePath == selected.Model3D.FilePath)
             PetModel.Stop();
@@ -1215,38 +1246,6 @@ public partial class CompanionOverlayWindow : Window
         _activeScene = null;
         _activeScenePlaybackFailed = false;
         _sceneRole = AnimationSceneRole.None;
-    }
-
-    private void SetFrame(BitmapSource? frame)
-    {
-        if (_sceneTransitionPending && frame is not null)
-        {
-            _sceneTransitionPending = false;
-            var transitionVersion = _sceneTransitionVersion;
-            CompanionImage.BeginAnimation(OpacityProperty, null);
-            CompanionImage.Source = frame;
-            CompanionImage.Visibility = Visibility.Visible;
-            CompanionImage.Opacity = 0;
-
-            var duration = new Duration(TimeSpan.FromMilliseconds(120));
-            var fadeIn = new DoubleAnimation(0, 1, duration);
-            var fadeOut = new DoubleAnimation(1, 0, duration);
-            fadeOut.Completed += (_, _) =>
-            {
-                if (transitionVersion != _sceneTransitionVersion)
-                    return;
-                TransitionImage.Source = null;
-                TransitionImage.Opacity = 0;
-            };
-            CompanionImage.BeginAnimation(OpacityProperty, fadeIn);
-            TransitionImage.BeginAnimation(OpacityProperty, fadeOut);
-            return;
-        }
-
-        CompanionImage.BeginAnimation(OpacityProperty, null);
-        CompanionImage.Opacity = 1;
-        CompanionImage.Source = frame;
-        CompanionImage.Visibility = frame is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void AddonStatusTimerTick(object? sender, EventArgs e)
@@ -1276,6 +1275,7 @@ public partial class CompanionOverlayWindow : Window
             return;
         }
 
+        if (InterruptAmbientIdle()) return;
         if (_modelSpeechPending && PresentDueModelCue()) return;
         if (_pendingDialogStartFrame is null && HasSceneDialog)
         {
@@ -1298,35 +1298,11 @@ public partial class CompanionOverlayWindow : Window
         _interruptedDialogText = string.Empty;
     }
 
-    private void BeginSceneTransition()
-    {
-        _sceneTransitionVersion++;
-        if (CompanionImage.Source is not BitmapSource source)
-        {
-            ClearSceneTransition();
-            return;
-        }
-
-        TransitionImage.BeginAnimation(OpacityProperty, null);
-        TransitionImage.Source = source;
-        TransitionImage.Opacity = 1;
-        _sceneTransitionPending = true;
-    }
-
-    private void ClearSceneTransition()
-    {
-        _sceneTransitionVersion++;
-        _sceneTransitionPending = false;
-        TransitionImage.BeginAnimation(OpacityProperty, null);
-        TransitionImage.Source = null;
-        TransitionImage.Opacity = 0;
-    }
-
     private void ShowMissingAsset(string message)
     {
-        ClearSceneTransition();
+        _sprites.Clear();
         _animationPlayer.Stop(clearFrame: true);
-        HideModel();
+        PetModel.Visibility = Visibility.Collapsed;
         PetModel.Clear();
         _sceneRole = AnimationSceneRole.None;
         CompanionImage.Visibility = Visibility.Collapsed;

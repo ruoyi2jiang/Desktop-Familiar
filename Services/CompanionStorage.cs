@@ -45,6 +45,7 @@ public sealed class CompanionStorage : ICompanionRepository
 
     public string RootDirectory { get; }
     public string DataFilePath => _dataStore.FilePath;
+    internal bool IsFirstUse => _dataStore.IsFirstUse;
     public StorageRecoveryNotice? LastRecoveryNotice { get; private set; }
 
     public DesktopCompanionData Load()

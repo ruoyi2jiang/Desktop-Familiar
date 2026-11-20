@@ -21,10 +21,13 @@ public sealed class JsonAppDataStore : IAppDataStore
         _directory = Path.Combine(rootDirectory, "Library");
         _legacyPath = Path.Combine(rootDirectory, "desktop-familiar.json");
         FilePath = Path.Combine(_directory, $"desktop-familiar.v{DesktopCompanionData.CurrentSchemaVersion}.json");
+        // Even a user who never saved a configuration already has a Library directory.
+        IsFirstUse = !Directory.Exists(_directory) && !File.Exists(_legacyPath);
         Directory.CreateDirectory(_directory);
     }
 
     public string FilePath { get; }
+    public bool IsFirstUse { get; }
     public string? SourceFingerprint { get; private set; }
     public string ReadPath
     {

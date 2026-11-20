@@ -108,6 +108,7 @@ public sealed class ChatController : IDisposable
         _turn = turn;
         try
         {
+            _overlay.BeginChatTurn();
             var answer = _session.SendReplyAsync(pet.Clone(), _manager.Data.Settings.Chat.ModelId!, prompt, turn.Token);
             if (await Task.WhenAny(answer, Task.Delay(200, turn.Token)) != answer && !turn.IsCancellationRequested)
                 _overlay.SetThinking(string.IsNullOrWhiteSpace(pet.ThinkingPhrase) ? LocalizationService.Get("Chat.Thinking") : pet.ThinkingPhrase);
@@ -128,7 +129,7 @@ public sealed class ChatController : IDisposable
             if (ReferenceEquals(_turn, turn))
             {
                 _turn = null;
-                _overlay.SetThinking(null);
+                _overlay.EndChatTurn();
             }
         }
     }

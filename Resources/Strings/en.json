@@ -168,6 +168,7 @@
   "Chat.PetIcon": "🐾",
   "Chat.Prompt": "Message your companion",
   "Chat.Send": "Send",
+  "Chat.YouSent": "You · Sent",
   "Chat.ClosePrompt": "Close chat prompt",
   "Chat.RememberPrefix": "Remember",
   "Chat.Thinking": "Hmm…",

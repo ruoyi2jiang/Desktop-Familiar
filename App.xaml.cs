@@ -68,7 +68,7 @@ public partial class App : System.Windows.Application
             System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
             AppLogger.Info("Application startup began.");
             Storage = new CompanionStorage();
-            Manager = new CompanionManager(Storage);
+            Manager = new CompanionManager(Storage, new StartupService(), Storage.IsFirstUse);
             AddonSettings = new AddonSettingsStore(Storage.RootDirectory);
             try
             {

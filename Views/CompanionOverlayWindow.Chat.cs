@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows.Threading;
 using System.Drawing;
+using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
 using DesktopFamiliar.Services.Animation;
 using MonitorScreen = System.Windows.Forms.Screen;
@@ -10,12 +11,12 @@ namespace DesktopFamiliar.Views;
 
 public partial class CompanionOverlayWindow
 {
-    private sealed record ChatPage(string Text, ChatReplyPlayback? Playback);
-    private readonly Queue<ChatPage> _chatPages = new();
+    private readonly ChatReplyPages _replies = new();
     private readonly DispatcherTimer _chatClock = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly Stopwatch _readClock = new();
-    private ChatPage? _reading;
-    private ChatPage? _voicedPage;
+    private ChatReplyPages.Page? _voicedPage;
+    private bool _chatTurnPending;
+    private bool ChatInProgress => _chatTurnPending || _replies.HasPages;
     private bool _voiceInputActive;
     private string? _thinking;
 
@@ -58,6 +59,39 @@ public partial class CompanionOverlayWindow
         return placement.DialogueClearance;
     }
 
+    internal void BeginChatTurn()
+    {
+        _chatTurnPending = true;
+        _chatSpeech.Stop();
+        _replies.DiscardSuperseded(keepVisiblePage: ChatReplyBorder.IsVisible);
+        InterruptAmbientIdle();
+    }
+
+    internal void EndChatTurn()
+    {
+        _chatTurnPending = false;
+        SetThinking(null);
+    }
+
+    private bool InterruptAmbientIdle()
+    {
+        if (!ChatInProgress || !IsVisible || _closingForExit || _showingAddonStatus || _activeReminder != null
+            || _manager.ActivityState != CompanionActivityState.Idle || !ScenePlaybackPolicy.IsAmbientIdle(_sceneRole)
+            || _playbackCompanion is not { } pet)
+            return false;
+
+        if (_sceneRole != AnimationSceneRole.IdleDefault || _afterLoopFinishes != null || !IsPlaybackLooping)
+        {
+            // StartScene cancels outgoing lines and cues, and blends from the displayed pose.
+            StartDefaultForCurrentState(pet, transition: true);
+            return true;
+        }
+        if (!HasSceneDialog) return false;
+        _dialogIndex = _activeScene!.DialogLines.Count;
+        StopDialog();
+        return true;
+    }
+
     public void SetThinking(string? text)
     {
         _thinking = text;
@@ -68,16 +102,16 @@ public partial class CompanionOverlayWindow
     {
         _thinking = null;
         var playback = animate ? new ChatReplyPlayback(expressionSceneId) : null;
-        foreach (var page in ChatBubbleTiming.Pages(reply)) _chatPages.Enqueue(new(page, playback));
+        _replies.Enqueue(reply, playback);
         RenderChat();
     }
 
     public void ResetChat()
     {
+        _chatTurnPending = false;
         _chatSpeech.Stop();
         _voicedPage = null;
-        _chatPages.Clear();
-        _reading = null;
+        _replies.DiscardSuperseded(keepVisiblePage: false);
         _thinking = null;
         _readClock.Reset();
         RenderChat();
@@ -85,31 +119,29 @@ public partial class CompanionOverlayWindow
 
     private void RenderChat(bool updateAnimation = true)
     {
-        if (_reading != null && !_chatSpeech.Playing && _readClock.Elapsed >= ChatBubbleTiming.ReadingTime(_reading.Text))
-        {
-            _reading = null;
-            _readClock.Reset();
-        }
-        if (_reading == null && _chatPages.TryDequeue(out var page)) _reading = page;
-        var text = _reading?.Text ?? _thinking;
+        var previous = _replies.Current;
+        _replies.Update(_readClock.Elapsed, _chatSpeech.Playing);
+        var reading = _replies.Current;
+        if (!ReferenceEquals(previous, reading)) _readClock.Reset();
+        var text = reading?.Text ?? _thinking;
         var visible = text != null && IsVisible && BubbleRoot.Visibility != Visibility.Visible
             && !_sceneSpeech.Playing && _voicePlayer == null;
         if (!visible || _manager.Data.Settings.FocusModeEnabled)
             _chatSpeech.Stop();
-        else if (!_voiceInputActive && _reading is { Playback.SpeechInterrupted: false } spoken && !ReferenceEquals(_voicedPage, spoken)
+        else if (!_voiceInputActive && reading is { Playback.SpeechInterrupted: false } spoken && !ReferenceEquals(_voicedPage, spoken)
             && _manager.CurrentCompanion is { Voice.Id: not "off" } companion)
         {
             _voicedPage = spoken;
             _ = _chatSpeech.PlayAsync(spoken.Text, companion.Voice);
         }
-        if (visible && _reading != null) _readClock.Start();
+        if (visible && reading != null) _readClock.Start();
         else _readClock.Stop();
         ChatReplyBorder.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         ChatReplyText.Text = text ?? string.Empty;
         if (text == null) _chatClock.Stop();
         else _chatClock.Start();
         UpdateDialogAreaForContent();
-        if (updateAnimation) UpdateChatReplyAnimation(visible ? _reading?.Playback : null);
+        if (updateAnimation) UpdateChatReplyAnimation(visible ? reading?.Playback : null);
     }
 
     internal void SetVoiceInputActive(bool active)
@@ -123,9 +155,7 @@ public partial class CompanionOverlayWindow
             _sceneSpeech.Stop();
             StartLineReadingTimer();
         }
-        if (_reading?.Playback != null) _reading.Playback.SpeechInterrupted = true;
-        foreach (var page in _chatPages)
-            if (page.Playback != null) page.Playback.SpeechInterrupted = true;
+        _replies.InterruptSpeech();
         _chatSpeech.Stop();
     }
 
@@ -139,16 +169,17 @@ public partial class CompanionOverlayWindow
         if (scene == null || _manager.Data.Settings.FocusModeEnabled)
         {
             if (_sceneRole == AnimationSceneRole.ChatReply && !FinishHeldModelClip(pet))
-                StartDefaultForCurrentState(pet);
+                StartDefaultForCurrentState(pet, transition: true);
             return;
         }
 
         if (_showingAddonStatus || _pointerDown || _afterLoopFinishes != null
+            || (pet.Appearance == CompanionAppearance.Images2D && TransitionImage.Source != null)
             || !ScenePlaybackPolicy.CanStartChatReply(_sceneRole, _manager.ActivityState, HasActiveDialog, _activeScene?.Id, scene.Id))
             return;
 
         _idleTimer.Stop();
-        StartScene(scene, AnimationSceneRole.ChatReply, forceLoop: true);
+        StartScene(scene, AnimationSceneRole.ChatReply, forceLoop: true, transition: true);
         if (_activeScenePlaybackFailed)
         {
             playback!.MarkFailed(scene.Id);

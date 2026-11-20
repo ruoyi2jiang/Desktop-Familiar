@@ -15,6 +15,21 @@ public sealed class PersistenceTests
         public DateTime Now { get; set; } = now;
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FirstUseRespectsLegacyAndPreviouslyOpenedUnsavedLibraries(bool hasLegacyLibrary)
+    {
+        using var directory = new TemporaryDirectory();
+        if (hasLegacyLibrary)
+            File.WriteAllText(Path.Combine(directory.Path, "desktop-familiar.json"), """{"SchemaVersion":8}""");
+        var first = new CompanionStorage(directory.Path);
+        Assert.Equal(!hasLegacyLibrary, first.IsFirstUse);
+        var reopened = new CompanionStorage(directory.Path);
+        Assert.False(reopened.IsFirstUse);
+        Assert.False(File.Exists(reopened.DataFilePath));
+    }
+
     [Fact]
     public void ObservedWeeklyExpirationSurvivesRestartBeyondReminderLookbackWithoutRewritingTheLibrary()
     {

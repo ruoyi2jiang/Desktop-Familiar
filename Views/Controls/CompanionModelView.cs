@@ -24,6 +24,8 @@ public sealed class CompanionModelView : Viewport3D
     private readonly OrthographicCamera _camera = new() { LookDirection = new(0, 0, -1), UpDirection = new(0, 1, 0) };
     private SceneInstance? _scene;
     private ModelPlaybackRig? _rig;
+    private HashSet<string>? _boundedClips;
+    private System.Drawing.RectangleF? _motionBounds;
     private string? _path;
     private (long Length, DateTime LastWriteUtc) _version;
     private ModelClipTimeline? _timeline;
@@ -40,7 +42,6 @@ public sealed class CompanionModelView : Viewport3D
     private Rect? _characterFrame;
 
     public event EventHandler? Completed;
-    internal event Action<bool>? PosePresented;
 
     internal static BitmapSource CaptureFirstFrame(string path, string? clip)
     {
@@ -139,7 +140,7 @@ public sealed class CompanionModelView : Viewport3D
         _loop = loop;
         _playing = true;
         _clock.Reset();
-        PresentFrame(_timeline.Sample(0), 0, firstFrame: true);
+        PresentFrame(_timeline.Sample(0), 0);
         UpdateTimer();
     }
 
@@ -243,7 +244,32 @@ public sealed class CompanionModelView : Viewport3D
     // Pixel bounds relative to the configured character rectangle, independent of the HWND's size.
     internal Rect GetPoseBounds(Size frame)
     {
-        var pose = _content.Bounds;
+        return ProjectBounds(_content.Bounds, frame);
+    }
+
+    internal Rect? GetConfiguredMotionBounds(ModelAppearance model, Size frame)
+    {
+        if (_rig == null || _restBounds.IsEmpty) return null;
+        var clips = model.Animations.SelectMany(scene => scene.SourceClips);
+        if (_boundedClips == null || !_boundedClips.SetEquals(clips))
+        {
+            var names = clips.ToHashSet(StringComparer.Ordinal);
+            var rest = new System.Drawing.RectangleF((float)_restBounds.X, (float)_restBounds.Y,
+                (float)_restBounds.SizeX, (float)_restBounds.SizeY);
+            try { _motionBounds = ModelMotionBounds.Calculate(_rig.Model, _meshes, names, rest); }
+            catch (Exception ex) when (GlbModelFile.IsLoadError(ex))
+            {
+                DesktopFamiliar.Services.AppLogger.Warning("Could not bound the configured model motion; reserving the desktop.", ex);
+                _motionBounds = null;
+            }
+            _boundedClips = names;
+        }
+        return _motionBounds is { } box
+            ? ProjectBounds(new Rect3D(box.X, box.Y, 0, box.Width, box.Height, 0), frame) : null;
+    }
+
+    private Rect ProjectBounds(Rect3D pose, Size frame)
+    {
         if (_restBounds.IsEmpty || pose.IsEmpty || frame.Width <= 0 || frame.Height <= 0) return Rect.Empty;
         var units = UnitsPerDip(frame);
         var x = _restBounds.X + _restBounds.SizeX / 2;
@@ -314,13 +340,12 @@ public sealed class CompanionModelView : Viewport3D
         PresentFrame(_timeline.SampleSource(seconds), 0);
     }
 
-    private void PresentFrame(ModelClipTimeline.Frame frame, float elapsed, bool firstFrame = false)
+    private void PresentFrame(ModelClipTimeline.Frame frame, float elapsed)
     {
         _scene!.Armature.SetPoseTransforms();
         _rig!.GetClip(frame.Clip)?.Apply((float)frame.Time);
         _transition?.Apply(elapsed);
         Pose();
-        PosePresented?.Invoke(firstFrame);
         FitCamera();
         SourceTimeChanged?.Invoke(frame.SourceTime);
     }
@@ -378,6 +403,8 @@ public sealed class CompanionModelView : Viewport3D
         _content.Children.Clear();
         _scene = null;
         _rig = null;
+        _boundedClips = null;
+        _motionBounds = null;
         _path = null;
         _restBounds = Rect3D.Empty;
     }
