@@ -10,6 +10,8 @@ using DesktopFamiliar.Services.Storage;
 
 namespace DesktopFamiliar.Services.Chat;
 
+internal sealed record ChatModelTestResult(string Reply, TimeSpan Elapsed, double? TokensPerSecond, long PeakRamBytes);
+
 /// <summary>A turn has its own CPU process and context. Idle companions consume no model RAM.</summary>
 public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
 {
@@ -26,9 +28,28 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
     internal static Task ProbeAsync(string enginePath, string modelPath, CancellationToken token) =>
         GenerateAsync(enginePath, modelPath, [new ChatMessage("user", "Hello")], [], 1, token);
 
-    private static async Task<ModelChatReply> GenerateAsync(string enginePath, string modelPath,
-        IReadOnlyList<ChatMessage> messages, IReadOnlyList<string> expressions, int maxTokens, CancellationToken token)
+    internal Task<ChatModelTestResult> TestAsync(string modelId, CancellationToken token)
     {
+        if (!models.Installed(modelId)) throw new FileNotFoundException("Chat model unavailable.");
+        var started = Stopwatch.GetTimestamp();
+        return WithServerAsync(models.EnginePath(modelId), models.ModelPath(modelId), async (http, secret, process, ct) =>
+        {
+            ChatMessage[] sample = [new("user", "Describe a rainy afternoon in two short sentences.")];
+            var reply = await CompleteAsync(http, secret, sample, 64, null, ct, temperature: 0).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(reply.Text)) throw new InvalidDataException("Model returned an empty test reply.");
+            return new ChatModelTestResult(reply.Text.Trim(), Stopwatch.GetElapsedTime(started), reply.TokensPerSecond, process.PeakWorkingSet64);
+        }, token);
+    }
+
+    private static Task<ModelChatReply> GenerateAsync(string enginePath, string modelPath,
+        IReadOnlyList<ChatMessage> messages, IReadOnlyList<string> expressions, int maxTokens, CancellationToken token) =>
+        WithServerAsync(enginePath, modelPath, (http, secret, _, ct) =>
+            RequestReplyAsync(http, secret, messages, expressions, maxTokens, ct), token);
+
+    private static async Task<T> WithServerAsync<T>(string enginePath, string modelPath,
+        Func<HttpClient, string, Process, CancellationToken, Task<T>> request, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromMinutes(3));
         using var probe = new TcpListener(IPAddress.Loopback, 0);
@@ -64,10 +85,11 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
                 catch (HttpRequestException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionRefused }) { }
                 await Task.Delay(60, timeout.Token).ConfigureAwait(false);
             }
-            return await RequestReplyAsync(http, secret, messages, expressions, maxTokens, timeout.Token).ConfigureAwait(false);
+            return await request(http, secret, process, timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException ex) when (!token.IsCancellationRequested)
+        catch (Exception ex) when (timeout.IsCancellationRequested && ex is OperationCanceledException or HttpRequestException or IOException or InvalidOperationException)
         {
+            token.ThrowIfCancellationRequested();
             throw new TimeoutException("Local model response timed out.", ex);
         }
         finally
@@ -96,7 +118,7 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
             try
             {
                 var content = await CompleteAsync(http, secret, structured, maxTokens, format, token).ConfigureAwait(false);
-                using var json = JsonDocument.Parse(content);
+                using var json = JsonDocument.Parse(content.Text);
                 var obj = json.RootElement;
                 if (obj.ValueKind == JsonValueKind.Object && obj.TryGetProperty("reply", out var spoken)
                     && spoken.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(spoken.GetString()))
@@ -110,22 +132,31 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
             catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity)
             { AppLogger.Warning("The local engine rejected the expression format; retrying as text.", exception); }
         }
-        return new(await CompleteAsync(http, secret, messages, maxTokens, null, token).ConfigureAwait(false));
+        return new((await CompleteAsync(http, secret, messages, maxTokens, null, token).ConfigureAwait(false)).Text);
     }
 
-    private static async Task<string> CompleteAsync(HttpClient http, string secret,
-        IReadOnlyList<ChatMessage> messages, int maxTokens, object? format, CancellationToken token)
+    private static async Task<(string Text, double? TokensPerSecond)> CompleteAsync(HttpClient http, string secret,
+        IReadOnlyList<ChatMessage> messages, int maxTokens, object? format, CancellationToken token, double temperature = 0.65)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", secret);
         var body = new Dictionary<string, object> { ["model"] = "companion", ["messages"] = messages,
-            ["max_tokens"] = maxTokens, ["temperature"] = 0.65, ["stream"] = false };
+            ["max_tokens"] = maxTokens, ["temperature"] = temperature, ["stream"] = false };
         if (format != null) body["response_format"] = format;
         request.Content = JsonContent.Create(body);
         using var response = await http.SendAsync(request, token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false));
-        return json.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+        return ReadCompletion(json.RootElement);
+    }
+
+    internal static (string Text, double? TokensPerSecond) ReadCompletion(JsonElement root)
+    {
+        var text = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+        double? speed = root.TryGetProperty("timings", out var timings) && timings.ValueKind == JsonValueKind.Object
+            && timings.TryGetProperty("predicted_per_second", out var value) && value.ValueKind == JsonValueKind.Number
+            && value.TryGetDouble(out var rate) && rate > 0 && double.IsFinite(rate) ? rate : null;
+        return (text, speed);
     }
 
     private static void Stop(Process process)

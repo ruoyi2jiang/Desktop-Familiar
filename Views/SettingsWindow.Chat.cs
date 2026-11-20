@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using DesktopFamiliar.Localization;
 using DesktopFamiliar.Models;
 using DesktopFamiliar.Services;
+using DesktopFamiliar.Services.Chat;
 using DesktopFamiliar.Services.Storage;
 
 namespace DesktopFamiliar.Views;
@@ -11,6 +12,9 @@ namespace DesktopFamiliar.Views;
 public partial class SettingsWindow
 {
     private bool _refreshingChat;
+    private CancellationTokenSource? _testOperation;
+    private string? _testingId;
+    private readonly ChatModelTestResults _modelTestResults = new();
     private enum SetupAction { Download, File, Folder }
     private void ChatMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Chat);
 
@@ -39,13 +43,64 @@ public partial class SettingsWindow
             foreach (var (action, key) in new[] { (SetupAction.Download, "Chat.GetModel"), (SetupAction.File, "Chat.PickFile"), (SetupAction.Folder, "Chat.ScanFolder") })
                 ChatModelChoice.Items.Add(new ComboBoxItem { Content = LocalizationService.Get(key), Tag = action });
             ChatModelChoice.SelectedItem = selected;
-            ChatAvailability.Text = LocalizationService.Get(installed.Count == 0 ? "Chat.Unavailable"
-                : selected.Tag == null ? "Chat.SelectModel" : "Chat.Local");
+            var selectedId = (selected.Tag as AvailableChatModel)?.Id;
+            ChatAvailability.Text = selectedId == null
+                ? LocalizationService.Get(installed.Count == 0 ? "Chat.Unavailable" : "Chat.SelectModel")
+                : chat.Models.DescribeRequirements(ChatModelStore.CatalogueEntry(selectedId), forDownload: false);
+            RefreshModelTest(prefs.Enabled ? selectedId : null);
             ChatShortcut.Text = prefs.Shortcut;
             RefreshVoiceSettings(prefs);
             ShortcutHint.Text = LocalizationService.Get(chat.ShortcutAvailable ? "Chat.ShortcutHint" : "Chat.ShortcutUnavailable");
         }
         finally { _refreshingChat = false; }
+    }
+
+    private void RefreshModelTest(string? selectedId, string? notice = null)
+    {
+        var testingSelection = _testOperation != null && _testingId == selectedId;
+        if (!testingSelection) _testOperation?.Cancel();
+        TestChatModel.IsEnabled = selectedId != null && ChatModelStore.Supported && (_testOperation == null || testingSelection);
+        TestChatModel.Content = LocalizationService.Get(testingSelection ? "Chat.CancelTest" : "Chat.TestModel");
+        var status = testingSelection ? LocalizationService.Get("Chat.TestRunning")
+            : _modelTestResults.Describe(selectedId, notice);
+        ModelTestStatus.Text = status ?? "";
+        ModelTestStatus.Visibility = status == null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async void TestChatModel_Click(object sender, RoutedEventArgs e)
+    {
+        if (_testOperation != null) { _testOperation.Cancel(); return; }
+        if (ChatModelChoice.SelectedItem is not ComboBoxItem { Tag: AvailableChatModel model }
+            || !_manager.Data.Settings.Chat.Enabled) return;
+        using var operation = new CancellationTokenSource();
+        _testOperation = operation;
+        _testingId = model.Id;
+        RefreshModelTest(model.Id);
+        string? notice = null;
+        try
+        {
+            var result = await App.CurrentApp.Chat.TestModelAsync(model.Id, operation.Token);
+            operation.Token.ThrowIfCancellationRequested();
+            if (result == null) notice = LocalizationService.Get("Chat.TestBusy");
+            else _modelTestResults.Record(model.Id, result);
+        }
+        catch (OperationCanceledException) { /* The user, a preference change, or a live chat turn ended the test. */ }
+        catch (Exception ex)
+        {
+            AppLogger.Warning("The local chat model test failed.", ex);
+            notice = LocalizationService.Get(ex is TimeoutException ? "Chat.TestTimedOut" : "Chat.TestFailed");
+        }
+        finally
+        {
+            _testOperation = null;
+            _testingId = null;
+            if (IsVisible && ChatPanel.IsVisible)
+            {
+                var selected = (ChatModelChoice.SelectedItem as ComboBoxItem)?.Tag as AvailableChatModel;
+                var id = _manager.Data.Settings.Chat.Enabled ? selected?.Id : null;
+                RefreshModelTest(id, id == model.Id ? notice : null);
+            }
+        }
     }
 
     private void ApplyChat(ChatPreferences settings)

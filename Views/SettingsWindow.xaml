@@ -202,10 +202,16 @@
                     </DockPanel>
                     <StackPanel x:Name="ChatOptions">
                         <controls:FieldHelpLabel Text="{loc:Loc Chat.Model}" HelpText="{loc:Loc Chat.ModelHelp}" />
-                        <ComboBox x:Name="ChatModelChoice" SelectionChanged="ChatModel_Changed" DropDownClosed="ChatModel_Closed"
-                                  ToolTip="{loc:Loc Chat.ModelHelp}" AutomationProperties.HelpText="{loc:Loc Chat.ModelHelp}" AutomationProperties.Name="{loc:Loc Chat.Model}" />
-                        <TextBlock x:Name="ChatAvailability" TextWrapping="Wrap" Margin="0,6,0,20"/>
-                        <TextBlock Text="{loc:Loc Chat.Shortcut}" FontWeight="SemiBold"/>
+                        <DockPanel LastChildFill="True" Margin="{x:Static controls:FormFieldMetrics.FieldMargin}">
+                            <Button x:Name="TestChatModel" DockPanel.Dock="Right" VerticalAlignment="Center" Content="{loc:Loc Chat.TestModel}" Click="TestChatModel_Click"
+                                    ToolTip="{loc:Loc Chat.TestHelp}" AutomationProperties.HelpText="{loc:Loc Chat.TestHelp}" Margin="8,0,0,0" />
+                            <ComboBox x:Name="ChatModelChoice" Margin="0" SelectionChanged="ChatModel_Changed" DropDownClosed="ChatModel_Closed"
+                                      ToolTip="{loc:Loc Chat.ModelHelp}" AutomationProperties.HelpText="{loc:Loc Chat.ModelHelp}" AutomationProperties.Name="{loc:Loc Chat.Model}" />
+                        </DockPanel>
+                        <TextBlock x:Name="ChatAvailability" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        <TextBlock x:Name="ModelTestStatus" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock Text="{loc:Loc Chat.Shortcut}" FontWeight="SemiBold" Margin="0,20,0,0"/>
                         <TextBox x:Name="ChatShortcut" IsReadOnly="True" PreviewKeyDown="ChatShortcut_KeyDown" AutomationProperties.Name="{loc:Loc Chat.Shortcut}" />
                         <TextBlock x:Name="ShortcutHint" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         <Border Style="{StaticResource SettingsDivider}" />

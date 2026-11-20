@@ -5,6 +5,7 @@
         <TextBlock x:Name="Heading" Text="{loc:Loc Chat.Models}" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,14"/>
         <ListBox x:Name="Choices" MaxHeight="220" ScrollViewer.HorizontalScrollBarVisibility="Auto" SelectionChanged="SelectionChanged" />
         <TextBlock x:Name="DownloadDetails" TextWrapping="Wrap" Margin="0,14,0,4"/>
+        <TextBlock x:Name="Requirements" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,4,0,8" />
         <TextBlock x:Name="Terms"><Hyperlink Click="Terms_Click" Foreground="{DynamicResource PageAccentBrush}"><Run Text="{loc:Loc Chat.Terms}"/></Hyperlink></TextBlock>
         <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,12" AutomationProperties.LiveSetting="Polite"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

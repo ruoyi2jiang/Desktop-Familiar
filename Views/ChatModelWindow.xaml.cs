@@ -68,6 +68,8 @@ public partial class ChatModelWindow : Window
         var available = model != null && _models.AvailableIdFor(model) != null;
         if (model != null)
         {
+            Requirements.Text = _models.DescribeRequirements(model, forDownload: !available);
+            Requirements.Visibility = Visibility.Visible;
             DownloadDetails.Text = available ? LocalizationService.Format("Chat.AlreadyAvailable", model.Name)
                 : LocalizationService.Format("Chat.DownloadDetails", model.Name, model.DownloadMb);
             Install.Content = LocalizationService.Get(available ? "Chat.UseFile" : "Chat.Download");
