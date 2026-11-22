@@ -22,6 +22,48 @@ public sealed class SemanticTextStyleTests
     }
 
     [Fact]
+    public void ConfigureUsesOneSliderTemplateWithAnOptionalPlaybackSelection()
+    {
+        var editor = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "CompanionEditorWindow.xaml")));
+        var sliders = editor.Descendants(Presentation + "Slider").ToList();
+        Assert.NotEmpty(sliders);
+        Assert.All(sliders, slider => Assert.Equal("{StaticResource ThemedHorizontalSlider}", (string?)slider.Attribute("Style")));
+
+        var playhead = sliders.Single(slider => (string?)slider.Attribute(Xaml + "Name") == "Scrubber");
+        Assert.Equal("True", (string?)playhead.Attribute("IsSelectionRangeEnabled"));
+        var app = XDocument.Load(FindRepositoryFile("App.xaml"));
+        var style = app.Descendants(Presentation + "Style").Single(s => (string?)s.Attribute(Xaml + "Key") == "ThemedHorizontalSlider");
+        Assert.Contains(style.Descendants(), e => (string?)e.Attribute(Xaml + "Name") == "PART_SelectionRange");
+        Assert.DoesNotContain(style.Elements(Presentation + "Setter"), s =>
+            (string?)s.Attribute("Property") is "Minimum" or "Maximum" or "IsSnapToTickEnabled");
+    }
+
+    [Fact]
+    public void ProfileVoiceButtonsInheritOneSizeAndSpacingIncludingDownloadButtons()
+    {
+        var editor = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "CompanionEditorWindow.xaml")));
+        var voice = editor.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "ProfileVoicePanel");
+        var style = voice.Element(Presentation + "StackPanel.Resources")!.Elements(Presentation + "Style")
+            .Single(s => (string?)s.Attribute("TargetType") == "Button");
+        Assert.Null(style.Attribute(Xaml + "Key"));
+        Assert.Equal("{StaticResource EditorImportButton}", (string?)style.Attribute("BasedOn"));
+        Assert.Contains(voice.Descendants(), e => (string?)e.Attribute(Xaml + "Name") == "BankDownloads");
+        Assert.All(voice.Descendants(Presentation + "Button"), button =>
+            Assert.DoesNotContain(button.Attributes(), a => a.Name.LocalName is "Margin" or "Style" or "Height"));
+    }
+
+    [Fact]
+    public void SharedTooltipWrapsTextAtTheRequestedWidth()
+    {
+        var app = XDocument.Load(FindRepositoryFile("App.xaml"));
+        var tooltip = app.Descendants(Presentation + "Style").Single(e => (string?)e.Attribute("TargetType") == "ToolTip");
+        Assert.Null(tooltip.Attribute(Xaml + "Key"));
+        Assert.Contains(tooltip.Elements(Presentation + "Setter"), s =>
+            (string?)s.Attribute("Property") == "MaxWidth" && (string?)s.Attribute("Value") == "560");
+        Assert.Equal("Wrap", (string?)tooltip.Descendants(Presentation + "TextBlock").Single().Attribute("TextWrapping"));
+    }
+
+    [Fact]
     public void SurfaceContainersOwnOrdinaryText_WithoutGlobalTextBlockOverride()
     {
         var appDocument = XDocument.Load(FindRepositoryFile("App.xaml"));
@@ -196,6 +238,21 @@ public sealed class SemanticTextStyleTests
             .ToList();
 
         Assert.Empty(untokenizedStyles);
+    }
+
+    [Fact]
+    public void ChatModelPickerInheritsTheWindowThemeAndKeepsItsActionsOutsideTheScrollingDetails()
+    {
+        var picker = XDocument.Load(FindRepositoryFile(Path.Combine("Views", "ChatModelWindow.xaml")));
+        Assert.Equal("{DynamicResource PageBackgroundBrush}", (string?)picker.Root!.Attribute("Background"));
+        Assert.Equal("{DynamicResource TextOnPageBackgroundBrush}", (string?)picker.Root.Attribute("Foreground"));
+        var list = picker.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "Choices");
+        var scroll = Assert.Single(list.Ancestors(Presentation + "ScrollViewer"));
+        Assert.Equal("Auto", (string?)scroll.Attribute("VerticalScrollBarVisibility"));
+        var install = picker.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "Install");
+        Assert.DoesNotContain(scroll, install.Ancestors());
+        Assert.Equal(scroll.Parent, install.Parent!.Parent);
+        Assert.Equal("2", (string?)install.Parent.Attribute("Grid.Row"));
     }
 
     [Fact]

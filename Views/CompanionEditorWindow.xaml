@@ -306,60 +306,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="EditorSlider" TargetType="Slider">
-            <Setter Property="Minimum" Value="5" />
-            <Setter Property="Maximum" Value="40" />
-            <Setter Property="TickFrequency" Value="1" />
-            <Setter Property="IsSnapToTickEnabled" Value="True" />
-            <Setter Property="Height" Value="28" />
-            <Setter Property="Margin" Value="0,6,0,4" />
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryAccentBrush}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Slider">
-                        <Grid VerticalAlignment="Center">
-                            <Track x:Name="PART_Track" VerticalAlignment="Center">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="{x:Static Slider.DecreaseLarge}" CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
-                                                  Focusable="False" Background="{DynamicResource PrimaryAccentBrush}" BorderThickness="0">
-                                        <RepeatButton.Template>
-                                            <ControlTemplate TargetType="RepeatButton">
-                                                <Border Background="{TemplateBinding Background}" Height="5" CornerRadius="3" />
-                                            </ControlTemplate>
-                                        </RepeatButton.Template>
-                                    </RepeatButton>
-                                </Track.DecreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb Width="18" Height="18" Background="{DynamicResource PrimaryAccentBrush}" BorderBrush="{DynamicResource PrimaryAccentHoverBrush}" BorderThickness="1">
-                                        <Thumb.Template>
-                                            <ControlTemplate TargetType="Thumb">
-                                                <Border x:Name="ThumbBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" />
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource PrimaryAccentHoverBrush}" />
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Thumb.Template>
-                                    </Thumb>
-                                </Track.Thumb>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="{x:Static Slider.IncreaseLarge}" CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
-                                                  Focusable="False" Background="{DynamicResource PrimaryBackgroundHoverBrush}" BorderThickness="0">
-                                        <RepeatButton.Template>
-                                            <ControlTemplate TargetType="RepeatButton">
-                                                <Border Background="{TemplateBinding Background}" Height="5" CornerRadius="3" />
-                                            </ControlTemplate>
-                                        </RepeatButton.Template>
-                                    </RepeatButton>
-                                </Track.IncreaseRepeatButton>
-                            </Track>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
         <Style x:Key="EditorTabControl" TargetType="TabControl">
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Template">
@@ -599,30 +545,45 @@
                         <Border Background="{DynamicResource PrimaryBackgroundBrush}" CornerRadius="14" Padding="22" Margin="0,16,0,0"
                                 BorderBrush="{DynamicResource PrimaryAccentBrush}" BorderThickness="1" TextElement.Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}">
                             <StackPanel x:Name="ProfileVoicePanel" IsVisibleChanged="ProfileVoice_IsVisibleChanged">
+                                <StackPanel.Resources>
+                                    <Style TargetType="Button" BasedOn="{StaticResource EditorImportButton}">
+                                        <Setter Property="HorizontalAlignment" Value="Left" />
+                                        <Setter Property="Margin" Value="0,4,6,4" />
+                                    </Style>
+                                </StackPanel.Resources>
                                 <TextBlock Text="{loc:Loc Voice.Profile}" Style="{StaticResource SectionTitle}"/>
                                 <Label Content="{loc:Loc Voice.ReplyLanguage}" Target="{Binding ElementName=ReplyLanguage}" Padding="0"/>
                                 <ComboBox x:Name="ReplyLanguage" DisplayMemberPath="Name" Style="{StaticResource EditorComboInput}" SelectionChanged="ProfileVoice_Changed"/>
                                 <Label Content="{loc:Loc Voice.Bank}" Target="{Binding ElementName=VoiceBank}" Margin="0,8,0,0" Padding="0"/>
                                 <ComboBox x:Name="VoiceBank" DisplayMemberPath="Name" Style="{StaticResource EditorComboInput}" SelectionChanged="ProfileVoice_Changed"/>
-                                <WrapPanel Margin="0,6,0,6">
-                                    <Button Content="{loc:Loc Voice.Import}" Click="ImportVoice_Click" Margin="0,0,6,0"/>
-                                    <Button Content="{loc:Loc Voice.WindowsPacks}" Click="OpenSpeechPacks_Click" Margin="0,0,6,0"/>
+                                <WrapPanel>
+                                    <Button Content="{loc:Loc Voice.Import}" Click="ImportVoice_Click"/>
+                                    <Button Content="{loc:Loc Voice.WindowsPacks}" Click="OpenSpeechPacks_Click"/>
                                     <Button Content="{loc:Loc Voice.Refresh}" Click="RefreshBanks_Click"/>
                                 </WrapPanel>
                                 <StackPanel x:Name="BankDownloads"/>
                                 <StackPanel x:Name="VoiceTuning">
                                     <Label x:Name="SpeakerLabel" Content="{loc:Loc Voice.Speaker}" Target="{Binding ElementName=VoiceSpeaker}" Padding="0"/>
                                     <ComboBox x:Name="VoiceSpeaker" Style="{StaticResource EditorComboInput}" SelectionChanged="ProfileVoice_Changed"/>
-                                <Label Content="{loc:Loc Voice.Rate}" Target="{Binding ElementName=VoiceRate}" Padding="0" Margin="0,6,0,0"/>
-                                <DockPanel><TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" Text="{Binding ElementName=VoiceRate,Path=Value,StringFormat=F0}"/>
-                                    <Slider x:Name="VoiceRate" Minimum="-5" Maximum="5" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Rate}"/></DockPanel>
-                                <Label Content="{loc:Loc Voice.Pitch}" Target="{Binding ElementName=VoicePitch}" Padding="0" Margin="0,6,0,0"/>
-                                <DockPanel><TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" Text="{Binding ElementName=VoicePitch,Path=Value,StringFormat=F0}"/>
-                                    <Slider x:Name="VoicePitch" Minimum="-10" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Pitch}"/></DockPanel>
-                                <Label Content="{loc:Loc Voice.Volume}" Target="{Binding ElementName=VoiceGain}" Padding="0" Margin="0,6,0,0"/>
-                                <DockPanel><TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" Text="{Binding ElementName=VoiceGain,Path=Value,StringFormat=F0}"/>
-                                    <Slider x:Name="VoiceGain" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Volume}"/></DockPanel>
-                                    <Button x:Name="PreviewVoice" Content="{loc:Loc Voice.Preview}" HorizontalAlignment="Left" Margin="0,8,0,0" Click="PreviewVoice_Click"/>
+                                    <Label Content="{loc:Loc Voice.Rate}" Target="{Binding ElementName=VoiceRate}" Padding="0" Margin="0,6,0,0"/>
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" VerticalAlignment="Center" Text="{Binding ElementName=VoiceRate,Path=Value,StringFormat=F0}"/>
+                                        <Slider x:Name="VoiceRate" Style="{StaticResource ThemedHorizontalSlider}" Minimum="-5" Maximum="5" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Rate}"/>
+                                    </DockPanel>
+                                    <Label Content="{loc:Loc Voice.Pitch}" Target="{Binding ElementName=VoicePitch}" Padding="0" Margin="0,6,0,0"/>
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" VerticalAlignment="Center" Text="{Binding ElementName=VoicePitch,Path=Value,StringFormat=F0}"/>
+                                        <Slider x:Name="VoicePitch" Style="{StaticResource ThemedHorizontalSlider}" Minimum="-10" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Pitch}"/>
+                                    </DockPanel>
+                                    <Label Content="{loc:Loc Voice.Volume}" Target="{Binding ElementName=VoiceGain}" Padding="0" Margin="0,6,0,0"/>
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" Width="38" TextAlignment="Right" VerticalAlignment="Center" Text="{Binding ElementName=VoiceGain,Path=Value,StringFormat=F0}"/>
+                                        <Slider x:Name="VoiceGain" Style="{StaticResource ThemedHorizontalSlider}" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                ValueChanged="VoiceTuning_Changed" AutomationProperties.Name="{loc:Loc Voice.Volume}"/>
+                                    </DockPanel>
+                                    <Button x:Name="PreviewVoice" Content="{loc:Loc Voice.Preview}" Click="PreviewVoice_Click"/>
                                 </StackPanel>
                                 <TextBlock x:Name="ProfileVoiceStatus" TextWrapping="Wrap" Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite"/>
                             </StackPanel>
@@ -706,8 +667,8 @@
                                                                      IsVisibleChanged="ModelPreview_IsVisibleChanged"/>
                                     </Grid>
                                     <TextBlock x:Name="PlayheadText"/>
-                                    <Slider x:Name="Scrubber" SmallChange="0.01" LargeChange="0.1" IsMoveToPointEnabled="True"
-                                            IsSelectionRangeEnabled="True" Foreground="{DynamicResource PrimaryAccentBrush}" ValueChanged="ScrubberChanged"
+                                    <Slider x:Name="Scrubber" Style="{StaticResource ThemedHorizontalSlider}" SmallChange="0.01" LargeChange="0.1" IsMoveToPointEnabled="True"
+                                            IsSelectionRangeEnabled="True" ValueChanged="ScrubberChanged"
                                             AutomationProperties.Name="{loc:Loc Model3D.Scrub}"/>
                                     <Grid Margin="0,6">
                                         <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -875,7 +836,9 @@
                                     </StackPanel>
                                     <StackPanel Grid.Column="2">
                                         <TextBlock Text="{loc:Loc Editor.DialogSpeed}" Style="{StaticResource FieldLabel}" />
-                                        <Slider Style="{StaticResource EditorSlider}" Value="{Binding DialogCharactersPerSecond, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <Slider Style="{StaticResource ThemedHorizontalSlider}" Minimum="5" Maximum="40" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Margin="0,6,0,4" AutomationProperties.Name="{loc:Loc Editor.DialogSpeed}"
+                                                Value="{Binding DialogCharactersPerSecond, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                         <TextBlock Text="{Binding DialogCharactersPerSecond, StringFormat={}{0:0} characters / second}" Foreground="{DynamicResource TextOnPrimaryBackgroundBrush}" Opacity="0.72" FontSize="12" HorizontalAlignment="Right" />
                                     </StackPanel>
                                 </Grid>

@@ -52,13 +52,13 @@ public partial class CompanionEditorWindow
             {
                 var label = LocalizationService.Format("Voice.DownloadBank", LocalizationService.Get(asset.NameKey!),
                     FileSizeFormatter.Format(asset.Size + (store.HasVoiceEngine ? 0 : VoiceBankStore.Catalogue.VoiceEngine.Size)));
-                var button = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Left, ToolTip = asset.Terms };
+                var button = new Button { Content = label, ToolTip = asset.Terms };
                 button.Click += (_, _) => InstallVoice(asset);
                 BankDownloads.Children.Add(button);
             }
             if (banks.Count > 0 && !store.HasVoiceEngine)
             {
-                var button = new Button { Content = V("DownloadEngine"), HorizontalAlignment = HorizontalAlignment.Left };
+                var button = new Button { Content = V("DownloadEngine") };
                 button.Click += (_, _) => InstallVoice(null);
                 BankDownloads.Children.Add(button);
             }

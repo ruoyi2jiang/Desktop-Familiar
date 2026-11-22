@@ -154,6 +154,14 @@ public partial class CompanionOverlayWindow : Window
             Style = (Style)FindResource("Windows11ContextMenu")
         };
         menu.Closed += OverlayContextMenu_Closed;
+        var exit = new MenuItem { Header = LocalizationService.Get("Overlay.Exit"), Style = (Style)FindResource("Windows11MenuItem") };
+        exit.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ShutdownApplication);
+        if (_closingForExit)
+        {
+            menu.Items.Add(exit);
+            ContextMenu = menu;
+            return;
+        }
 
         var enterFocus = new System.Windows.Controls.MenuItem
         {
@@ -214,12 +222,6 @@ public partial class CompanionOverlayWindow : Window
             Style = (Style)FindResource("Windows11MenuItem")
         };
         settings.Click += (_, _) => _menuAction.Queue(App.CurrentApp.ShowSettings);
-        var exit = new System.Windows.Controls.MenuItem
-        {
-            Header = LocalizationService.Get("Overlay.Exit"),
-            Style = (Style)FindResource("Windows11MenuItem")
-        };
-        exit.Click += (_, _) => App.CurrentApp.ShutdownApplication();
         menu.Items.Add(new System.Windows.Controls.Separator { Style = (Style)FindResource("Windows11MenuSeparator") });
         menu.Items.Add(setEvent);
         menu.Items.Add(configure);
@@ -264,7 +266,7 @@ public partial class CompanionOverlayWindow : Window
     public void ShowAddonStatus(string message)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        if (!IsVisible)
+        if (!IsVisible || _closingForExit)
             return;
 
         if (_showingAddonStatus)
@@ -657,7 +659,7 @@ public partial class CompanionOverlayWindow : Window
     {
         _idleTimer.Stop();
         var companion = _playbackCompanion;
-        if (companion is null || _manager.ActivityState != CompanionActivityState.Idle)
+        if (_closingForExit || companion is null || _manager.ActivityState != CompanionActivityState.Idle)
             return;
 
         if (ChatInProgress)
@@ -1316,7 +1318,7 @@ public partial class CompanionOverlayWindow : Window
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ButtonState != MouseButtonState.Pressed || BubbleRoot.IsMouseOver
+        if (_closingForExit || e.ButtonState != MouseButtonState.Pressed || BubbleRoot.IsMouseOver
             || HideDialogButton.IsMouseOver || ShowDialogButton.IsMouseOver)
             return;
         _pointerDown = true;
@@ -1525,10 +1527,22 @@ public partial class CompanionOverlayWindow : Window
     public void CloseForExit(Action? completed = null)
     {
         if (_closingForExit)
+        {
+            CompleteCloseForExit();
             return;
+        }
 
         _closingForExit = true;
         _exitCompleted = completed;
+        _idleTimer.Stop();
+        EndPointerInteraction();
+        _menuAction.Clear();
+        _manager.CurrentCompanionChanged -= ManagerCurrentCompanionChanged;
+        _manager.ActivityStateChanged -= ManagerStateChanged;
+        _manager.ViewportChanged -= ManagerViewportChanged;
+        _manager.DialogPresentationChanged -= ManagerDialogPresentationChanged;
+        _manager.IdleIntervalChanged -= ManagerIdleIntervalChanged;
+        _manager.UserBirthdayChanged -= ManagerUserBirthdayChanged;
         _pendingReminder = null;
         _activeReminder = null;
         ReminderActions.Visibility = Visibility.Collapsed;
@@ -1548,12 +1562,6 @@ public partial class CompanionOverlayWindow : Window
         _exitCloseCompleted = true;
         var completed = _exitCompleted;
         _exitCompleted = null;
-        _manager.CurrentCompanionChanged -= ManagerCurrentCompanionChanged;
-        _manager.ActivityStateChanged -= ManagerStateChanged;
-        _manager.ViewportChanged -= ManagerViewportChanged;
-        _manager.DialogPresentationChanged -= ManagerDialogPresentationChanged;
-        _manager.IdleIntervalChanged -= ManagerIdleIntervalChanged;
-        _manager.UserBirthdayChanged -= ManagerUserBirthdayChanged;
         StopAll(releaseModel: true);
         _animationPlayer.Dispose();
         Close();

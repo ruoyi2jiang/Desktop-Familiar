@@ -12,16 +12,22 @@ public sealed class ChatModelSetupTests : IDisposable
     private static ChatModel Gemma => ChatModelStore.Catalogue.Single(m => m.Id == "gemma-3-1b-it-q4");
 
     [Fact]
-    public void BusyOrFailedAttemptsPreserveTheLastCompletedTestForEachModel()
+    public void LocalMeasurementsAreSeparatedByModelAndGpuPreference()
     {
         var results = new ChatModelTestResults();
-        results.Record("first", new("Sample answer", TimeSpan.FromSeconds(2), 24, 1024));
-        var first = results.Describe("first");
-        Assert.Contains("Sample answer", first);
-        Assert.Equal("Busy" + Environment.NewLine + first, results.Describe("first", "Busy"));
-        Assert.Equal("Failed", results.Describe("other", "Failed"));
-        Assert.Equal(first, results.Describe("first"));
-        Assert.Null(results.Describe("other"));
+        var cpu = new ChatModelTestResult("Sample answer", TimeSpan.FromSeconds(2), 24, 1024, ChatComputeBackend.Cpu, 14);
+        var fallback = cpu with { Backend = ChatComputeBackend.CpuFallback, TokensPerSecond = 21 };
+        results.Record("first", false, cpu);
+        Assert.Null(results.Get("first", true));
+        results.Record("first", true, fallback);
+        Assert.Same(cpu, results.Get("first", false));
+        Assert.Same(fallback, results.Get("first", true));
+        Assert.Null(results.Get("other", false));
+        Assert.Contains("14 tokens per reply", ChatModelTestResults.Summary(Gemma, cpu));
+        Assert.Contains("24.0 tokens/s", ChatModelTestResults.Summary(Gemma, cpu));
+        Assert.Contains("Sample answer", ChatModelTestResults.Details(cpu));
+        Assert.DoesNotContain("tokens/s", ChatModelTestResults.Summary(Gemma, null));
+        Assert.DoesNotContain("tokens per", ChatModelTestResults.Summary(null, null));
     }
 
     [Fact]
@@ -31,6 +37,62 @@ public sealed class ChatModelSetupTests : IDisposable
         Assert.Same(Gemma, ChatModelStore.CatalogueEntry("local:" + Gemma.Sha256.ToUpperInvariant()));
         Assert.NotNull(Gemma.Requirements);
         Assert.Null(ChatModelStore.CatalogueEntry("local:" + new string('a', 64)));
+    }
+
+    [Theory]
+    [InlineData("gemma-3-1b-it-q4")]
+    [InlineData("lfm2-5-1-2b-instruct-q4")]
+    [InlineData("qwen3-5-2b-q4")]
+    [InlineData("qwen3-4b-instruct-2507-q4")]
+    public void ExistingLinkedFilesGainCatalogueDetailsWithoutBeingCopiedOrRelinked(string id)
+    {
+        LegacyEngine();
+        var model = Assert.Single(ChatModelStore.Catalogue, m => m.Id == id);
+        var path = FileAt("external/model.gguf", []);
+        var link = "local:" + model.Sha256;
+        new LocalChatModelIndex(_root).Link(link, path);
+        using var network = new Requests();
+        using var http = new HttpClient(network);
+        var store = new ChatModelStore(_root, http);
+        Assert.Equal(link, store.AvailableIdFor(model));
+        Assert.Equal(new AvailableChatModel(link, model.Name, path), Assert.Single(store.AvailableModels()));
+        Assert.Same(model, ChatModelStore.CatalogueEntry(link));
+        Assert.True(model.FileBytes < model.Requirements!.SetupSpaceMb * 1_000_000L);
+        Assert.InRange(model.SampleReplyTokens!.Value, 1, 64);
+        Assert.Equal(model.Sha256, store.TestKey(model.Id));
+        Assert.Equal(store.TestKey(model.Id), store.TestKey(link));
+        Assert.DoesNotContain("[Chat.", DesktopFamiliar.Localization.LocalizationService.Get(model.StrengthsKey));
+        Assert.Equal(id == "qwen3-5-2b-q4", model.DisableThinking);
+        Assert.Empty(network.Urls);
+    }
+
+    [Fact]
+    public async Task FailedGpuDownloadKeepsExistingCpuAndDoesNotOptInOrLeaveStaging()
+    {
+        if (!ChatModelStore.Supported) return;
+        var cpu = LegacyEngine();
+        using var http = new HttpClient(new Requests());
+        var store = new ChatModelStore(_root, http);
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.SetGpuEnabledAsync(true, default));
+        Assert.False(store.GpuEnabled);
+        Assert.False(store.GpuInstalled);
+        Assert.Equal(cpu, store.EnginePath(Gemma.Id));
+        Assert.Empty(Directory.GetDirectories(_root, "*.install-*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task TurningOffGpuKeepsTheCachedEngineAndWorksOffline()
+    {
+        using var requests = new Requests();
+        using var http = new HttpClient(requests);
+        var store = new ChatModelStore(_root, http);
+        FileAt("Chat/Engines/b12496-vulkan/llama-server.exe", []);
+        FileAt("Chat/Engines/b12496-vulkan/enabled", []);
+        Assert.True(store.GpuEnabled);
+        await store.SetGpuEnabledAsync(false, default);
+        Assert.False(new ChatModelStore(_root, http).GpuEnabled);
+        Assert.True(store.GpuInstalled);
+        Assert.Empty(requests.Urls);
     }
 
     [Theory]
@@ -46,7 +108,7 @@ public sealed class ChatModelSetupTests : IDisposable
         bool supported, int threads, int? ramMb, int? diskMb, bool downloading, string fit)
     {
         var pc = new ChatModelPc(supported, threads, ramMb * 1_000_000L, diskMb * 1_000_000L);
-        Assert.Equal(fit, pc.Assess(new ChatModelRequirements(2000, 4, 1000), downloading).ToString());
+        Assert.Equal(fit, pc.Assess(new ChatModelRequirements(2000, 4, 1000, 2000), downloading).ToString());
     }
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
@@ -92,7 +154,7 @@ public sealed class ChatModelSetupTests : IDisposable
         if (!ChatModelStore.Supported) return;
         var engine = LegacyEngine();
         var bytes = Fixture(7);
-        var release = Gemma with { Sha256 = Convert.ToHexString(SHA256.HashData(bytes)) };
+        var release = Gemma with { Sha256 = Convert.ToHexString(SHA256.HashData(bytes)), FileBytes = bytes.Length };
         var requests = new Requests(bytes);
         using var http = new HttpClient(requests);
         var store = new ChatModelStore(_root, http);

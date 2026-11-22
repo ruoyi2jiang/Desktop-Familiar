@@ -20,7 +20,11 @@ Existing libraries can contain the retired `Settings.TruncateLongDialogLines` fl
 
 ## Local chat
 
-The embedded `Resources/chat-models.json` catalogue holds each supported GGUF’s identity, digest, and `requirements`. The latter gives `suggestedFreeRamMb`, `suggestedThreads`, and `setupSpaceMb`. Sizes use decimal megabytes. A matching linked model uses the same entry by digest. Hardware readings and test results are transient.
+The embedded `Resources/chat-models.json` catalogue holds each supported GGUF’s identity, digest, download and terms URLs, exact `fileBytes`, localized `strengthsKey` and optional `disableThinking`. Its `requirements` give suggested available system RAM, logical threads, setup disk space and free GPU memory for full offload, in decimal megabytes for sizes. The optional `sampleReplyTokens` is the measured mean output token count for the three benchmark prompts, rounded to one decimal place. A matching linked model uses the same entry by digest. Hardware readings and local test results are held in memory.
+
+The optional Vulkan runtime lives in `Chat/Engines/b12496-vulkan/`. An empty `enabled` file in that directory records the user's opt-in on this PC. Enabling checks the device before creating the marker. Disabling removes the marker and retains the runtime. Existing libraries start on CPU and need no migration.
+
+An installed publisher download uses `Chat/Models/hub-<lowercase SHA-256>/model.gguf`. Its adjacent `publisher.json` records the Hub `Repository`, pinned `Revision`, `FileName`, LFS `Digest` and exact `Bytes`. The app validates these fields to reconstruct the offline display name, source and resource estimate. A new revision with different weights gets a distinct ID. Browsing listings writes no library settings. Existing managed and linked model IDs retain their meaning. If the receipt is missing or invalid, downloading the model again restores the receipt. Choosing the existing GGUF file links it by its verified digest.
 
 Schema 16 adds voice preferences to `Settings.Chat`: `VoiceEnabled` defaults to true, `InputLanguage` to the system language, `MicrophoneId` to the default input, `TalkShortcut` to Ctrl+Shift+F10, and `SendOnRelease` and `PreferWhisper` to false. When the two shortcuts coincide, normalization preserves the text-chat shortcut and assigns a distinct default to push-to-talk. Disabling Chat takes precedence over the voice preference.
 

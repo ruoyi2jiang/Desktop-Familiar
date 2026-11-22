@@ -144,6 +144,7 @@ public partial class SettingsWindow : Window
         Closed += (_, _) => CloseAppUpdates();
         Closed += (_, _) => CancelVoiceSettingsOperations();
         Closed += (_, _) => _testOperation?.Cancel();
+        Closed += (_, _) => _gpuOperation?.Cancel();
         var history = App.CurrentApp.Chat.History;
         history.Changed += HistorySizeChanged;
         Closed += (_, _) => history.Changed -= HistorySizeChanged;
@@ -1058,6 +1059,7 @@ public partial class SettingsWindow : Window
         {
             CancelVoiceSettingsOperations();
             _testOperation?.Cancel();
+            _gpuOperation?.Cancel();
         }
         ThemePanel.Visibility = page == SettingsPage.Theme ? Visibility.Visible : Visibility.Collapsed;
         AddonsPanel.Visibility = page == SettingsPage.Addons ? Visibility.Visible : Visibility.Collapsed;

@@ -8,10 +8,14 @@ using DesktopFamiliar.Services.Chat;
 
 namespace DesktopFamiliar.Services.Storage;
 
-public sealed record ChatModel(string Id, string NameKey, string FileUrl, string Sha256, int DownloadMb, string TermsUrl)
+public sealed record ChatModel(string Id, string NameKey, string FileUrl, string Sha256, long FileBytes, string TermsUrl)
 {
-    public string Name => LocalizationService.Get(NameKey);
-    public ChatModelRequirements? Requirements { get; init; }
+    public string Name => PublisherRelease?.Name ?? LocalizationService.Get(NameKey);
+    internal PublisherChatRelease? PublisherRelease { get; init; }
+    public required string StrengthsKey { get; init; }
+    public bool DisableThinking { get; init; }
+    public required ChatModelRequirements Requirements { get; init; }
+    public double? SampleReplyTokens { get; init; }
 }
 
 public sealed class ChatModelStore(string root, HttpClient http,
@@ -19,12 +23,22 @@ public sealed class ChatModelStore(string root, HttpClient http,
 {
     private const string EngineUrl = "https://github.com/ggml-org/llama.cpp/releases/download/b12496/llama-b12496-bin-win-cpu-x64.zip";
     private const string EngineHash = "f02e029c0f4f0f9c8ea341ef47d0fd28191df0bcfa5ab4f40f4aa43942e943ea";
+    private const string VulkanUrl = "https://github.com/ggml-org/llama.cpp/releases/download/b12496/llama-b12496-bin-win-vulkan-x64.zip";
+    private const string VulkanHash = "bd8eaf56c8dfe87d46ef183c71188c659639a71b104b63f00a5a8eb587405095";
     public static IReadOnlyList<ChatModel> Catalogue { get; } = LoadCatalogue();
     private readonly string _directory = Path.Combine(root, "Chat", "Models");
     private readonly SemaphoreSlim _install = new(1);
     private readonly LocalChatModelIndex _local = new(root);
+    private readonly PublisherChatModels _publishers = new(http);
+    private volatile ChatModel[] _discovered = [];
     private readonly string _sharedEngine = Path.Combine(root, "Chat", "Engines", "b12496");
+    private readonly string _vulkanDirectory = Path.Combine(root, "Chat", "Engines", "b12496-vulkan");
+    private string GpuOptInPath => Path.Combine(_vulkanDirectory, "enabled");
+    internal string VulkanEnginePath => Path.Combine(_vulkanDirectory, "llama-server.exe");
+    internal bool GpuEnabled => File.Exists(GpuOptInPath) && File.Exists(VulkanEnginePath);
+    internal bool GpuInstalled => File.Exists(VulkanEnginePath);
     private readonly Func<string, string, CancellationToken, Task> _probe = probeLocalFile ?? LlamaChatEngine.ProbeAsync;
+    private readonly Func<string, string, CancellationToken, Task> _probePublisher = probeLocalFile ?? LlamaChatEngine.ProbePublisherAsync;
 
     private static IReadOnlyList<ChatModel> LoadCatalogue()
     {
@@ -35,8 +49,9 @@ public sealed class ChatModelStore(string root, HttpClient http,
         if (models == null || models.DistinctBy(m => m.Id).Count() != models.Length || models.Any(m =>
             string.IsNullOrEmpty(m.Id) || m.Id.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-') ||
             string.IsNullOrWhiteSpace(m.NameKey) || !Https(m.FileUrl) || !Https(m.TermsUrl) ||
-            m.Sha256?.Length != 64 || !m.Sha256.All(Uri.IsHexDigit) || m.DownloadMb <= 0 ||
-            m.Requirements is not { SuggestedFreeRamMb: > 0, SuggestedThreads: > 0, SetupSpaceMb: > 0 }))
+            m.Sha256?.Length != 64 || !m.Sha256.All(Uri.IsHexDigit) || m.FileBytes <= 0 || string.IsNullOrWhiteSpace(m.StrengthsKey) ||
+            m.SampleReplyTokens is <= 0 or > 64 ||
+            m.Requirements is not { SuggestedFreeRamMb: > 0, SuggestedThreads: > 0, SetupSpaceMb: > 0, SuggestedFreeVramMb: > 0 }))
             throw new InvalidDataException("Invalid bundled chat model catalogue.");
         return Array.AsReadOnly(models);
     }
@@ -45,9 +60,26 @@ public sealed class ChatModelStore(string root, HttpClient http,
     internal static ChatModel? CatalogueEntry(string id) => Catalogue.FirstOrDefault(model =>
         model.Id == id || string.Equals("local:" + model.Sha256, id, StringComparison.OrdinalIgnoreCase));
 
-    internal string DescribeRequirements(ChatModel? model, bool forDownload) =>
-        ChatModelPc.Read(root, forDownload).Describe(model?.Requirements, forDownload);
-    private static bool IsManaged(string id) => Catalogue.Any(model => model.Id == id);
+    internal string TestKey(string id) => id.StartsWith("local:", StringComparison.Ordinal) ? id[6..]
+        : PublisherChatRelease.IsModelId(id) ? id[4..] : CatalogueEntry(id)?.Sha256 ?? id;
+    internal ChatModelPc ReadDownloadPc() => ChatModelPc.Read(root, forDownload: true);
+    internal bool FitsPicker(ChatModel model, ChatModelPc pc) =>
+        pc.Assess(model.Requirements, forDownload: AvailableIdFor(model) == null) == ModelFit.Recommended;
+
+    internal IReadOnlyList<ChatModel> DownloadChoices(ChatModelPc pc) =>
+        Catalogue.Concat(InstalledPublisherModels()).Concat(_discovered).DistinctBy(model => model.Sha256, StringComparer.OrdinalIgnoreCase)
+            .Where(model => FitsPicker(model, pc)).ToArray();
+
+    internal async Task<PublisherSearchResult> DiscoverAsync(CancellationToken token)
+    {
+        var result = await _publishers.SearchAsync(token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        _discovered = result.Incomplete ? result.Models.Concat(_discovered).DistinctBy(model => model.Sha256).ToArray()
+            : result.Models.ToArray();
+        return result;
+    }
+
+    private static bool IsManaged(string id) => PublisherChatRelease.IsModelId(id) || Catalogue.Any(model => model.Id == id);
     private string ManagedFile(string id) => Path.Combine(_directory, id, "model.gguf");
     private string LegacyEngine(string id) => Path.Combine(_directory, id, "engine", "llama-server.exe");
 
@@ -63,7 +95,49 @@ public sealed class ChatModelStore(string root, HttpClient http,
     private string? FindModelPath(string id) => IsManaged(id) ? ManagedFile(id) : _local.Find(id);
     internal string ModelPath(string id) => FindModelPath(id) ?? throw new FileNotFoundException("Unknown local chat model.");
 
-    public bool Installed(string? id) => id != null && File.Exists(FindModelPath(id)) && File.Exists(EnginePath(id));
+    private bool HasModelAndEngine(string id) => File.Exists(FindModelPath(id)) && File.Exists(EnginePath(id));
+
+    public bool Installed(string? id) => id != null && HasModelAndEngine(id) &&
+        (!PublisherChatRelease.IsModelId(id) || FindEntry(id) != null);
+
+    internal ChatModel? FindEntry(string id)
+    {
+        if (CatalogueEntry(id) is { } bundled) return bundled;
+        if (id.StartsWith("local:", StringComparison.Ordinal))
+            return _discovered.FirstOrDefault(model => string.Equals(model.Sha256, id[6..], StringComparison.OrdinalIgnoreCase));
+        if (!PublisherChatRelease.IsModelId(id)) return null;
+        var receipt = Path.Combine(_directory, id, "publisher.json");
+        try
+        {
+            using var input = File.OpenRead(receipt);
+            var entry = JsonSerializer.Deserialize<PublisherChatRelease>(input)?.ToModel();
+            return entry?.Id == id ? entry : null;
+        }
+        catch (FileNotFoundException) { return null; }
+        catch (DirectoryNotFoundException) { return null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            AppLogger.Warning("Could not read installed publisher model details.", ex);
+            return null;
+        }
+    }
+
+    private IEnumerable<ChatModel> InstalledPublisherModels()
+    {
+        if (!Directory.Exists(_directory)) yield break;
+        string[] directories;
+        try { directories = Directory.GetDirectories(_directory, "hub-*"); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.Warning("Could not list installed publisher chat models.", ex);
+            yield break;
+        }
+        foreach (var path in directories)
+        {
+            var id = Path.GetFileName(path);
+            if (PublisherChatRelease.IsModelId(id) && HasModelAndEngine(id) && FindEntry(id) is { } entry) yield return entry;
+        }
+    }
 
     public string? AvailableIdFor(ChatModel model)
     {
@@ -74,10 +148,11 @@ public sealed class ChatModelStore(string root, HttpClient http,
 
     public IReadOnlyList<AvailableChatModel> AvailableModels()
     {
-        var models = Catalogue.Where(m => Installed(m.Id)).Select(m => new AvailableChatModel(m.Id, m.Name, ManagedFile(m.Id))).ToList();
+        var models = Catalogue.Where(m => Installed(m.Id)).Concat(InstalledPublisherModels())
+            .Select(m => new AvailableChatModel(m.Id, m.Name, ManagedFile(m.Id))).ToList();
         foreach (var (id, path) in _local.Entries().Where(entry => Installed(entry.Key)))
         {
-            var match = CatalogueEntry(id);
+            var match = FindEntry(id);
             models.Add(new(id, match?.Name ?? Path.GetFileName(path), path));
         }
         return models;
@@ -105,6 +180,9 @@ public sealed class ChatModelStore(string root, HttpClient http,
             var known = Catalogue.FirstOrDefault(m => m.Sha256.Equals(hash, StringComparison.OrdinalIgnoreCase));
             long downloaded = 0;
             var engine = await EnsureEngineAsync(bytes => progress.Report(downloaded += bytes), token).ConfigureAwait(false);
+            var publisherId = "hub-" + hash;
+            if (Installed(publisherId) && string.Equals(path, ManagedFile(publisherId), StringComparison.OrdinalIgnoreCase))
+                return publisherId;
             if (known != null && string.Equals(path, ManagedFile(known.Id), StringComparison.OrdinalIgnoreCase))
                 return known.Id;
             if (known == null) await _probe(engine, path, token).ConfigureAwait(false);
@@ -130,12 +208,24 @@ public sealed class ChatModelStore(string root, HttpClient http,
             Directory.CreateDirectory(stage);
             long total = 0;
             void Report(int bytes) { total += bytes; progress.Report(total); }
-            await EnsureEngineAsync(Report, token).ConfigureAwait(false);
-            await DownloadAsync(model.FileUrl, model.Sha256, Path.Combine(stage, "model.gguf"), Report, token);
+            var engine = await EnsureEngineAsync(Report, token).ConfigureAwait(false);
+            var weights = Path.Combine(stage, "model.gguf");
+            await DownloadAsync(model.FileUrl, model.Sha256, weights, Report, token, model.FileBytes);
+            if (model.PublisherRelease is { } publisher)
+            {
+                await _probePublisher(engine, weights, token).ConfigureAwait(false);
+                await File.WriteAllTextAsync(Path.Combine(stage, "publisher.json"), JsonSerializer.Serialize(publisher), token).ConfigureAwait(false);
+            }
             token.ThrowIfCancellationRequested();
             var destination = ManagedFile(model.Id);
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            File.Move(Path.Combine(stage, "model.gguf"), destination, overwrite: true);
+            var directory = Path.GetDirectoryName(destination)!;
+            if (!Directory.Exists(directory)) Directory.Move(stage, directory);
+            else
+            {
+                File.Move(weights, destination, overwrite: true);
+                if (model.PublisherRelease != null)
+                    File.Move(Path.Combine(stage, "publisher.json"), Path.Combine(directory, "publisher.json"), overwrite: true);
+            }
         }
         finally
         {
@@ -145,30 +235,54 @@ public sealed class ChatModelStore(string root, HttpClient http,
     }
 
     // Called under the installation lock. Existing per-model engines are also usable by linked files.
-    private async Task<string> EnsureEngineAsync(Action<int> onBytes, CancellationToken token)
+    private Task<string> EnsureEngineAsync(Action<int> onBytes, CancellationToken token)
     {
         var existing = EnginePath("");
-        if (File.Exists(existing)) return existing;
-        var stage = _sharedEngine + ".install-" + Guid.NewGuid().ToString("N");
+        return File.Exists(existing) ? Task.FromResult(existing) : InstallEngineAsync(_sharedEngine, EngineUrl, EngineHash, onBytes, token);
+    }
+
+    internal async Task SetGpuEnabledAsync(bool enabled, CancellationToken token)
+    {
+        await _install.WaitAsync(token);
+        try
+        {
+            if (!enabled)
+            {
+                if (File.Exists(GpuOptInPath)) File.Delete(GpuOptInPath);
+                return;
+            }
+            if (!Supported) throw new PlatformNotSupportedException();
+            if (!GpuInstalled) await InstallEngineAsync(_vulkanDirectory, VulkanUrl, VulkanHash, _ => { }, token);
+            if (!await VulkanDeviceProbe.IsAvailableAsync(VulkanEnginePath, token))
+                throw new NotSupportedException("No usable Vulkan0 graphics device was reported.");
+            token.ThrowIfCancellationRequested();
+            using var marker = File.Open(GpuOptInPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
+        }
+        finally { _install.Release(); }
+    }
+
+    private async Task<string> InstallEngineAsync(string directory, string url, string hash, Action<int> onBytes, CancellationToken token)
+    {
+        var stage = directory + ".install-" + Guid.NewGuid().ToString("N");
         Directory.CreateDirectory(stage);
         try
         {
             var archive = Path.Combine(stage, "engine.zip");
-            await DownloadAsync(EngineUrl, EngineHash, archive, onBytes, token).ConfigureAwait(false);
+            await DownloadAsync(url, hash, archive, onBytes, token).ConfigureAwait(false);
             var engine = Path.Combine(stage, "engine");
             await Task.Run(() => ZipFile.ExtractToDirectory(archive, engine), token).ConfigureAwait(false);
             if (!File.Exists(Path.Combine(engine, "llama-server.exe")))
                 throw new InvalidDataException("Engine executable missing from release.");
             token.ThrowIfCancellationRequested();
             var previous = Path.Combine(stage, "previous");
-            if (Directory.Exists(_sharedEngine)) Directory.Move(_sharedEngine, previous);
-            try { Directory.Move(engine, _sharedEngine); }
+            if (Directory.Exists(directory)) Directory.Move(directory, previous);
+            try { Directory.Move(engine, directory); }
             catch
             {
-                if (Directory.Exists(previous)) Directory.Move(previous, _sharedEngine);
+                if (Directory.Exists(previous)) Directory.Move(previous, directory);
                 throw;
             }
-            return Path.Combine(_sharedEngine, "llama-server.exe");
+            return Path.Combine(directory, "llama-server.exe");
         }
         finally { RemoveStagingDirectory(stage); }
     }
@@ -182,7 +296,7 @@ public sealed class ChatModelStore(string root, HttpClient http,
         }
     }
 
-    private async Task DownloadAsync(string url, string hash, string path, Action<int> progress, CancellationToken token)
+    private async Task DownloadAsync(string url, string hash, string path, Action<int> progress, CancellationToken token, long? expectedBytes = null)
     {
         using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
@@ -193,10 +307,12 @@ public sealed class ChatModelStore(string root, HttpClient http,
         int count;
         while ((count = await source.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
         {
+            if (dest.Position + count > expectedBytes) throw new InvalidDataException("Download exceeds the expected size.");
             await dest.WriteAsync(buffer.AsMemory(0, count), token).ConfigureAwait(false);
             digest.AppendData(buffer, 0, count);
             progress(count);
         }
+        if (expectedBytes.HasValue && dest.Position != expectedBytes) throw new InvalidDataException("Incomplete model download.");
         if (!Convert.ToHexString(digest.GetHashAndReset()).Equals(hash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Download checksum mismatch.");
     }
