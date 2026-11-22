@@ -45,6 +45,7 @@ public sealed class ChatController : IDisposable
 
     public ChatModelStore Models { get; }
     public ChatHistoryStore History { get; }
+    internal ChatModelTestResults ModelTests { get; } = new();
     public bool Available => AvailableFor(_manager.Data.Settings.Chat);
     public bool ShortcutAvailable { get; private set; }
     public bool TalkShortcutAvailable { get; private set; }
@@ -87,7 +88,14 @@ public sealed class ChatController : IDisposable
         if (_turn != null || _modelTest != null) return null;
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(token);
         _modelTest = operation;
-        try { return await _engine.TestAsync(id, operation.Token); }
+        try
+        {
+            var gpuEnabled = Models.GpuEnabled;
+            var result = await _engine.TestAsync(id, operation.Token);
+            operation.Token.ThrowIfCancellationRequested();
+            ModelTests.Record(Models.TestKey(id), gpuEnabled, result);
+            return result;
+        }
         finally { _modelTest = null; }
     }
 

@@ -5,7 +5,15 @@ using Microsoft.VisualBasic.Devices;
 
 namespace DesktopFamiliar.Services.Chat;
 
-public sealed record ChatModelRequirements(int SuggestedFreeRamMb, int SuggestedThreads, int SetupSpaceMb);
+public sealed record ChatModelRequirements(int SuggestedFreeRamMb, int SuggestedThreads, int SetupSpaceMb, int SuggestedFreeVramMb)
+{
+    internal string Describe(bool forDownload)
+    {
+        static string Size(int mb) => FileSizeFormatter.Format(mb * 1_000_000L);
+        return LocalizationService.Format(forDownload ? "Chat.Requirements.Download" : "Chat.Requirements.Installed",
+            Size(SuggestedFreeRamMb), SuggestedThreads, Size(SuggestedFreeVramMb), Size(SetupSpaceMb));
+    }
+}
 
 internal enum ModelFit { Unsupported, LowDisk, Limited, Unknown, Recommended }
 
@@ -22,7 +30,10 @@ internal sealed record ChatModelPc(bool Supported, int Threads, long? FreeRam, l
         {
             AppLogger.Warning("Available physical memory could not be read for the model check.", ex);
         }
-        long? disk = forDownload && GetDiskFreeSpaceEx(directory, out var bytes, 0, 0) ? bytes : null;
+        // A new installation may not have created its data folder yet.
+        var driveDirectory = forDownload ? new DirectoryInfo(directory) : null;
+        while (driveDirectory != null && !driveDirectory.Exists) driveDirectory = driveDirectory.Parent;
+        long? disk = driveDirectory != null && GetDiskFreeSpaceEx(driveDirectory.FullName, out var bytes, 0, 0) ? bytes : null;
         return new(ChatModelStore.Supported, Environment.ProcessorCount, ram, disk);
     }
 
@@ -34,19 +45,5 @@ internal sealed record ChatModelPc(bool Supported, int Threads, long? FreeRam, l
             return ModelFit.Limited;
         if (FreeRam == null || (forDownload && FreeDisk == null)) return ModelFit.Unknown;
         return ModelFit.Recommended;
-    }
-
-    public string Describe(ChatModelRequirements? requirements, bool forDownload)
-    {
-        if (!Supported) return LocalizationService.Get("Chat.Unsupported");
-        if (requirements == null) return LocalizationService.Get("Chat.Fit.Custom");
-        string Size(long? bytes) => bytes.HasValue ? FileSizeFormatter.Format(bytes.Value) : LocalizationService.Get("Chat.Fit.Unavailable");
-        var lines = new List<string> {
-            LocalizationService.Get("Chat.Fit." + Assess(requirements, forDownload)),
-            LocalizationService.Format("Chat.Fit.Hardware", Size(FreeRam), Size(requirements.SuggestedFreeRamMb * 1_000_000L),
-                Threads, requirements.SuggestedThreads)
-        };
-        if (forDownload) lines.Add(LocalizationService.Format("Chat.Fit.Disk", Size(FreeDisk), Size(requirements.SetupSpaceMb * 1_000_000L)));
-        return string.Join(Environment.NewLine, lines);
     }
 }

@@ -5,7 +5,7 @@ Desktop Familiar is a Windows WPF desktop-companion application. It displays an 
 ## Current capabilities
 
 - Multiple locally configured companions with a shared profile across 2D and 3D, a live idle preview, and an optional portrait that defaults to a still of the active idle.
-- Built-in offline text chat for Windows x64. Check suggested PC resources before downloading Gemma 3 1B, choose an existing GGUF, or scan a folder for models. Test a model locally to compare reply speed and peak RAM. Toggle the prompt with a configurable shortcut and let the pet choose a configured expression as it replies. Each companion has private notes and history.
+- Built-in offline text chat for Windows x64. The downloader lists models that fit your PC, with benchmarked Gemma, Liquid and Qwen options and live discovery of compact and specialist models. Link an existing GGUF or scan a folder. Run on CPU or enable optional Vulkan GPU acceleration, then test the model on your PC. Each companion has private notes, history and configurable chat expressions.
 - Portable companion bundles that include configuration, animations, dialogue audio, fonts, and bubble artwork for one-step export and import.
 - Optional offline push-to-talk using installed Windows recognition or downloadable multilingual Whisper. Each pet can speak with a tuned Windows voice or a shared Kokoro voice bank.
 - GIF, static image, or ordered PNG-frame animations with per-frame timing. A companion can also carry a self-contained 3D GLB model. Play a full 3D activity with a marked loop range, timed repeats, or a loop that lasts through dialogue. Assign it to states or interactions. Switch appearances in Configure.

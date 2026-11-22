@@ -12,7 +12,7 @@
     <Product>Desktop Familiar</Product>
     <Company>Desktop Familiar</Company>
     <Description>An animated desktop-companion application for Windows.</Description>
-    <Version>0.10.1</Version>
+    <Version>0.10.2</Version>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>

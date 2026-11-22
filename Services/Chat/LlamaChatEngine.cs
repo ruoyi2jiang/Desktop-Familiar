@@ -10,9 +10,14 @@ using DesktopFamiliar.Services.Storage;
 
 namespace DesktopFamiliar.Services.Chat;
 
-internal sealed record ChatModelTestResult(string Reply, TimeSpan Elapsed, double? TokensPerSecond, long PeakRamBytes);
+internal enum ChatComputeBackend { Cpu, Vulkan, CpuFallback }
 
-/// <summary>A turn has its own CPU process and context. Idle companions consume no model RAM.</summary>
+internal sealed record ChatModelTestResult(string Reply, TimeSpan Elapsed, double? TokensPerSecond, long PeakRamBytes,
+    ChatComputeBackend Backend, double? AverageReplyTokens);
+
+internal sealed record ChatCompletion(string Text, double? TokensPerSecond, int? OutputTokens);
+
+/// <summary>A turn has its own engine process and context. Idle companions consume no model RAM.</summary>
 public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
 {
     public async Task<string> ReplyAsync(string modelId, IReadOnlyList<ChatMessage> messages, CancellationToken token) =>
@@ -21,32 +26,83 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
     public Task<ModelChatReply> ReplyWithExpressionAsync(string modelId, IReadOnlyList<ChatMessage> messages,
         IReadOnlyList<string> expressions, CancellationToken token)
     {
-        if (!models.Installed(modelId)) throw new FileNotFoundException("Chat model unavailable.");
-        return GenerateAsync(models.EnginePath(modelId), models.ModelPath(modelId), messages, expressions, 220, token);
+        return RunModelAsync(modelId, (http, secret, _, _, ct) =>
+            RequestReplyAsync(http, secret, messages, expressions, 220, ct), token);
     }
 
     internal static Task ProbeAsync(string enginePath, string modelPath, CancellationToken token) =>
-        GenerateAsync(enginePath, modelPath, [new ChatMessage("user", "Hello")], [], 1, token);
+        WithServerAsync(enginePath, modelPath, false, false, (http, secret, _, ct) =>
+            RequestReplyAsync(http, secret, [new ChatMessage("user", "Hello")], [], 1, ct), token);
+
+    internal static Task ProbePublisherAsync(string enginePath, string modelPath, CancellationToken token) =>
+        WithServerAsync(enginePath, modelPath, false, false, async (http, secret, _, ct) =>
+        {
+            var reply = await RequestReplyAsync(http, secret, [new ChatMessage("user", "Say hello.")], [], 32, ct).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(reply.Text)) throw new InvalidDataException("Model returned an empty setup reply.");
+            return reply;
+        }, token);
 
     internal Task<ChatModelTestResult> TestAsync(string modelId, CancellationToken token)
     {
-        if (!models.Installed(modelId)) throw new FileNotFoundException("Chat model unavailable.");
         var started = Stopwatch.GetTimestamp();
-        return WithServerAsync(models.EnginePath(modelId), models.ModelPath(modelId), async (http, secret, process, ct) =>
+        return RunModelAsync(modelId, async (http, secret, process, backend, ct) =>
         {
-            ChatMessage[] sample = [new("user", "Describe a rainy afternoon in two short sentences.")];
-            var reply = await CompleteAsync(http, secret, sample, 64, null, ct, temperature: 0).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(reply.Text)) throw new InvalidDataException("Model returned an empty test reply.");
-            return new ChatModelTestResult(reply.Text.Trim(), Stopwatch.GetElapsedTime(started), reply.TokensPerSecond, process.PeakWorkingSet64);
+            var replies = new List<ChatCompletion>();
+            var firstReplyTime = TimeSpan.Zero;
+            foreach (var prompt in new[] { "Describe a rainy afternoon in two short sentences.",
+                "I finished a hard task today. Cheer me on in one sentence.",
+                "In one sentence, suggest a quiet activity for a break." })
+            {
+                var reply = await CompleteAsync(http, secret, [new ChatMessage("user", prompt)], 64, null, ct, temperature: 0).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(reply.Text)) throw new InvalidDataException("Model returned an empty test reply.");
+                if (replies.Count == 0) firstReplyTime = Stopwatch.GetElapsedTime(started);
+                replies.Add(reply);
+            }
+            var metrics = SummarizeSamples(replies);
+            return new ChatModelTestResult(replies[0].Text.Trim(), firstReplyTime, metrics.Speed,
+                process.PeakWorkingSet64, backend, metrics.AverageTokens);
         }, token);
     }
 
-    private static Task<ModelChatReply> GenerateAsync(string enginePath, string modelPath,
-        IReadOnlyList<ChatMessage> messages, IReadOnlyList<string> expressions, int maxTokens, CancellationToken token) =>
-        WithServerAsync(enginePath, modelPath, (http, secret, _, ct) =>
-            RequestReplyAsync(http, secret, messages, expressions, maxTokens, ct), token);
+    internal static (double? Speed, double? AverageTokens) SummarizeSamples(IReadOnlyList<ChatCompletion> samples)
+    {
+        // Report a mean over the same prompts for every model, even when a runtime omits one metric.
+        double? speed = samples.Count > 0 && samples.All(s => s.TokensPerSecond.HasValue)
+            ? samples.Average(s => s.TokensPerSecond!.Value) : null;
+        double? tokens = samples.Count > 0 && samples.All(s => s.OutputTokens.HasValue)
+            ? samples.Average(s => s.OutputTokens!.Value) : null;
+        return (speed, tokens);
+    }
 
-    private static async Task<T> WithServerAsync<T>(string enginePath, string modelPath,
+    private Task<T> RunModelAsync<T>(string id,
+        Func<HttpClient, string, Process, ChatComputeBackend, CancellationToken, Task<T>> request, CancellationToken token)
+    {
+        if (!models.Installed(id)) throw new FileNotFoundException("Chat model unavailable.");
+        var weights = models.ModelPath(id);
+        var direct = ChatModelStore.CatalogueEntry(id)?.DisableThinking == true;
+        return RunWithFallbackAsync(models.GpuEnabled, backend =>
+        {
+            bool gpu = backend == ChatComputeBackend.Vulkan;
+            return WithServerAsync(gpu ? models.VulkanEnginePath : models.EnginePath(id), weights, gpu, direct,
+                (http, secret, process, ct) => request(http, secret, process, backend, ct), token);
+        }, token);
+    }
+
+    internal static async Task<T> RunWithFallbackAsync<T>(bool gpuEnabled, Func<ChatComputeBackend, Task<T>> run, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (!gpuEnabled) return await run(ChatComputeBackend.Cpu).ConfigureAwait(false);
+        try { return await run(ChatComputeBackend.Vulkan).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or TimeoutException
+            or HttpRequestException { StatusCode: null or HttpStatusCode.InternalServerError or HttpStatusCode.ServiceUnavailable })
+        {
+            token.ThrowIfCancellationRequested();
+            AppLogger.Warning("Vulkan inference failed. Retrying this request with the CPU engine.", ex);
+            return await run(ChatComputeBackend.CpuFallback).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<T> WithServerAsync<T>(string enginePath, string modelPath, bool gpu, bool disableThinking,
         Func<HttpClient, string, Process, CancellationToken, Task<T>> request, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
@@ -62,8 +118,15 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
             UseShellExecute = false, CreateNoWindow = true
         };
         foreach (var arg in new[] { "-m", modelPath, "--host", "127.0.0.1", "--port", port.ToString(),
-                 "-ngl", "0", "-t", "4", "-c", "12288", "-np", "1", "--api-key", secret, "--alias", "companion" })
+                 "-ngl", gpu ? "auto" : "0", "-t", "4", "-c", "12288", "-np", "1", "--api-key", secret, "--alias", "companion" })
             start.ArgumentList.Add(arg);
+        if (gpu)
+            foreach (var arg in new[] { "--device", "Vulkan0", "--split-mode", "none" }) start.ArgumentList.Add(arg);
+        if (disableThinking)
+        {
+            start.ArgumentList.Add("--reasoning");
+            start.ArgumentList.Add("off");
+        }
         using var process = Process.Start(start) ?? throw new IOException("Cannot start llama.cpp.");
         using var stopOnCancel = timeout.Token.Register(() => Stop(process));
         try
@@ -135,7 +198,7 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
         return new((await CompleteAsync(http, secret, messages, maxTokens, null, token).ConfigureAwait(false)).Text);
     }
 
-    private static async Task<(string Text, double? TokensPerSecond)> CompleteAsync(HttpClient http, string secret,
+    private static async Task<ChatCompletion> CompleteAsync(HttpClient http, string secret,
         IReadOnlyList<ChatMessage> messages, int maxTokens, object? format, CancellationToken token, double temperature = 0.65)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions");
@@ -150,13 +213,16 @@ public sealed class LlamaChatEngine(ChatModelStore models) : IChatEngine
         return ReadCompletion(json.RootElement);
     }
 
-    internal static (string Text, double? TokensPerSecond) ReadCompletion(JsonElement root)
+    internal static ChatCompletion ReadCompletion(JsonElement root)
     {
         var text = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
         double? speed = root.TryGetProperty("timings", out var timings) && timings.ValueKind == JsonValueKind.Object
             && timings.TryGetProperty("predicted_per_second", out var value) && value.ValueKind == JsonValueKind.Number
             && value.TryGetDouble(out var rate) && rate > 0 && double.IsFinite(rate) ? rate : null;
-        return (text, speed);
+        int? count = root.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object
+            && usage.TryGetProperty("completion_tokens", out var tokens) && tokens.ValueKind == JsonValueKind.Number
+            && tokens.TryGetInt32(out var n) && n > 0 ? n : null;
+        return new(text, speed, count);
     }
 
     private static void Stop(Process process)

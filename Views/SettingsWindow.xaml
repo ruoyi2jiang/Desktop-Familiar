@@ -208,12 +208,21 @@
                             <ComboBox x:Name="ChatModelChoice" Margin="0" SelectionChanged="ChatModel_Changed" DropDownClosed="ChatModel_Closed"
                                       ToolTip="{loc:Loc Chat.ModelHelp}" AutomationProperties.HelpText="{loc:Loc Chat.ModelHelp}" AutomationProperties.Name="{loc:Loc Chat.Model}" />
                         </DockPanel>
-                        <TextBlock x:Name="ChatAvailability" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                        <TextBlock x:Name="ModelTestStatus" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,8,0,0"
+                        <TextBlock x:Name="ChatAvailability" Style="{StaticResource MutedPageTextBlock}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        <TextBlock x:Name="ModelSummary" Style="{StaticResource MutedPageTextBlock}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock x:Name="ModelTestStatus" Style="{StaticResource MutedPageTextBlock}" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,6,0,0"
                                    AutomationProperties.LiveSetting="Polite" />
+                        <Expander x:Name="TestDetails" Visibility="Collapsed" Margin="0,6,0,0" Foreground="{DynamicResource TextOnPageBackgroundBrush}">
+                            <Expander.Header>
+                                <TextBlock Style="{StaticResource MutedPageTextBlock}" Text="{loc:Loc Chat.TestDetails}" />
+                            </Expander.Header>
+                            <TextBlock x:Name="TestDetailText" Style="{StaticResource MutedPageTextBlock}" TextWrapping="Wrap" Margin="20,4,0,0"/>
+                        </Expander>
+                        <CheckBox x:Name="ChatGpu" Content="{loc:Loc Chat.Gpu}" Click="ChatGpu_Click" Margin="0,12,0,2" />
+                        <TextBlock x:Name="ChatGpuHint" Style="{StaticResource MutedPageTextBlock}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                         <TextBlock Text="{loc:Loc Chat.Shortcut}" FontWeight="SemiBold" Margin="0,20,0,0"/>
                         <TextBox x:Name="ChatShortcut" IsReadOnly="True" PreviewKeyDown="ChatShortcut_KeyDown" AutomationProperties.Name="{loc:Loc Chat.Shortcut}" />
-                        <TextBlock x:Name="ShortcutHint" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock x:Name="ShortcutHint" Style="{StaticResource MutedPageTextBlock}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         <Border Style="{StaticResource SettingsDivider}" />
                         <DockPanel Margin="0,0,0,8">
                             <ToggleButton x:Name="EnableVoice" DockPanel.Dock="Right" Style="{StaticResource SettingsToggle}"
@@ -230,7 +239,7 @@
                                     <controls:FieldHelpLabel Text="{loc:Loc Voice.PreferWhisper}" HelpText="{loc:Loc Voice.PreferWhisperHelp}" IsHitTestVisible="False"/>
                                 </Border>
                             </CheckBox>
-                            <TextBlock x:Name="RecognitionStatus" TextWrapping="Wrap" Margin="0,4"/>
+                            <TextBlock x:Name="RecognitionStatus" Style="{StaticResource MutedPageTextBlock}" TextWrapping="Wrap" Margin="0,4"/>
                             <WrapPanel>
                                 <Button x:Name="GetRecognizer" Click="GetRecognizer_Click" Margin="0,2,8,6"/>
                                 <Button Content="{loc:Loc Voice.WindowsPacks}" Click="OpenSpeechPacks_Click" Margin="0,2,8,6"/>
@@ -239,10 +248,10 @@
                             <Label Content="{loc:Loc Voice.Microphone}" Target="{Binding ElementName=VoiceDevice}" Padding="0" Margin="0,16,0,0"/>
                             <ComboBox x:Name="VoiceDevice" SelectionChanged="VoiceChoice_Changed"/>
                             <Button x:Name="TestMic" Content="{loc:Loc Voice.TestMic}" Click="TestMic_Click" HorizontalAlignment="Left" Margin="0,6,0,0"/>
-                            <TextBlock x:Name="MicStatus" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+                            <TextBlock x:Name="MicStatus" Style="{StaticResource MutedPageTextBlock}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
                             <Label Content="{loc:Loc Voice.Shortcut}" Target="{Binding ElementName=TalkShortcut}" Padding="0" Margin="0,16,0,0"/>
                             <TextBox x:Name="TalkShortcut" IsReadOnly="True" PreviewKeyDown="ChatShortcut_KeyDown"/>
-                            <TextBlock x:Name="TalkShortcutHint" TextWrapping="Wrap" Margin="0,4"/>
+                            <TextBlock x:Name="TalkShortcutHint" Style="{StaticResource MutedPageTextBlock}" TextWrapping="Wrap" Margin="0,4"/>
                             <CheckBox x:Name="VoiceAutoSend" Content="{loc:Loc Voice.SendOnRelease}" Click="AutoSend_Click" Margin="0,4"/>
                         </StackPanel>
                     </StackPanel>

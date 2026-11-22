@@ -244,7 +244,7 @@ public partial class App : System.Windows.Application
 
     private void ApplyVisibility()
     {
-        if (_overlay is null)
+        if (_overlay is null || _shutdownRequested)
             return;
         if (Manager.ShouldDisplayCompanion)
             _overlay.ShowCompanion();
@@ -351,15 +351,15 @@ public partial class App : System.Windows.Application
 
     public void ShutdownApplication()
     {
-        if (_shutdownRequested)
-            return;
-        _shutdownRequested = true;
-        AppLogger.Info("Application shutdown was requested.");
-        _addonRuntimeLoader?.Dispose();
-        _trayService?.Dispose();
-        _calendarReminders?.Dispose();
-        Chat?.Dispose();
-        _httpClient.Dispose();
+        if (!_shutdownRequested)
+        {
+            _shutdownRequested = true;
+            AppLogger.Info("Application shutdown was requested.");
+            _trayService?.BeginExit();
+            _calendarReminders?.Dispose();
+            Chat?.Dispose();
+            _addonRuntimeLoader?.Dispose();
+        }
         if (_overlay is not null)
         {
             _overlay.CloseForExit(CompleteNormalShutdown);

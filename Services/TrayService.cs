@@ -18,6 +18,8 @@ public sealed class TrayService : IDisposable
     private readonly ThemedTrayContextMenu _trayMenu;
     private TrayToggleColors _toggleColors;
     private bool _refreshAfterClose;
+    private bool _exiting;
+    private Forms.ToolStripMenuItem? _exitItem;
 
     public TrayService(
         CompanionManager manager,
@@ -75,6 +77,7 @@ public sealed class TrayService : IDisposable
 
     private void BuildTrayMenu()
     {
+        if (_exiting) return;
         ClearTrayItems();
         ApplyTrayTheme(_manager.CurrentSavedTheme.Palette);
 
@@ -134,11 +137,18 @@ public sealed class TrayService : IDisposable
         _trayMenu.Items.Add(settings);
 
         _trayMenu.Items.Add(new ThemedTraySeparator());
-        var exit = CreateMenuItem(LocalizationService.Get("Tray.Exit"));
-        exit.Click += (_, _) => _exit();
-        _trayMenu.Items.Add(exit);
+        _exitItem = CreateMenuItem(LocalizationService.Get("Tray.Exit"));
+        _exitItem.Click += (_, _) => _exit();
+        _trayMenu.Items.Add(_exitItem);
 
         _trayMenu.ApplyItemTheme(_trayMenu.Items);
+    }
+
+    internal void BeginExit()
+    {
+        _exiting = true;
+        foreach (Forms.ToolStripItem item in _trayMenu.Items)
+            item.Enabled = ReferenceEquals(item, _exitItem);
     }
 
     private void TrayMenu_Closed(object? sender, Forms.ToolStripDropDownClosedEventArgs e)

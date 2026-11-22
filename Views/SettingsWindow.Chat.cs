@@ -13,9 +13,10 @@ public partial class SettingsWindow
 {
     private bool _refreshingChat;
     private CancellationTokenSource? _testOperation;
+    private CancellationTokenSource? _gpuOperation;
     private string? _testingId;
-    private readonly ChatModelTestResults _modelTestResults = new();
     private enum SetupAction { Download, File, Folder }
+    private string? SelectedModelId => (ChatModelChoice.SelectedItem as ComboBoxItem)?.Tag is AvailableChatModel model ? model.Id : null;
     private void ChatMenu_Click(object sender, RoutedEventArgs e) => ShowPage(SettingsPage.Chat);
 
     private void RefreshChatSettings()
@@ -44,10 +45,13 @@ public partial class SettingsWindow
                 ChatModelChoice.Items.Add(new ComboBoxItem { Content = LocalizationService.Get(key), Tag = action });
             ChatModelChoice.SelectedItem = selected;
             var selectedId = (selected.Tag as AvailableChatModel)?.Id;
+            var entry = selectedId == null ? null : chat.Models.FindEntry(selectedId);
             ChatAvailability.Text = selectedId == null
                 ? LocalizationService.Get(installed.Count == 0 ? "Chat.Unavailable" : "Chat.SelectModel")
-                : chat.Models.DescribeRequirements(ChatModelStore.CatalogueEntry(selectedId), forDownload: false);
+                : LocalizationService.Get(entry?.StrengthsKey ?? "Chat.CustomModel");
             RefreshModelTest(prefs.Enabled ? selectedId : null);
+            if (!prefs.Enabled) _gpuOperation?.Cancel();
+            RefreshGpuSettings(chat.Models);
             ChatShortcut.Text = prefs.Shortcut;
             RefreshVoiceSettings(prefs);
             ShortcutHint.Text = LocalizationService.Get(chat.ShortcutAvailable ? "Chat.ShortcutHint" : "Chat.ShortcutUnavailable");
@@ -55,14 +59,58 @@ public partial class SettingsWindow
         finally { _refreshingChat = false; }
     }
 
-    private void RefreshModelTest(string? selectedId, string? notice = null)
+    private void RefreshGpuSettings(ChatModelStore models, string? notice = null)
+    {
+        ChatGpu.IsEnabled = _gpuOperation == null && _testOperation == null && ChatModelStore.Supported;
+        ChatGpu.IsChecked = models.GpuEnabled;
+        ChatGpuHint.Text = LocalizationService.Get(notice ?? (_gpuOperation != null ? "Chat.GpuPreparing"
+            : models.GpuInstalled ? "Chat.GpuHint" : "Chat.GpuDownloadHint"));
+    }
+
+    private async void ChatGpu_Click(object sender, RoutedEventArgs e)
+    {
+        if (_gpuOperation != null) return;
+        var models = App.CurrentApp.Chat.Models;
+        bool enable = ChatGpu.IsChecked == true;
+        using var operation = new CancellationTokenSource();
+        _gpuOperation = operation;
+        RefreshModelTest(SelectedModelId);
+        RefreshGpuSettings(models);
+        string? notice = null;
+        try { await models.SetGpuEnabledAsync(enable, operation.Token); }
+        catch (OperationCanceledException) when (operation.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            AppLogger.Warning("Could not change chat GPU acceleration.", ex);
+            notice = ex is NotSupportedException ? "Chat.GpuUnavailable" : "Chat.GpuFailed";
+        }
+        finally
+        {
+            _gpuOperation = null;
+            RefreshGpuSettings(models, notice);
+            RefreshModelTest(_manager.Data.Settings.Chat.Enabled ? SelectedModelId : null);
+        }
+    }
+
+    private void RefreshModelTest(string? selectedId, string? notice = null, bool showDetails = false)
     {
         var testingSelection = _testOperation != null && _testingId == selectedId;
         if (!testingSelection) _testOperation?.Cancel();
-        TestChatModel.IsEnabled = selectedId != null && ChatModelStore.Supported && (_testOperation == null || testingSelection);
+        var chat = App.CurrentApp.Chat;
+        var result = selectedId == null ? null : chat.ModelTests.Get(chat.Models.TestKey(selectedId), chat.Models.GpuEnabled);
+        ModelSummary.Text = selectedId == null ? "" : ChatModelTestResults.Summary(chat.Models.FindEntry(selectedId), result);
+        ModelSummary.Visibility = selectedId == null ? Visibility.Collapsed : Visibility.Visible;
+        if (!ReferenceEquals(TestDetails.Tag, result))
+        {
+            TestDetails.Tag = result;
+            TestDetails.IsExpanded = false;
+            TestDetailText.Text = result == null ? "" : ChatModelTestResults.Details(result);
+        }
+        TestDetails.Visibility = result == null ? Visibility.Collapsed : Visibility.Visible;
+        if (showDetails && result != null) TestDetails.IsExpanded = true;
+        TestChatModel.IsEnabled = selectedId != null && ChatModelStore.Supported && _gpuOperation == null && (_testOperation == null || testingSelection);
         TestChatModel.Content = LocalizationService.Get(testingSelection ? "Chat.CancelTest" : "Chat.TestModel");
-        var status = testingSelection ? LocalizationService.Get("Chat.TestRunning")
-            : _modelTestResults.Describe(selectedId, notice);
+        var status = testingSelection ? LocalizationService.Get("Chat.TestRunning") : notice;
         ModelTestStatus.Text = status ?? "";
         ModelTestStatus.Visibility = status == null ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -75,14 +123,16 @@ public partial class SettingsWindow
         using var operation = new CancellationTokenSource();
         _testOperation = operation;
         _testingId = model.Id;
+        RefreshGpuSettings(App.CurrentApp.Chat.Models);
         RefreshModelTest(model.Id);
         string? notice = null;
+        bool completed = false;
         try
         {
             var result = await App.CurrentApp.Chat.TestModelAsync(model.Id, operation.Token);
             operation.Token.ThrowIfCancellationRequested();
             if (result == null) notice = LocalizationService.Get("Chat.TestBusy");
-            else _modelTestResults.Record(model.Id, result);
+            else completed = true;
         }
         catch (OperationCanceledException) { /* The user, a preference change, or a live chat turn ended the test. */ }
         catch (Exception ex)
@@ -96,9 +146,9 @@ public partial class SettingsWindow
             _testingId = null;
             if (IsVisible && ChatPanel.IsVisible)
             {
-                var selected = (ChatModelChoice.SelectedItem as ComboBoxItem)?.Tag as AvailableChatModel;
-                var id = _manager.Data.Settings.Chat.Enabled ? selected?.Id : null;
-                RefreshModelTest(id, id == model.Id ? notice : null);
+                var id = _manager.Data.Settings.Chat.Enabled ? SelectedModelId : null;
+                RefreshGpuSettings(App.CurrentApp.Chat.Models);
+                RefreshModelTest(id, id == model.Id ? notice : null, completed && id == model.Id);
             }
         }
     }
@@ -148,7 +198,8 @@ public partial class SettingsWindow
             if (open.ShowDialog(this) != true) return;
             folder = open.FolderName;
         }
-        var picker = new ChatModelWindow(App.CurrentApp.Chat.Models, file, folder) { Owner = this };
+        var chat = App.CurrentApp.Chat;
+        var picker = new ChatModelWindow(chat.Models, file, folder, chat.ModelTests) { Owner = this };
         picker.ShowDialog();
         if (picker.InstalledId is { } id) ApplyChat(_manager.Data.Settings.Chat with { ModelId = id });
         else RefreshChatSettings();

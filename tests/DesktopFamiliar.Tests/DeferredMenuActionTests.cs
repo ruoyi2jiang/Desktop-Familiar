@@ -64,6 +64,7 @@ public sealed class DeferredMenuActionTests
     [Theory]
     [InlineData("Views/CompanionOverlayWindow.xaml.cs", "menu.Closed += OverlayContextMenu_Closed;", "_menuAction.Queue(App.CurrentApp.ShowCalendarEvents)")]
     [InlineData("Views/CompanionOverlayWindow.xaml.cs", "menu.Closed += OverlayContextMenu_Closed;", "_menuAction.Queue(App.CurrentApp.ShowSettings)")]
+    [InlineData("Views/CompanionOverlayWindow.xaml.cs", "menu.Closed += OverlayContextMenu_Closed;", "_menuAction.Queue(App.CurrentApp.ShutdownApplication)")]
     [InlineData("Views/CompanionOverlayWindow.xaml.cs", "menu.Closed += OverlayContextMenu_Closed;", "_menuAction.Queue(action.Execute)")]
     public void WindowOpeningMenuRoutes_WaitForTheirClosedBoundary(
         string relativePath,
